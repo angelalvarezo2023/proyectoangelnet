@@ -71,15 +71,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
 
   // 🆕 NUEVO - Actualización del contador en tiempo real cada segundo
-  // Usa remainingSeconds como referencia para evitar problemas de zona horaria
+  // Se resetea al valor de Firebase cada vez que remainingSeconds cambia (cada 6 segundos)
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
+
+    // Resetear al valor de Firebase (sincronización)
+    const baseRemaining = liveData.republishStatus.remainingSeconds;
 
     const interval = setInterval(() => {
       setLiveData(prev => {
         if (!prev.republishStatus) return prev;
         
-        // Decrementar remainingSeconds localmente (simple y sin problemas de timezone)
+        // Decrementar remainingSeconds localmente
         const newRemaining = Math.max(0, prev.republishStatus.remainingSeconds - 1);
         const newElapsed = Math.min(
           prev.republishStatus.totalSeconds,
@@ -98,7 +101,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [liveData.republishStatus?.totalSeconds, liveData.isPaused]);
+  }, [liveData.republishStatus?.remainingSeconds, liveData.isPaused]);
 
   // Listener de Firebase (sincronización cada 6 segundos)
   useEffect(() => {
@@ -484,9 +487,11 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     <ClockIcon className="h-4 w-4" />
                     {liveData.editInProgress
                       ? "Editando Post"
-                      : showSuccessMessage
-                        ? "Republicación Exitosa"
-                        : "Próxima Republicación"}
+                      : liveData.republishStatus.remainingSeconds <= 0
+                        ? "Republicación"
+                        : showSuccessMessage
+                          ? "Republicación Exitosa"
+                          : "Próxima Republicación"}
                   </h3>
                   {liveData.isPaused && (
                     <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
@@ -499,6 +504,8 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <div className="text-4xl font-bold tabular-nums text-foreground">
                     {liveData.editInProgress ? (
                       <span className="text-primary">Editando...</span>
+                    ) : liveData.republishStatus.remainingSeconds <= 0 ? (
+                      <span className="text-accent">✓ Completada</span>
                     ) : showSuccessMessage ? (
                       <span className="text-accent">Completado</span>
                     ) : liveData.isPaused ? (
@@ -511,7 +518,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
                 <div className="h-2 overflow-hidden rounded-full bg-secondary">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-primary to-accent transition-all duration-300"
+                    className={cn(
+                      "h-full rounded-full transition-all duration-300",
+                      liveData.republishStatus.remainingSeconds <= 0
+                        ? "bg-gradient-to-r from-green-500 to-emerald-500"
+                        : "bg-gradient-to-r from-primary to-accent"
+                    )}
                     style={{ width: `${Math.min(progressPercent, 100)}%` }}
                   />
                 </div>
