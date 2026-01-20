@@ -27,28 +27,18 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
 function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () => void }) {
   const [timeRemaining, setTimeRemaining] = useState<{ minutes: number; seconds: number } | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
-  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
     if (!browser.republishStatus) {
       setTimeRemaining(null);
       setProgressPercent(0);
-      setIsCompleted(false);
       return;
     }
 
     // Usar directamente los datos de Firebase (que se actualizan en el parent)
     const { remainingSeconds, totalSeconds } = browser.republishStatus;
     
-    // Detectar si está completada
-    if (remainingSeconds <= 0) {
-      setTimeRemaining({ minutes: 0, seconds: 0 });
-      setProgressPercent(100);
-      setIsCompleted(true);
-      return;
-    }
-
-    setIsCompleted(false);
+    // Calcular minutos y segundos
     const minutes = Math.floor(remainingSeconds / 60);
     const seconds = remainingSeconds % 60;
     setTimeRemaining({ minutes, seconds });
@@ -59,13 +49,63 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
     setProgressPercent(Math.min(100, Math.max(0, progress)));
 
   }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds]);
-  // ↑ Se actualiza cada vez que Firebase envía nuevos datos
+  
+  // Determinar si está completada (para mostrar el mensaje)
+  const isCompleted = timeRemaining !== null && timeRemaining.minutes === 0 && timeRemaining.seconds === 0;
+  
+  // 🆕 Detectar errores por datos N/A (indica problema en la página)
+  const hasDataExtractionError = 
+    (browser.phoneNumber === "N/A" || browser.phoneNumber === "Manual") &&
+    (browser.city === "N/A" || browser.city === "Manual") &&
+    (browser.location === "N/A" || browser.location === "Manual");
+  
+  // 🆕 Detectar si hay un error reportado recientemente (últimos 5 minutos)
+  const hasRecentError = browser.lastError && 
+    (Date.now() - new Date(browser.lastError.timestamp).getTime()) < 5 * 60 * 1000;
+  
+  // 🆕 Detectar fallo de republicación (tiempo > totalSeconds + 60s)
+  const hasRepublishFailure = browser.republishStatus && 
+    browser.republishStatus.elapsedSeconds > (browser.republishStatus.totalSeconds + 60);
+  
+  const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
   return (
     <div
       onClick={onClick}
-      className="group cursor-pointer rounded-xl border border-border bg-gradient-to-br from-card to-card/50 p-6 transition-all hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5"
+      className={cn(
+        "group cursor-pointer rounded-xl border p-6 transition-all hover:shadow-xl hover:shadow-primary/5",
+        hasError 
+          ? "border-red-500/50 bg-gradient-to-br from-red-500/10 to-card/50" 
+          : "border-border bg-gradient-to-br from-card to-card/50 hover:border-primary/50"
+      )}
     >
+      {/* 🆕 ALERTA DE ERROR */}
+      {hasError && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-red-400">⚠️</span>
+            <span className="text-sm font-semibold text-red-400">
+              {hasRepublishFailure ? "Fallo en Republicación" :
+               hasDataExtractionError ? "Error de Extracción de Datos" :
+               "Error Detectado"}
+            </span>
+          </div>
+          {browser.lastError && hasRecentError && (
+            <p className="text-xs text-red-300">{browser.lastError.message}</p>
+          )}
+          {hasDataExtractionError && (
+            <p className="text-xs text-red-300">
+              No se pudieron extraer los datos de la página. Posible error en Megapersonals.
+            </p>
+          )}
+          {hasRepublishFailure && (
+            <p className="text-xs text-red-300">
+              El tiempo de republicación excedió el límite. El robot podría estar bloqueado.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Header con estado */}
       <div className="mb-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
