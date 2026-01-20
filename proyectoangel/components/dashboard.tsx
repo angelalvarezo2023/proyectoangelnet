@@ -71,6 +71,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
 
   // 🆕 NUEVO - Actualización del contador en tiempo real cada segundo
+  // Calcula el tiempo basándose en nextRepublishAt para mantener sincronización perfecta
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
 
@@ -78,25 +79,28 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       setLiveData(prev => {
         if (!prev.republishStatus) return prev;
         
-        const newRemaining = Math.max(0, prev.republishStatus.remainingSeconds - 1);
-        const newElapsed = Math.min(
-          prev.republishStatus.totalSeconds,
-          prev.republishStatus.elapsedSeconds + 1
-        );
+        // Calcular tiempo restante basándose en nextRepublishAt (hora absoluta)
+        const nextRepublish = new Date(prev.republishStatus.nextRepublishAt);
+        const now = new Date();
+        const msRemaining = nextRepublish.getTime() - now.getTime();
+        const secondsRemaining = Math.max(0, Math.floor(msRemaining / 1000));
+        
+        // Calcular elapsed basándose en total - remaining
+        const secondsElapsed = Math.max(0, prev.republishStatus.totalSeconds - secondsRemaining);
 
         return {
           ...prev,
           republishStatus: {
             ...prev.republishStatus,
-            remainingSeconds: newRemaining,
-            elapsedSeconds: newElapsed,
+            remainingSeconds: secondsRemaining,
+            elapsedSeconds: secondsElapsed,
           }
         };
       });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [liveData.republishStatus?.totalSeconds, liveData.isPaused]);
+  }, [liveData.republishStatus?.nextRepublishAt, liveData.isPaused]);
 
   // Listener de Firebase (sincronización cada 6 segundos)
   useEffect(() => {
