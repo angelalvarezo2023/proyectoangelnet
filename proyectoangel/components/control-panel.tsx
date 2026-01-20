@@ -244,7 +244,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const handleBackToList = () => {
     setBrowserData(null);
     setBrowserList([]);
-    setClientSearch("");
+    // NO borrar clientSearch - mantener para que el usuario pueda buscar de nuevo
   };
 
   return (
