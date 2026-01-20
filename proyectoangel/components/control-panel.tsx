@@ -27,44 +27,42 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
 function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () => void }) {
   const [timeRemaining, setTimeRemaining] = useState<{ minutes: number; seconds: number } | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
+  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
-    // Función para calcular el tiempo restante en tiempo real
-    const calculateTimeRemaining = () => {
-      if (!browser.republishStatus) {
-        setTimeRemaining(null);
-        setProgressPercent(0);
-        return;
-      }
+    if (!browser.republishStatus) {
+      setTimeRemaining(null);
+      setProgressPercent(0);
+      setIsCompleted(false);
+      return;
+    }
 
-      // El robot calcula el tiempo basándose en savedDateTime + totalSeconds
-      // NO usar nextRepublishAt porque puede tener problemas de zona horaria
-      const { totalSeconds, remainingSeconds: initialRemaining } = browser.republishStatus;
-      
-      // Usar remainingSeconds de Firebase como base y decrementar localmente
-      if (initialRemaining <= 0) {
-        setTimeRemaining({ minutes: 0, seconds: 0 });
-        setProgressPercent(100);
-        return;
-      }
+    const { remainingSeconds, totalSeconds } = browser.republishStatus;
+    
+    // Detectar si la republicación está completada
+    if (remainingSeconds <= 0) {
+      setTimeRemaining({ minutes: 0, seconds: 0 });
+      setProgressPercent(100);
+      setIsCompleted(true);
+      return;
+    }
 
-      const minutes = Math.floor(initialRemaining / 60);
-      const seconds = initialRemaining % 60;
-      setTimeRemaining({ minutes, seconds });
+    // Resetear el estado local al valor de Firebase (sincronización)
+    setIsCompleted(false);
+    const minutes = Math.floor(remainingSeconds / 60);
+    const seconds = remainingSeconds % 60;
+    setTimeRemaining({ minutes, seconds });
 
-      // Calcular progreso
-      const elapsedSeconds = totalSeconds - initialRemaining;
-      const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
-      setProgressPercent(Math.min(100, Math.max(0, progress)));
-    };
-
-    // Calcular inmediatamente
-    calculateTimeRemaining();
+    // Calcular progreso
+    const elapsedSeconds = totalSeconds - remainingSeconds;
+    const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
+    setProgressPercent(Math.min(100, Math.max(0, progress)));
 
     // Actualizar cada segundo decrementando localmente
     const interval = setInterval(() => {
       setTimeRemaining(prev => {
         if (!prev || (prev.minutes === 0 && prev.seconds === 0)) {
+          setIsCompleted(true);
           return { minutes: 0, seconds: 0 };
         }
 
@@ -76,6 +74,7 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
             newMinutes -= 1;
             newSeconds = 59;
           } else {
+            setIsCompleted(true);
             return { minutes: 0, seconds: 0 };
           }
         }
@@ -170,22 +169,33 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-xs font-semibold uppercase tracking-wider text-pink-400">
-            Próxima Republicación
+            {isCompleted ? "Republicación" : "Próxima Republicación"}
           </span>
         </div>
         
         {timeRemaining ? (
           <>
             <div className="mb-3 text-center">
-              <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
-                {timeRemaining.minutes}m {timeRemaining.seconds}s
-              </span>
+              {isCompleted ? (
+                <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
+                  ✓ Completada
+                </span>
+              ) : (
+                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
+                  {timeRemaining.minutes}m {timeRemaining.seconds}s
+                </span>
+              )}
             </div>
             
             {/* Barra de progreso */}
             <div className="h-2 w-full overflow-hidden rounded-full bg-background/50">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500 transition-all duration-1000 ease-linear"
+                className={cn(
+                  "h-full rounded-full transition-all duration-1000 ease-linear",
+                  isCompleted 
+                    ? "bg-gradient-to-r from-green-500 to-emerald-500" 
+                    : "bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"
+                )}
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -257,7 +267,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   };
 
   const handleSelectBrowser = (browser: BrowserData) => {
-    setBrowserList([]);
+    // NO limpiar browserList - solo abrir el dashboard
     setBrowserData(browser);
   };
 
