@@ -264,4 +264,15 @@ export const SERVICES = [
     stock: 20,
     gradient: "from-amber-500 to-orange-500",
   },
+  {
+    id: "megabot",
+    icon: "bot",
+    title: "MegaBot PRO",
+    subtitle: "Automatización inteligente",
+    description: "Sistema de republicación automática con detección de bans y sincronización multi-PC.",
+    features: ["Republicación automática", "Detección de bloqueos", "Control remoto desde celular", "Sincronización multi-PC"],
+    price: "Desde $29.99",
+    stock: 99,
+    gradient: "from-purple-500 to-pink-500",
+  },
 ];
