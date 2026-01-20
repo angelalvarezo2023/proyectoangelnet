@@ -37,19 +37,25 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
         return;
       }
 
-      const { totalSeconds, elapsedSeconds, remainingSeconds } = browser.republishStatus;
+      // Calcular tiempo restante basándose en nextRepublishAt (hora absoluta)
+      const nextRepublish = new Date(browser.republishStatus.nextRepublishAt);
+      const now = new Date();
+      const msRemaining = nextRepublish.getTime() - now.getTime();
+      const secondsRemaining = Math.max(0, Math.floor(msRemaining / 1000));
       
-      if (remainingSeconds <= 0) {
+      if (secondsRemaining <= 0) {
         setTimeRemaining({ minutes: 0, seconds: 0 });
         setProgressPercent(100);
         return;
       }
 
-      const minutes = Math.floor(remainingSeconds / 60);
-      const seconds = remainingSeconds % 60;
+      const minutes = Math.floor(secondsRemaining / 60);
+      const seconds = secondsRemaining % 60;
       setTimeRemaining({ minutes, seconds });
 
-      // Calcular progreso
+      // Calcular progreso basándose en tiempo transcurrido
+      const { totalSeconds } = browser.republishStatus;
+      const elapsedSeconds = totalSeconds - secondsRemaining;
       const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
       setProgressPercent(Math.min(100, Math.max(0, progress)));
     };
@@ -59,19 +65,11 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
 
     // Actualizar cada segundo
     const interval = setInterval(() => {
-      if (browser.republishStatus) {
-        // Decrementar remainingSeconds localmente
-        browser.republishStatus.remainingSeconds = Math.max(0, browser.republishStatus.remainingSeconds - 1);
-        browser.republishStatus.elapsedSeconds = Math.min(
-          browser.republishStatus.totalSeconds,
-          browser.republishStatus.elapsedSeconds + 1
-        );
-        calculateTimeRemaining();
-      }
+      calculateTimeRemaining();
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [browser]);
+  }, [browser.republishStatus?.nextRepublishAt, browser.republishStatus?.totalSeconds]);
 
   return (
     <div
