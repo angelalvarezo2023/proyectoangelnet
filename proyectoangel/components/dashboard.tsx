@@ -375,6 +375,20 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     : 0;
 
   const status = getRentalStatus(liveData.rentalRemaining);
+  
+  // 🆕 Detectar errores
+  const hasDataExtractionError = 
+    (liveData.phoneNumber === "N/A" || liveData.phoneNumber === "Manual") &&
+    (liveData.city === "N/A" || liveData.city === "Manual") &&
+    (liveData.location === "N/A" || liveData.location === "Manual");
+  
+  const hasRecentError = liveData.lastError && 
+    (Date.now() - new Date(liveData.lastError.timestamp).getTime()) < 5 * 60 * 1000;
+  
+  const hasRepublishFailure = liveData.republishStatus && 
+    liveData.republishStatus.elapsedSeconds > (liveData.republishStatus.totalSeconds + 60);
+  
+  const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
   return (
     <>
@@ -456,6 +470,54 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
+            {/* 🆕 ALERTA DE ERROR */}
+            {hasError && (
+              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+                <div className="mb-3 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-500/20">
+                    <span className="text-xl">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-red-400">
+                      {hasRepublishFailure ? "⏰ Fallo en Republicación" :
+                       hasDataExtractionError ? "📋 Error de Extracción de Datos" :
+                       "❌ Error Detectado"}
+                    </h4>
+                    <p className="text-sm text-red-300">
+                      {hasRepublishFailure && "El tiempo de republicación excedió el límite normal"}
+                      {hasDataExtractionError && "No se pudieron extraer los datos de la página"}
+                      {hasRecentError && liveData.lastError && liveData.lastError.message}
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-red-500/5 p-3 text-xs text-red-200">
+                  💡 <strong>Posibles causas:</strong>
+                  <ul className="ml-4 mt-1 list-disc space-y-1">
+                    {hasDataExtractionError && (
+                      <>
+                        <li>Megapersonals.eu tiene un error o cambió su estructura</li>
+                        <li>El navegador no está en la página correcta</li>
+                        <li>Hay un problema de conexión con el sitio</li>
+                      </>
+                    )}
+                    {hasRepublishFailure && (
+                      <>
+                        <li>El robot está esperando un captcha por mucho tiempo</li>
+                        <li>Hay un error en la página que impide la republicación</li>
+                        <li>La sesión pudo haber expirado</li>
+                      </>
+                    )}
+                    {hasRecentError && (
+                      <li>Revisa el mensaje de error arriba para más detalles</li>
+                    )}
+                  </ul>
+                  <p className="mt-2">
+                    <strong>Recomendación:</strong> Verifica el navegador manualmente o contacta soporte.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Info Section */}
             {!liveData.manuallyCreated && (
               <div className="rounded-xl border border-border bg-secondary/30 p-4">
@@ -487,7 +549,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     <ClockIcon className="h-4 w-4" />
                     {liveData.editInProgress
                       ? "Editando Post"
-                      : liveData.republishStatus.remainingSeconds <= 0
+                      : (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage)
                         ? "Republicación"
                         : showSuccessMessage
                           ? "Republicación Exitosa"
@@ -504,7 +566,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <div className="text-4xl font-bold tabular-nums text-foreground">
                     {liveData.editInProgress ? (
                       <span className="text-primary">Editando...</span>
-                    ) : liveData.republishStatus.remainingSeconds <= 0 ? (
+                    ) : (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage) ? (
                       <span className="text-accent">✓ Completada</span>
                     ) : showSuccessMessage ? (
                       <span className="text-accent">Completado</span>
@@ -520,7 +582,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <div
                     className={cn(
                       "h-full rounded-full transition-all duration-300",
-                      liveData.republishStatus.remainingSeconds <= 0
+                      (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage)
                         ? "bg-gradient-to-r from-green-500 to-emerald-500"
                         : "bg-gradient-to-r from-primary to-accent"
                     )}
