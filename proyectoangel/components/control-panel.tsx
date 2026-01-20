@@ -37,25 +37,23 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
         return;
       }
 
-      // Calcular tiempo restante basándose en nextRepublishAt (hora absoluta)
-      const nextRepublish = new Date(browser.republishStatus.nextRepublishAt);
-      const now = new Date();
-      const msRemaining = nextRepublish.getTime() - now.getTime();
-      const secondsRemaining = Math.max(0, Math.floor(msRemaining / 1000));
+      // El robot calcula el tiempo basándose en savedDateTime + totalSeconds
+      // NO usar nextRepublishAt porque puede tener problemas de zona horaria
+      const { totalSeconds, remainingSeconds: initialRemaining } = browser.republishStatus;
       
-      if (secondsRemaining <= 0) {
+      // Usar remainingSeconds de Firebase como base y decrementar localmente
+      if (initialRemaining <= 0) {
         setTimeRemaining({ minutes: 0, seconds: 0 });
         setProgressPercent(100);
         return;
       }
 
-      const minutes = Math.floor(secondsRemaining / 60);
-      const seconds = secondsRemaining % 60;
+      const minutes = Math.floor(initialRemaining / 60);
+      const seconds = initialRemaining % 60;
       setTimeRemaining({ minutes, seconds });
 
-      // Calcular progreso basándose en tiempo transcurrido
-      const { totalSeconds } = browser.republishStatus;
-      const elapsedSeconds = totalSeconds - secondsRemaining;
+      // Calcular progreso
+      const elapsedSeconds = totalSeconds - initialRemaining;
       const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
       setProgressPercent(Math.min(100, Math.max(0, progress)));
     };
@@ -63,13 +61,37 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
     // Calcular inmediatamente
     calculateTimeRemaining();
 
-    // Actualizar cada segundo
+    // Actualizar cada segundo decrementando localmente
     const interval = setInterval(() => {
-      calculateTimeRemaining();
+      setTimeRemaining(prev => {
+        if (!prev || (prev.minutes === 0 && prev.seconds === 0)) {
+          return { minutes: 0, seconds: 0 };
+        }
+
+        let newMinutes = prev.minutes;
+        let newSeconds = prev.seconds - 1;
+
+        if (newSeconds < 0) {
+          if (newMinutes > 0) {
+            newMinutes -= 1;
+            newSeconds = 59;
+          } else {
+            return { minutes: 0, seconds: 0 };
+          }
+        }
+
+        return { minutes: newMinutes, seconds: newSeconds };
+      });
+
+      setProgressPercent(prev => {
+        if (!browser.republishStatus) return prev;
+        const newProgress = prev + (100 / browser.republishStatus.totalSeconds);
+        return Math.min(100, newProgress);
+      });
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [browser.republishStatus?.nextRepublishAt, browser.republishStatus?.totalSeconds]);
+  }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds]);
 
   return (
     <div
@@ -316,13 +338,9 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         <Dashboard
           browserData={browserData}
           onClose={() => {
-            if (browserList.length > 0) {
-              // Si vino de una lista, volver a mostrar la lista
-              setBrowserData(null);
-            } else {
-              // Si fue búsqueda directa, cerrar todo
-              handleBackToList();
-            }
+            // Solo cerrar el modal, NO limpiar la lista ni el campo de búsqueda
+            setBrowserData(null);
+            // browserList y clientSearch se mantienen para que el usuario pueda seguir viendo sus tarjetas
           }}
         />
       )}
