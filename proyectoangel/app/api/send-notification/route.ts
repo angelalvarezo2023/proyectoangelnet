@@ -205,17 +205,3 @@ function getEmailTemplate(tipo: string, data: any) {
 
   return templates[tipo as keyof typeof templates] || templates.test;
 }
-```
-
-5. Click en **"Commit changes"**
-
----
-
-## ✅ Después de esto tendrás:
-```
-app/
-├── api/
-│   ├── monitor-notifications/
-│   │   └── route.ts  ← Ya tienes ✅
-│   └── send-notification/
-│       └── route.ts  ← Crear ahora 🆕
