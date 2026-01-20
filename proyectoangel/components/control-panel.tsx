@@ -462,7 +462,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Jhelko"
+                placeholder="Angel"
                 className="h-12 flex-1 bg-input text-foreground"
                 disabled={searching}
               />
