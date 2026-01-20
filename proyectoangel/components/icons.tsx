@@ -57,6 +57,28 @@ export const BoltIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const BotIcon = ({ className }: IconProps) => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={cn("", className)}
+  >
+    <rect x="4" y="8" width="16" height="12" rx="2" />
+    <circle cx="9" cy="14" r="1.5" fill="currentColor" />
+    <circle cx="15" cy="14" r="1.5" fill="currentColor" />
+    <path d="M10 18h4" />
+    <path d="M12 4v4" />
+    <circle cx="12" cy="3" r="1" fill="currentColor" />
+    <path d="M2 12h2M20 12h2" />
+  </svg>
+);
+
 export const FlameIcon = ({ className }: IconProps) => (
   <svg
     width="24"
