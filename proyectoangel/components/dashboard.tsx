@@ -68,6 +68,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const modalManuallyControlledRef = useRef(false);
   const commandInProgressRef = useRef(false);
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
+  
+  // 🆕 NUEVO - Ref para debounce
+  const lastActionTimeRef = useRef<number>(0);
 
   useEffect(() => {
     const unsubscribe = FirebaseAPI.listenToBrowser(
@@ -97,7 +100,88 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     );
 
     return () => unsubscribe();
-  }, [browserData]); // Updated dependency array to use browserData instead of browserData.browserName
+  }, [browserData, showCaptchaForm]);
+
+  // 🆕 NUEVA FUNCIÓN - Debounce genérico
+  const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
+    const now = Date.now();
+    if (now - lastActionTimeRef.current < delay) {
+      console.log('[Dashboard] Acción bloqueada por debounce');
+      return false;
+    }
+    lastActionTimeRef.current = now;
+    callback();
+    return true;
+  }, []);
+
+  // 🆕 NUEVA FUNCIÓN - Toggle pause con UI optimista (SIN LAG)
+  const handleTogglePause = useCallback(async () => {
+    if (commandInProgressRef.current || actionLoading) {
+      return;
+    }
+
+    debounce(async () => {
+      const newPauseState = !liveData.isPaused;
+      
+      // 1. Actualizar UI INMEDIATAMENTE (optimista)
+      setLiveData(prev => ({ ...prev, isPaused: newPauseState }));
+      setActionLoading(true);
+      commandInProgressRef.current = true;
+
+      try {
+        // 2. Actualizar Firebase directamente (SIN comando)
+        const result = await FirebaseAPI.togglePause(
+          liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+          newPauseState
+        );
+
+        if (!result.success) {
+          // Si falla, revertir UI
+          setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
+          alert(`Error: ${result.error}`);
+        }
+      } catch (error) {
+        // Si hay error, revertir UI
+        setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
+        alert('Error al cambiar estado de pausa');
+      } finally {
+        setActionLoading(false);
+        commandInProgressRef.current = false;
+      }
+    });
+  }, [liveData, debounce, actionLoading]);
+
+  // 🆕 NUEVA FUNCIÓN - Forzar republicación directa (SIN LAG)
+  const handleRepublish = useCallback(async () => {
+    if (commandInProgressRef.current || actionLoading || liveData.isPaused) {
+      return;
+    }
+
+    debounce(async () => {
+      setActionLoading(true);
+      commandInProgressRef.current = true;
+
+      try {
+        const result = await FirebaseAPI.forceRepublish(
+          liveData.browserName || (liveData as BrowserData & { name?: string }).name || ""
+        );
+
+        if (result.success) {
+          alert("Republicación iniciada");
+        } else {
+          alert(`Error: ${result.error}`);
+        }
+      } catch (error) {
+        alert('Error al forzar republicación');
+      } finally {
+        // Pequeño delay para UX
+        setTimeout(() => {
+          setActionLoading(false);
+          commandInProgressRef.current = false;
+        }, 1000);
+      }
+    });
+  }, [liveData, debounce, actionLoading]);
 
   const executeAction = useCallback(async (actionType: string, payload: Record<string, unknown> = {}) => {
     if (commandInProgressRef.current || actionLoading) {
@@ -115,11 +199,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        if (actionType === "pause") {
-          alert(liveData.isPaused ? "Sistema reanudado" : "Sistema pausado");
-        } else if (actionType === "republish") {
-          alert("Republicando...");
-        } else if (actionType === "screenshot") {
+        if (actionType === "screenshot") {
           alert("Capturando...");
 
           let attempts = 0;
@@ -440,8 +520,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             <div className="rounded-xl border border-border bg-secondary/30 p-4">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {/* 🆕 MODIFICADO - Usa handleTogglePause en vez de executeAction */}
                 <Button
-                  onClick={() => executeAction("pause")}
+                  onClick={handleTogglePause}
                   disabled={actionLoading || commandInProgressRef.current}
                   className={cn(
                     "flex h-auto flex-col gap-2 py-4",
@@ -454,8 +535,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <span className="text-xs">{liveData.isPaused ? "Reanudar" : "Pausar"}</span>
                 </Button>
 
+                {/* 🆕 MODIFICADO - Usa handleRepublish en vez de executeAction */}
                 <Button
-                  onClick={() => executeAction("republish")}
+                  onClick={handleRepublish}
                   disabled={actionLoading || liveData.isPaused || commandInProgressRef.current}
                   className="flex h-auto flex-col gap-2 bg-primary/10 py-4 text-primary hover:bg-primary/20"
                 >
