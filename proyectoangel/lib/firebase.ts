@@ -171,7 +171,34 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 NUEVA FUNCIÓN - Buscar por nombre de cliente
+  // 🆕 NUEVA FUNCIÓN - Buscar TODOS los navegadores de un cliente
+  async findAllBrowsersByClientName(clientName: string): Promise<BrowserData[]> {
+    try {
+      const snapshot = await get(ref(database, "browsers"));
+      const browsers = snapshot.val();
+      
+      if (!browsers) return [];
+
+      const cleanSearch = clientName.trim().toLowerCase();
+      const results: BrowserData[] = [];
+
+      // Buscar todas las coincidencias (exactas y parciales)
+      for (const [, data] of Object.entries(browsers)) {
+        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
+        
+        // Coincidencia exacta o parcial
+        if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
+          results.push(data as BrowserData);
+        }
+      }
+
+      return results;
+    } catch {
+      return [];
+    }
+  },
+
+  // Mantener función original para compatibilidad (retorna solo el primero)
   async findBrowserByClientName(clientName: string): Promise<BrowserData | null> {
     try {
       const snapshot = await get(ref(database, "browsers"));
