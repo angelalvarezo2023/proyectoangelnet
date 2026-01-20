@@ -339,6 +339,25 @@ export const FirebaseAPI = {
     });
     return unsubscribe;
   },
+
+  // 🆕 NUEVA FUNCIÓN - Eliminar navegador completamente
+  async deleteBrowser(browserName: string) {
+    try {
+      // Eliminar de /browsers
+      await set(ref(database, `browsers/${browserName}`), null);
+      
+      // Eliminar comandos pendientes
+      await set(ref(database, `commands/${browserName}`), null);
+      
+      // Eliminar notificaciones si existen
+      await set(ref(database, `notifications/${browserName}`), null);
+      await set(ref(database, `lastNotified/${browserName}`), null);
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
 };
 
 export const ADMIN_PASSWORD = "admin123";
