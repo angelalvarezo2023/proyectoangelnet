@@ -68,10 +68,37 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const modalManuallyControlledRef = useRef(false);
   const commandInProgressRef = useRef(false);
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
-  
-  // 🆕 NUEVO - Ref para debounce
   const lastActionTimeRef = useRef<number>(0);
 
+  // 🆕 NUEVO - Actualización del contador en tiempo real cada segundo
+  useEffect(() => {
+    if (!liveData.republishStatus || liveData.isPaused) return;
+
+    const interval = setInterval(() => {
+      setLiveData(prev => {
+        if (!prev.republishStatus) return prev;
+        
+        const newRemaining = Math.max(0, prev.republishStatus.remainingSeconds - 1);
+        const newElapsed = Math.min(
+          prev.republishStatus.totalSeconds,
+          prev.republishStatus.elapsedSeconds + 1
+        );
+
+        return {
+          ...prev,
+          republishStatus: {
+            ...prev.republishStatus,
+            remainingSeconds: newRemaining,
+            elapsedSeconds: newElapsed,
+          }
+        };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [liveData.republishStatus?.totalSeconds, liveData.isPaused]);
+
+  // Listener de Firebase (sincronización cada 6 segundos)
   useEffect(() => {
     const unsubscribe = FirebaseAPI.listenToBrowser(
       browserData.browserName || (browserData as BrowserData & { name?: string }).name || "",
@@ -102,7 +129,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     return () => unsubscribe();
   }, [browserData, showCaptchaForm]);
 
-  // 🆕 NUEVA FUNCIÓN - Debounce genérico
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < delay) {
@@ -114,7 +140,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     return true;
   }, []);
 
-  // 🆕 NUEVA FUNCIÓN - Toggle pause con UI optimista (SIN LAG)
   const handleTogglePause = useCallback(async () => {
     if (commandInProgressRef.current || actionLoading) {
       return;
@@ -123,25 +148,21 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     debounce(async () => {
       const newPauseState = !liveData.isPaused;
       
-      // 1. Actualizar UI INMEDIATAMENTE (optimista)
       setLiveData(prev => ({ ...prev, isPaused: newPauseState }));
       setActionLoading(true);
       commandInProgressRef.current = true;
 
       try {
-        // 2. Actualizar Firebase directamente (SIN comando)
         const result = await FirebaseAPI.togglePause(
           liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
           newPauseState
         );
 
         if (!result.success) {
-          // Si falla, revertir UI
           setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
           alert(`Error: ${result.error}`);
         }
       } catch (error) {
-        // Si hay error, revertir UI
         setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
         alert('Error al cambiar estado de pausa');
       } finally {
@@ -151,7 +172,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     });
   }, [liveData, debounce, actionLoading]);
 
-  // 🆕 NUEVA FUNCIÓN - Forzar republicación directa (SIN LAG)
   const handleRepublish = useCallback(async () => {
     if (commandInProgressRef.current || actionLoading || liveData.isPaused) {
       return;
@@ -174,7 +194,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       } catch (error) {
         alert('Error al forzar republicación');
       } finally {
-        // Pequeño delay para UX
         setTimeout(() => {
           setActionLoading(false);
           commandInProgressRef.current = false;
@@ -520,7 +539,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             <div className="rounded-xl border border-border bg-secondary/30 p-4">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                {/* 🆕 MODIFICADO - Usa handleTogglePause en vez de executeAction */}
                 <Button
                   onClick={handleTogglePause}
                   disabled={actionLoading || commandInProgressRef.current}
@@ -535,7 +553,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <span className="text-xs">{liveData.isPaused ? "Reanudar" : "Pausar"}</span>
                 </Button>
 
-                {/* 🆕 MODIFICADO - Usa handleRepublish en vez de executeAction */}
                 <Button
                   onClick={handleRepublish}
                   disabled={actionLoading || liveData.isPaused || commandInProgressRef.current}
