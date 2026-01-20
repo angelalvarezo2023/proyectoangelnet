@@ -14,6 +14,7 @@ import {
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NotificationSettings } from "@/components/notification-settings";
 
 interface DashboardProps {
   browserData: BrowserData;
@@ -55,6 +56,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false);
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -70,19 +72,15 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
   const lastActionTimeRef = useRef<number>(0);
 
-  // 🆕 NUEVO - Actualización del contador en tiempo real cada segundo
-  // Se resetea al valor de Firebase cada vez que remainingSeconds cambia (cada 6 segundos)
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
 
-    // Resetear al valor de Firebase (sincronización)
     const baseRemaining = liveData.republishStatus.remainingSeconds;
 
     const interval = setInterval(() => {
       setLiveData(prev => {
         if (!prev.republishStatus) return prev;
         
-        // Decrementar remainingSeconds localmente
         const newRemaining = Math.max(0, prev.republishStatus.remainingSeconds - 1);
         const newElapsed = Math.min(
           prev.republishStatus.totalSeconds,
@@ -103,7 +101,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     return () => clearInterval(interval);
   }, [liveData.republishStatus?.remainingSeconds, liveData.isPaused]);
 
-  // Listener de Firebase (sincronización cada 6 segundos)
   useEffect(() => {
     const unsubscribe = FirebaseAPI.listenToBrowser(
       browserData.browserName || (browserData as BrowserData & { name?: string }).name || "",
@@ -376,7 +373,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
   const status = getRentalStatus(liveData.rentalRemaining);
   
-  // 🆕 Detectar errores
   const hasDataExtractionError = 
     (liveData.phoneNumber === "N/A" || liveData.phoneNumber === "Manual") &&
     (liveData.city === "N/A" || liveData.city === "Manual") &&
@@ -395,10 +391,8 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       {/* Main Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/90 p-4 backdrop-blur-md">
         <div className="relative my-8 w-full max-w-2xl overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10">
-          {/* Decorative gradient */}
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-pink-400 to-accent" />
           
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-border/50 p-6">
             <div className="flex items-center gap-4">
               <div
@@ -456,7 +450,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
           </div>
 
           <div className="space-y-6 p-6">
-            {/* Edit Log */}
             {liveData.editLog && (
               <div
                 className={cn(
@@ -470,7 +463,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {/* 🆕 ALERTA DE ERROR */}
             {hasError && (
               <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
                 <div className="mb-3 flex items-center gap-3">
@@ -518,7 +510,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {/* Info Section */}
             {!liveData.manuallyCreated && (
               <div className="rounded-xl border border-border bg-secondary/30 p-4">
                 <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -541,7 +532,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {/* Republish Progress */}
             {liveData.republishStatus && (
               <div className={cn("rounded-xl border border-border bg-secondary/30 p-4", liveData.isPaused && "opacity-60")}>
                 <div className="mb-4 flex items-center justify-between">
@@ -592,7 +582,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {/* Rental Info */}
             <div className="rounded-xl border border-border bg-secondary/30 p-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tiempo de Renta</span>
@@ -611,10 +600,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             </div>
 
-            {/* Controls */}
             <div className="rounded-xl border border-border bg-secondary/30 p-4">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3">
                 <Button
                   onClick={handleTogglePause}
                   disabled={actionLoading || commandInProgressRef.current}
@@ -655,10 +643,17 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <EditIcon className="h-5 w-5" />
                   <span className="text-xs">{liveData.editInProgress ? "Editando..." : "Editar"}</span>
                 </Button>
+
+                <Button
+                  onClick={() => setShowNotificationSettings(true)}
+                  className="col-span-2 flex h-auto flex-col gap-2 bg-blue-500/10 py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
+                >
+                  <span className="text-xl">🔔</span>
+                  <span className="text-xs">Configurar Notificaciones</span>
+                </Button>
               </div>
             </div>
 
-            {/* Close Button */}
             <Button onClick={onClose} variant="outline" className="w-full bg-transparent">
               Cerrar
             </Button>
@@ -666,7 +661,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* Edit Form Modal */}
       {showEditForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-background/90 p-4 backdrop-blur-sm">
           <div className="my-8 w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl">
@@ -784,7 +778,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       )}
 
-      {/* Captcha Modal */}
       {showCaptchaForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
@@ -845,7 +838,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       )}
 
-      {/* Screenshot Modal */}
       {screenshot && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-background/95 p-5 backdrop-blur-sm"
@@ -862,6 +854,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             <img src={screenshot || "/placeholder.svg"} alt="Screenshot" className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl" />
           </div>
         </div>
+      )}
+
+      {showNotificationSettings && (
+        <NotificationSettings
+          browserName={liveData.browserName || (liveData as BrowserData & { name?: string }).name || ""}
+          onClose={() => setShowNotificationSettings(false)}
+        />
       )}
     </>
   );
