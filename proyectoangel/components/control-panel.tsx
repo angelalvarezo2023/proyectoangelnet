@@ -23,7 +23,7 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
-// Componente para tarjeta de navegador con contador en tiempo real
+// Componente para tarjeta de navegador con datos en tiempo real desde Firebase
 function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () => void }) {
   const [timeRemaining, setTimeRemaining] = useState<{ minutes: number; seconds: number } | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
@@ -37,9 +37,10 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
       return;
     }
 
+    // Usar directamente los datos de Firebase (que se actualizan en el parent)
     const { remainingSeconds, totalSeconds } = browser.republishStatus;
     
-    // Detectar si la republicación está completada
+    // Detectar si está completada
     if (remainingSeconds <= 0) {
       setTimeRemaining({ minutes: 0, seconds: 0 });
       setProgressPercent(100);
@@ -47,7 +48,6 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
       return;
     }
 
-    // Resetear el estado local al valor de Firebase (sincronización)
     setIsCompleted(false);
     const minutes = Math.floor(remainingSeconds / 60);
     const seconds = remainingSeconds % 60;
@@ -58,39 +58,8 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
     const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
     setProgressPercent(Math.min(100, Math.max(0, progress)));
 
-    // Actualizar cada segundo decrementando localmente
-    const interval = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (!prev || (prev.minutes === 0 && prev.seconds === 0)) {
-          setIsCompleted(true);
-          return { minutes: 0, seconds: 0 };
-        }
-
-        let newMinutes = prev.minutes;
-        let newSeconds = prev.seconds - 1;
-
-        if (newSeconds < 0) {
-          if (newMinutes > 0) {
-            newMinutes -= 1;
-            newSeconds = 59;
-          } else {
-            setIsCompleted(true);
-            return { minutes: 0, seconds: 0 };
-          }
-        }
-
-        return { minutes: newMinutes, seconds: newSeconds };
-      });
-
-      setProgressPercent(prev => {
-        if (!browser.republishStatus) return prev;
-        const newProgress = prev + (100 / browser.republishStatus.totalSeconds);
-        return Math.min(100, newProgress);
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
   }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds]);
+  // ↑ Se actualiza cada vez que Firebase envía nuevos datos
 
   return (
     <div
@@ -238,6 +207,34 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const [browserList, setBrowserList] = useState<BrowserData[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
+
+  // 🆕 NUEVO - Escuchar cambios en Firebase para actualizar las tarjetas en tiempo real
+  useEffect(() => {
+    if (browserList.length === 0) return;
+
+    const unsubscribers: (() => void)[] = [];
+
+    // Suscribirse a cada navegador en la lista
+    browserList.forEach((browser, index) => {
+      const unsubscribe = FirebaseAPI.listenToBrowser(
+        browser.browserName,
+        (updatedData) => {
+          // Actualizar solo este navegador en la lista
+          setBrowserList(prev => {
+            const newList = [...prev];
+            newList[index] = updatedData;
+            return newList;
+          });
+        }
+      );
+      unsubscribers.push(unsubscribe);
+    });
+
+    // Limpiar todas las suscripciones al desmontar
+    return () => {
+      unsubscribers.forEach(unsub => unsub());
+    };
+  }, [browserList.length]); // Solo cuando cambia la cantidad de navegadores
 
   const handleSearch = async () => {
     if (!clientSearch.trim()) {
