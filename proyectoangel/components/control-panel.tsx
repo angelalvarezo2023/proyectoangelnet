@@ -13,14 +13,14 @@ interface ControlPanelProps {
 }
 
 export function ControlPanel({ initialBrowserData, initialError }: ControlPanelProps) {
-  const [phoneSearch, setPhoneSearch] = useState("");
+  const [clientSearch, setClientSearch] = useState("");
   const [browserData, setBrowserData] = useState<BrowserData | null>(initialBrowserData || null);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
 
   const handleSearch = async () => {
-    if (!phoneSearch.trim()) {
-      setError("Ingresa un número");
+    if (!clientSearch.trim()) {
+      setError("Ingresa el nombre del cliente");
       return;
     }
 
@@ -28,11 +28,12 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     setError("");
     setBrowserData(null);
 
-    const data = await FirebaseAPI.findBrowser(phoneSearch);
+    const data = await FirebaseAPI.findBrowserByClientName(clientSearch);
+
     if (data) {
       setBrowserData(data);
     } else {
-      setError("No se encontró el usuario");
+      setError("No se encontró ningún cliente con ese nombre");
     }
 
     setSearching(false);
@@ -47,17 +48,17 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
               <SettingsIcon className="h-8 w-8 text-primary" />
             </div>
             <h2 className="mb-2 text-2xl font-bold text-foreground">Panel de Control</h2>
-            <p className="text-sm text-muted-foreground">Busca tu cuenta por número de teléfono</p>
+            <p className="text-sm text-muted-foreground">Busca tu cuenta por nombre del cliente</p>
           </div>
 
           <div className="space-y-4">
             <div className="flex gap-3">
               <Input
                 type="text"
-                value={phoneSearch}
-                onChange={(e) => setPhoneSearch(e.target.value)}
+                value={clientSearch}
+                onChange={(e) => setClientSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Número de teléfono"
+                placeholder="Nombre del cliente"
                 className="h-12 flex-1 bg-input text-foreground"
                 disabled={searching}
               />
