@@ -30,6 +30,22 @@ export interface RepublishStatus {
   nextRepublishAt: string;
 }
 
+// 🆕 Interfaces para notificaciones
+export interface NotificationConfig {
+  email: {
+    active: boolean;
+    address: string;
+  };
+  eventos: {
+    republicacion: boolean;
+    error: boolean;
+    renta7dias: boolean;
+    renta3dias: boolean;
+    renta24horas: boolean;
+    renta12horas: boolean;
+  };
+}
+
 export interface BrowserData {
   browserName: string;
   clientName?: string;
@@ -48,6 +64,7 @@ export interface BrowserData {
   editLogType?: "error" | "success" | "info";
   captchaWaiting?: boolean;
   captchaImage?: string;
+  notificationConfig?: NotificationConfig; // 🆕 Config de notificaciones
   lastScreenshot?: string;
   postName?: string;
   
@@ -354,6 +371,74 @@ export const FirebaseAPI = {
       await set(ref(database, `lastNotified/${browserName}`), null);
       
       return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 FUNCIÓN - Obtener configuración de notificaciones
+  async getNotificationConfig(browserName: string): Promise<NotificationConfig | null> {
+    try {
+      const notifRef = ref(database, `notifications/${browserName}`);
+      const snapshot = await get(notifRef);
+      
+      if (snapshot.exists()) {
+        return snapshot.val() as NotificationConfig;
+      }
+      
+      // Si no existe, retornar config por defecto
+      return {
+        email: {
+          active: false,
+          address: "",
+        },
+        eventos: {
+          republicacion: true,
+          error: true,
+          renta7dias: true,
+          renta3dias: true,
+          renta24horas: true,
+          renta12horas: true,
+        },
+      };
+    } catch (error) {
+      console.error("Error obteniendo configuración:", error);
+      return null;
+    }
+  },
+
+  // 🆕 FUNCIÓN - Guardar configuración de notificaciones
+  async saveNotificationConfig(
+    browserName: string,
+    config: NotificationConfig
+  ) {
+    try {
+      await set(ref(database, `notifications/${browserName}`), config);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 FUNCIÓN - Enviar email de prueba
+  async sendTestEmail(browserName: string, email: string) {
+    try {
+      const response = await fetch("/api/send-notification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          browserName,
+          tipo: "test",
+          config: {
+            email,
+          },
+        }),
+      });
+
+      const result = await response.json();
+      return result;
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
