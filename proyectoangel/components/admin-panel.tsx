@@ -13,6 +13,7 @@ import {
   WifiOffIcon,
   AlertTriangleIcon,
   CheckCircleIcon,
+  XIcon,
 } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
@@ -29,7 +30,6 @@ function getConnectionStatus(browser: BrowserData) {
   const lastHeartbeat = browser.lastHeartbeat ? new Date(browser.lastHeartbeat).getTime() : 0;
   const timeSinceHeartbeat = now - lastHeartbeat;
 
-  // Si no hay heartbeat o es muy antiguo (>15 segundos)
   if (!browser.lastHeartbeat || timeSinceHeartbeat > 15000) {
     return {
       status: "offline" as const,
@@ -42,7 +42,6 @@ function getConnectionStatus(browser: BrowserData) {
     };
   }
 
-  // Si hay errores consecutivos
   if (browser.consecutiveErrors && browser.consecutiveErrors > 3) {
     return {
       status: "error" as const,
@@ -55,7 +54,6 @@ function getConnectionStatus(browser: BrowserData) {
     };
   }
 
-  // Si está pausado
   if (browser.isPaused) {
     return {
       status: "paused" as const,
@@ -68,7 +66,6 @@ function getConnectionStatus(browser: BrowserData) {
     };
   }
 
-  // Si está editando
   if (browser.editInProgress) {
     return {
       status: "editing" as const,
@@ -81,7 +78,6 @@ function getConnectionStatus(browser: BrowserData) {
     };
   }
 
-  // Todo bien - online
   return {
     status: "online" as const,
     label: "Activo",
@@ -119,6 +115,13 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUser, setNewUser] = useState({ name: "", days: "", hours: "" });
   const [creating, setCreating] = useState(false);
+  
+  // 🆕 Estados para el modal de ajuste de renta
+  const [showRentalModal, setShowRentalModal] = useState(false);
+  const [rentalBrowser, setRentalBrowser] = useState<BrowserData | null>(null);
+  const [rentalDays, setRentalDays] = useState("");
+  const [rentalHours, setRentalHours] = useState("");
+  const [adjustingRental, setAdjustingRental] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -194,6 +197,93 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     alert("Link copiado");
   };
 
+  // 🆕 Abrir modal de ajuste de renta
+  const handleOpenRentalModal = (browser: BrowserData) => {
+    setRentalBrowser(browser);
+    setRentalDays("");
+    setRentalHours("");
+    setShowRentalModal(true);
+  };
+
+  // 🆕 Calcular vista previa de la nueva renta
+  const calculatePreviewRental = (action: "establecer" | "agregar") => {
+    if (!rentalBrowser) return null;
+
+    const days = Number.parseInt(rentalDays) || 0;
+    const hours = Number.parseInt(rentalHours) || 0;
+
+    if (days === 0 && hours === 0) return null;
+
+    let newDate = new Date();
+
+    if (action === "establecer") {
+      // Sobrescribir - establecer desde ahora
+      newDate.setDate(newDate.getDate() + days);
+      newDate.setHours(newDate.getHours() + hours);
+    } else {
+      // Agregar - sumar al tiempo existente
+      if (rentalBrowser.rentalExpiration && !isRentalExpired(rentalBrowser.rentalRemaining)) {
+        newDate = new Date(rentalBrowser.rentalExpiration);
+      }
+      newDate.setDate(newDate.getDate() + days);
+      newDate.setHours(newDate.getHours() + hours);
+    }
+
+    // Calcular tiempo restante desde ahora
+    const diff = newDate.getTime() - Date.now();
+    const totalDays = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const totalHours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const totalMinutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+    return {
+      days: totalDays,
+      hours: totalHours,
+      minutes: totalMinutes,
+      formatted: formatRentalTime({ days: totalDays, hours: totalHours, minutes: totalMinutes })
+    };
+  };
+
+  const isRentalExpired = (rental: BrowserData["rentalRemaining"]) => {
+    if (!rental || rental.days === -1) return true;
+    return rental.days === 0 && rental.hours === 0 && rental.minutes === 0;
+  };
+
+  // 🆕 Ajustar renta (establecer o agregar)
+  const handleAdjustRental = async (action: "establecer" | "agregar") => {
+    if (!rentalBrowser) return;
+
+    const days = Number.parseInt(rentalDays) || 0;
+    const hours = Number.parseInt(rentalHours) || 0;
+
+    if (days === 0 && hours === 0) {
+      alert("Ingresa días u horas");
+      return;
+    }
+
+    setAdjustingRental(true);
+
+    try {
+      const result = await FirebaseAPI.sendCommand(
+        rentalBrowser.browserName,
+        "adjustRental",
+        { days, hours, action }
+      );
+
+      if (result.success) {
+        alert(`Renta ${action === "establecer" ? "establecida" : "agregada"} correctamente`);
+        setShowRentalModal(false);
+        setRentalDays("");
+        setRentalHours("");
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert("Error al ajustar la renta");
+    } finally {
+      setAdjustingRental(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -236,18 +326,15 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     ...data,
   }));
 
-  // Ordenar: primero offline/error, luego por tiempo de renta
   browserList.sort((a, b) => {
     const statusA = getConnectionStatus(a);
     const statusB = getConnectionStatus(b);
 
-    // Prioridad: offline > error > otros
     if (statusA.status === "offline" && statusB.status !== "offline") return -1;
     if (statusA.status !== "offline" && statusB.status === "offline") return 1;
     if (statusA.status === "error" && statusB.status !== "error") return -1;
     if (statusA.status !== "error" && statusB.status === "error") return 1;
 
-    // Luego por tiempo de renta
     const getRentalDays = (browser: BrowserData) => {
       if (!browser.rentalRemaining || browser.rentalRemaining.days === -1) return 999;
       return browser.rentalRemaining.days + browser.rentalRemaining.hours / 24;
@@ -255,7 +342,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     return getRentalDays(a) - getRentalDays(b);
   });
 
-  // Calcular estadísticas
   const stats = {
     total: browserList.length,
     online: browserList.filter((b) => getConnectionStatus(b).status === "online").length,
@@ -375,7 +461,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                 const rentalStatus = getRentalStatus(browser.rentalRemaining);
                 const StatusIcon = connectionStatus.icon;
 
-                // Calcular tiempo desde último heartbeat
                 const lastHeartbeatTime = browser.lastHeartbeat
                   ? Math.floor((Date.now() - new Date(browser.lastHeartbeat).getTime()) / 1000)
                   : null;
@@ -389,7 +474,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       connectionStatus.status === "error" && "bg-warning/5"
                     )}
                   >
-                    {/* Navegador */}
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-3">
                         <div className={cn("h-2 w-2 rounded-full", connectionStatus.pulse && "animate-pulse")}>
@@ -408,7 +492,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       </div>
                     </td>
 
-                    {/* Estado */}
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex flex-col gap-1">
                         <span
@@ -423,7 +506,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                           {connectionStatus.label}
                         </span>
 
-                        {/* Mostrar error si existe */}
                         {browser.lastError && (
                           <span
                             className="max-w-[200px] truncate text-xs text-destructive"
@@ -435,12 +517,10 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       </div>
                     </td>
 
-                    {/* Teléfono */}
                     <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
                       {browser.phoneNumber || "N/A"}
                     </td>
 
-                    {/* Renta */}
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center gap-2">
                         <ClockIcon
@@ -468,7 +548,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       </div>
                     </td>
 
-                    {/* Último Heartbeat */}
                     <td className="whitespace-nowrap px-6 py-4">
                       {lastHeartbeatTime !== null ? (
                         <span
@@ -486,7 +565,7 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       )}
                     </td>
 
-                    {/* Acciones */}
+                    {/* 🆕 Acciones mejoradas con botón de Renta */}
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => setSelectedBrowser(browser)}>
@@ -499,6 +578,14 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                         >
                           <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
                           Link
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenRentalModal(browser)}
+                          className="bg-primary/10 text-primary hover:bg-primary/20"
+                        >
+                          <ClockIcon className="mr-1.5 h-3.5 w-3.5" />
+                          Renta
                         </Button>
                       </div>
                     </td>
@@ -517,7 +604,125 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
         </div>
       </div>
 
+      {/* Dashboard Modal */}
       {selectedBrowser && <Dashboard browserData={selectedBrowser} onClose={() => setSelectedBrowser(null)} />}
+
+      {/* 🆕 Modal de Ajuste de Renta */}
+      {showRentalModal && rentalBrowser && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            {/* Header */}
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+                  <ClockIcon className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-foreground">Ajustar Tiempo de Renta</h3>
+                  <p className="text-sm text-muted-foreground">{rentalBrowser.browserName}</p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowRentalModal(false)}
+                className="rounded-xl"
+              >
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+
+            {/* Renta Actual */}
+            <div className="mb-6 rounded-xl border border-border bg-secondary/30 p-4">
+              <div className="mb-2 text-sm font-medium text-muted-foreground">📅 Renta Actual</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatRentalTime(rentalBrowser.rentalRemaining)}
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="mb-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Días</label>
+                  <Input
+                    type="number"
+                    value={rentalDays}
+                    onChange={(e) => setRentalDays(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    className="bg-input text-foreground"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">Horas</label>
+                  <Input
+                    type="number"
+                    value={rentalHours}
+                    onChange={(e) => setRentalHours(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    className="bg-input text-foreground"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Vista Previa */}
+            {(rentalDays || rentalHours) && (
+              <div className="mb-6 space-y-3">
+                <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
+                  <div className="mb-2 text-sm font-medium text-muted-foreground">✅ Vista Previa (Establecer)</div>
+                  <div className="text-xl font-bold text-accent">
+                    {calculatePreviewRental("establecer")?.formatted || "0d 0h"}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+                  <div className="mb-2 text-sm font-medium text-muted-foreground">➕ Vista Previa (Agregar)</div>
+                  <div className="text-xl font-bold text-primary">
+                    {calculatePreviewRental("agregar")?.formatted || "0d 0h"}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Botones de Acción */}
+            <div className="space-y-3">
+              <Button
+                onClick={() => handleAdjustRental("establecer")}
+                disabled={adjustingRental || (!rentalDays && !rentalHours)}
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {adjustingRental ? "Procesando..." : "✅ Establecer Nueva Renta"}
+              </Button>
+
+              <Button
+                onClick={() => handleAdjustRental("agregar")}
+                disabled={adjustingRental || (!rentalDays && !rentalHours)}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {adjustingRental ? "Procesando..." : "➕ Agregar Tiempo"}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => setShowRentalModal(false)}
+                disabled={adjustingRental}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+            </div>
+
+            {/* Información */}
+            <div className="mt-4 rounded-lg bg-secondary/30 p-3 text-xs text-muted-foreground">
+              <p className="mb-1"><strong>✅ Establecer:</strong> Sobrescribe la renta actual con el nuevo tiempo.</p>
+              <p><strong>➕ Agregar:</strong> Suma el tiempo al que ya tiene el usuario.</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
