@@ -4,6 +4,7 @@ import {
   ref,
   get,
   set,
+  update,
   onValue,
   type Database,
 } from "firebase/database";
@@ -206,6 +207,62 @@ export const FirebaseAPI = {
         type: actionType,
         ...payload,
         timestamp: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 NUEVA FUNCIÓN - Actualizar isPaused directamente (SIN LAG)
+  async togglePause(browserName: string, newState: boolean) {
+    try {
+      await update(ref(database, `browsers/${browserName}`), {
+        isPaused: newState,
+        lastUpdate: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 NUEVA FUNCIÓN - Forzar republicación directamente (SIN LAG)
+  async forceRepublish(browserName: string) {
+    try {
+      const totalSeconds = 900 + Math.floor(Math.random() * 181); // 900-1080 segundos
+      const now = new Date();
+      
+      // Actualizar directamente el estado de republicación
+      await update(ref(database, `browsers/${browserName}`), {
+        republishStatus: {
+          totalSeconds: totalSeconds,
+          elapsedSeconds: 0,
+          remainingSeconds: totalSeconds,
+          nextRepublishAt: new Date(now.getTime() + totalSeconds * 1000).toISOString(),
+        },
+        lastUpdate: now.toISOString(),
+      });
+
+      // También enviar comando para que la extensión lo ejecute
+      const commandId = Date.now().toString();
+      await set(ref(database, `commands/${browserName}/${commandId}`), {
+        type: "republish",
+        timestamp: now.toISOString(),
+      });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 NUEVA FUNCIÓN - Actualizar un campo específico directamente
+  async updateBrowserField(browserName: string, field: string, value: any) {
+    try {
+      await update(ref(database, `browsers/${browserName}`), {
+        [field]: value,
+        lastUpdate: new Date().toISOString(),
       });
       return { success: true };
     } catch (error) {
