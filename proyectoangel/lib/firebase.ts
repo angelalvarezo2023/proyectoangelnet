@@ -32,6 +32,7 @@ export interface RepublishStatus {
 
 export interface BrowserData {
   browserName: string;
+  clientName?: string;
   uniqueId?: string;
   phoneNumber: string;
   city: string;
@@ -48,6 +49,7 @@ export interface BrowserData {
   captchaWaiting?: boolean;
   captchaImage?: string;
   lastScreenshot?: string;
+  postName?: string;
   
   // NUEVOS CAMPOS PARA MONITOREO EN TIEMPO REAL
   connectionStatus?: "online" | "offline" | "error";
@@ -164,6 +166,38 @@ export const FirebaseAPI = {
     try {
       const snapshot = await get(ref(database, `browsers/${browserName}`));
       return snapshot.val();
+    } catch {
+      return null;
+    }
+  },
+
+  // 🆕 NUEVA FUNCIÓN - Buscar por nombre de cliente
+  async findBrowserByClientName(clientName: string): Promise<BrowserData | null> {
+    try {
+      const snapshot = await get(ref(database, "browsers"));
+      const browsers = snapshot.val();
+      
+      if (!browsers) return null;
+
+      const cleanSearch = clientName.trim().toLowerCase();
+
+      // Buscar coincidencia exacta primero
+      for (const [, data] of Object.entries(browsers)) {
+        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
+        if (browserClientName === cleanSearch) {
+          return data as BrowserData;
+        }
+      }
+
+      // Si no hay coincidencia exacta, buscar parcial
+      for (const [, data] of Object.entries(browsers)) {
+        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
+        if (browserClientName.includes(cleanSearch)) {
+          return data as BrowserData;
+        }
+      }
+
+      return null;
     } catch {
       return null;
     }
