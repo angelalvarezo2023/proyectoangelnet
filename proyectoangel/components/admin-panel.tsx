@@ -14,6 +14,7 @@ import {
   AlertTriangleIcon,
   CheckCircleIcon,
   XIcon,
+  TrashIcon,
 } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,6 @@ interface AdminPanelProps {
   onLogin: () => void;
 }
 
-// Función para determinar el estado de conexión en tiempo real
 function getConnectionStatus(browser: BrowserData) {
   const now = new Date().getTime();
   const lastHeartbeat = browser.lastHeartbeat ? new Date(browser.lastHeartbeat).getTime() : 0;
@@ -116,12 +116,16 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
   const [newUser, setNewUser] = useState({ name: "", days: "", hours: "" });
   const [creating, setCreating] = useState(false);
   
-  // 🆕 Estados para el modal de ajuste de renta
   const [showRentalModal, setShowRentalModal] = useState(false);
   const [rentalBrowser, setRentalBrowser] = useState<BrowserData | null>(null);
   const [rentalDays, setRentalDays] = useState("");
   const [rentalHours, setRentalHours] = useState("");
   const [adjustingRental, setAdjustingRental] = useState(false);
+
+  // 🆕 Estados para modal de confirmación de eliminación
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteBrowser, setDeleteBrowser] = useState<BrowserData | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -197,7 +201,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     alert("Link copiado");
   };
 
-  // 🆕 Abrir modal de ajuste de renta
   const handleOpenRentalModal = (browser: BrowserData) => {
     setRentalBrowser(browser);
     setRentalDays("");
@@ -205,7 +208,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     setShowRentalModal(true);
   };
 
-  // 🆕 Calcular vista previa de la nueva renta
   const calculatePreviewRental = (action: "establecer" | "agregar") => {
     if (!rentalBrowser) return null;
 
@@ -217,11 +219,9 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     let newDate = new Date();
 
     if (action === "establecer") {
-      // Sobrescribir - establecer desde ahora
       newDate.setDate(newDate.getDate() + days);
       newDate.setHours(newDate.getHours() + hours);
     } else {
-      // Agregar - sumar al tiempo existente
       if (rentalBrowser.rentalExpiration && !isRentalExpired(rentalBrowser.rentalRemaining)) {
         newDate = new Date(rentalBrowser.rentalExpiration);
       }
@@ -229,7 +229,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
       newDate.setHours(newDate.getHours() + hours);
     }
 
-    // Calcular tiempo restante desde ahora
     const diff = newDate.getTime() - Date.now();
     const totalDays = Math.floor(diff / (1000 * 60 * 60 * 24));
     const totalHours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -248,7 +247,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
     return rental.days === 0 && rental.hours === 0 && rental.minutes === 0;
   };
 
-  // 🆕 Ajustar renta (establecer o agregar)
   const handleAdjustRental = async (action: "establecer" | "agregar") => {
     if (!rentalBrowser) return;
 
@@ -281,6 +279,35 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
       alert("Error al ajustar la renta");
     } finally {
       setAdjustingRental(false);
+    }
+  };
+
+  // 🆕 Abrir modal de confirmación de eliminación
+  const handleOpenDeleteModal = (browser: BrowserData) => {
+    setDeleteBrowser(browser);
+    setShowDeleteModal(true);
+  };
+
+  // 🆕 Ejecutar eliminación
+  const handleConfirmDelete = async () => {
+    if (!deleteBrowser) return;
+
+    setDeleting(true);
+
+    try {
+      const result = await FirebaseAPI.deleteBrowser(deleteBrowser.browserName);
+
+      if (result.success) {
+        alert(`Usuario "${deleteBrowser.browserName}" eliminado correctamente`);
+        setShowDeleteModal(false);
+        setDeleteBrowser(null);
+      } else {
+        alert(`Error al eliminar: ${result.error}`);
+      }
+    } catch (error) {
+      alert("Error al eliminar el usuario");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -439,6 +466,9 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                   Navegador
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cliente
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Estado
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -490,6 +520,13 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                         </div>
                         <span className="font-medium text-foreground">{browser.browserName || browser.name}</span>
                       </div>
+                    </td>
+
+                    {/* 🆕 Columna Cliente */}
+                    <td className="whitespace-nowrap px-6 py-4">
+                      <span className="text-sm font-medium text-primary">
+                        {browser.clientName || "Sin asignar"}
+                      </span>
                     </td>
 
                     <td className="whitespace-nowrap px-6 py-4">
@@ -565,7 +602,7 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                       )}
                     </td>
 
-                    {/* 🆕 Acciones mejoradas con botón de Renta */}
+                    {/* 🆕 Acciones con botón de Eliminar */}
                     <td className="whitespace-nowrap px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         <Button size="sm" variant="outline" onClick={() => setSelectedBrowser(browser)}>
@@ -587,6 +624,13 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
                           <ClockIcon className="mr-1.5 h-3.5 w-3.5" />
                           Renta
                         </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleOpenDeleteModal(browser)}
+                          className="bg-destructive/10 text-destructive hover:bg-destructive/20"
+                        >
+                          <TrashIcon className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -607,11 +651,10 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
       {/* Dashboard Modal */}
       {selectedBrowser && <Dashboard browserData={selectedBrowser} onClose={() => setSelectedBrowser(null)} />}
 
-      {/* 🆕 Modal de Ajuste de Renta */}
+      {/* Modal de Ajuste de Renta */}
       {showRentalModal && rentalBrowser && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
-            {/* Header */}
             <div className="mb-6 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -632,7 +675,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
               </Button>
             </div>
 
-            {/* Renta Actual */}
             <div className="mb-6 rounded-xl border border-border bg-secondary/30 p-4">
               <div className="mb-2 text-sm font-medium text-muted-foreground">📅 Renta Actual</div>
               <div className="text-2xl font-bold text-foreground">
@@ -640,7 +682,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
               </div>
             </div>
 
-            {/* Inputs */}
             <div className="mb-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -668,7 +709,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
               </div>
             </div>
 
-            {/* Vista Previa */}
             {(rentalDays || rentalHours) && (
               <div className="mb-6 space-y-3">
                 <div className="rounded-xl border border-accent/20 bg-accent/5 p-4">
@@ -687,7 +727,6 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
               </div>
             )}
 
-            {/* Botones de Acción */}
             <div className="space-y-3">
               <Button
                 onClick={() => handleAdjustRental("establecer")}
@@ -715,10 +754,60 @@ export function AdminPanel({ isAuthenticated, onLogin }: AdminPanelProps) {
               </Button>
             </div>
 
-            {/* Información */}
             <div className="mt-4 rounded-lg bg-secondary/30 p-3 text-xs text-muted-foreground">
               <p className="mb-1"><strong>✅ Establecer:</strong> Sobrescribe la renta actual con el nuevo tiempo.</p>
               <p><strong>➕ Agregar:</strong> Suma el tiempo al que ya tiene el usuario.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 Modal de Confirmación de Eliminación */}
+      {showDeleteModal && deleteBrowser && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border-2 border-destructive bg-card p-6 shadow-2xl">
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
+                <TrashIcon className="h-8 w-8 text-destructive" />
+              </div>
+              <h3 className="mb-2 text-2xl font-bold text-foreground">¿Eliminar Usuario?</h3>
+              <p className="text-sm text-muted-foreground">Esta acción no se puede deshacer</p>
+            </div>
+
+            <div className="mb-6 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+              <div className="mb-2 text-xs font-medium text-muted-foreground">Navegador</div>
+              <div className="mb-3 text-lg font-bold text-foreground">{deleteBrowser.browserName}</div>
+              
+              <div className="mb-1 text-xs font-medium text-muted-foreground">Cliente</div>
+              <div className="text-base font-semibold text-primary">
+                {deleteBrowser.clientName || "Sin asignar"}
+              </div>
+            </div>
+
+            <div className="mb-4 rounded-lg bg-warning/10 p-3 text-sm text-warning">
+              ⚠️ Se eliminará toda la información incluyendo comandos, notificaciones y datos de Firebase.
+            </div>
+
+            <div className="space-y-3">
+              <Button
+                onClick={handleConfirmDelete}
+                disabled={deleting}
+                className="w-full bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleting ? "Eliminando..." : "🗑️ Confirmar Eliminación"}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteBrowser(null);
+                }}
+                disabled={deleting}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
             </div>
           </div>
         </div>
