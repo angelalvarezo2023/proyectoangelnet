@@ -503,38 +503,40 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   return (
     <>
       <div className="mx-auto max-w-7xl">
-        <div className="rounded-2xl border border-border bg-card p-8">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
-              <SettingsIcon className="h-8 w-8 text-primary" />
+        {/* 🆕 Panel de búsqueda mejorado para móviles */}
+        <div className="rounded-2xl border border-border bg-card p-4 sm:p-6 md:p-8 min-h-[320px] sm:min-h-[280px] flex flex-col justify-center">
+          <div className="mb-6 sm:mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
+              <SettingsIcon className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
             </div>
-            <h2 className="mb-2 text-2xl font-bold text-foreground">Panel de Control</h2>
-            <p className="text-sm text-muted-foreground">Busca tus perfiles por tu nombre de cliente</p>
+            <h2 className="mb-2 text-2xl sm:text-3xl font-bold text-foreground">Panel de Control</h2>
+            <p className="text-sm sm:text-base text-muted-foreground px-4">Busca tus perfiles por tu nombre de cliente</p>
           </div>
 
           <div className="space-y-4">
-            <div className="flex gap-3">
+            {/* 🆕 Búsqueda responsive - stack en móvil, row en desktop */}
+            <div className="flex flex-col sm:flex-row gap-3">
               <Input
                 type="text"
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Angel"
-                className="h-12 flex-1 bg-input text-foreground"
+                placeholder="Ej: Angel, Maria, Carlos..."
+                className="h-14 sm:h-12 flex-1 bg-input text-foreground text-base sm:text-sm px-4"
                 disabled={searching}
               />
               <Button
                 onClick={handleSearch}
                 disabled={searching}
-                className="h-12 bg-gradient-to-r from-pink-500 to-purple-500 px-8 text-white hover:from-pink-600 hover:to-purple-600"
+                className="h-14 sm:h-12 bg-gradient-to-r from-pink-500 to-purple-500 sm:px-8 px-6 text-white hover:from-pink-600 hover:to-purple-600 font-bold text-base sm:text-sm whitespace-nowrap"
               >
-                <SearchIcon className="mr-2 h-4 w-4" />
-                {searching ? "Buscando..." : "Buscar Mis Perfiles"}
+                <SearchIcon className="mr-2 h-5 w-5 sm:h-4 sm:w-4" />
+                {searching ? "Buscando..." : "Buscar Perfiles"}
               </Button>
             </div>
 
             {error && (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-center text-sm text-destructive">
+              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-center text-sm sm:text-base text-destructive">
                 {error}
               </div>
             )}
@@ -543,45 +545,50 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
 
         {browserList.length > 0 && (
           <div className="mt-8 space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="text-center flex-1">
-                <h3 className="text-2xl font-bold text-foreground">
+            {/* Header con título y toggle responsive */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-center sm:text-left flex-1 w-full sm:w-auto">
+                <h3 className="text-2xl md:text-3xl font-bold text-foreground">
                   Tus Perfiles
                 </h3>
-                <p className="text-sm text-muted-foreground">
-                  Se encontraron {browserList.length} {browserList.length === 1 ? "perfil" : "perfiles"} para "{clientSearch}"
+                <p className="text-sm md:text-base text-muted-foreground">
+                  {browserList.length} {browserList.length === 1 ? "perfil encontrado" : "perfiles encontrados"}
                 </p>
               </div>
 
-              <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1 border border-border">
+              {/* 🆕 Toggle responsive - centrado en móvil */}
+              <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1.5 border border-border w-full sm:w-auto justify-center">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    "px-4 py-2.5 sm:py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
                     viewMode === 'grid'
                       ? "bg-background text-foreground shadow-lg"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  🔲 Grid
+                  <span className="text-lg sm:text-base">🔲</span>
+                  <span>Grid</span>
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    "px-4 py-2.5 sm:py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
                     viewMode === 'list'
                       ? "bg-background text-foreground shadow-lg"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  📋 Lista
+                  <span className="text-lg sm:text-base">📋</span>
+                  <span>Lista</span>
                 </button>
               </div>
             </div>
 
+            {/* Grid o Lista responsive */}
             <div className={cn(
               viewMode === 'grid' 
-                ? "grid gap-6 md:grid-cols-2" 
+                ? "grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2" 
                 : "space-y-3"
             )}>
               {browserList.map((browser) => (
