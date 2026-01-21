@@ -148,9 +148,9 @@ export function CitySelector({
             <div className="p-2 space-y-2">
               <button
                 onClick={handleBack}
-                className="w-full text-left py-2 px-4 rounded-lg font-semibold bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-sm"
+                className="w-full text-left py-2 px-4 rounded-lg font-semibold bg-gray-600 dark:bg-gray-700 text-white hover:bg-gray-700 dark:hover:bg-gray-600 transition-all text-sm shadow-md"
               >
-                ← Back
+                ← Volver
               </button>
               
               {Object.keys(US_LOCATIONS).map((state) => (
@@ -173,9 +173,9 @@ export function CitySelector({
             <div className="p-2 space-y-2">
               <button
                 onClick={handleBack}
-                className="w-full text-left py-2 px-4 rounded-lg font-semibold bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 transition-all text-sm"
+                className="w-full text-left py-2 px-4 rounded-lg font-semibold bg-gray-600 dark:bg-gray-700 text-white hover:bg-gray-700 dark:hover:bg-gray-600 transition-all text-sm shadow-md"
               >
-                ← Back to States
+                ← Volver a Estados
               </button>
 
               <div className="text-center py-2 text-sm text-gray-500 dark:text-gray-400 font-semibold">
@@ -190,7 +190,7 @@ export function CitySelector({
                     "w-full text-left py-3 px-4 rounded-lg font-semibold transition-all shadow-sm hover:shadow-md flex items-center justify-between group",
                     currentCity === city 
                       ? "bg-gradient-to-r from-pink-500 to-pink-600 text-white" 
-                      : "bg-gradient-to-r from-cyan-500 to-blue-600 text-white hover:from-cyan-600 hover:to-blue-700"
+                      : "bg-gradient-to-r from-green-500 to-emerald-600 text-white hover:from-green-600 hover:to-emerald-700"
                   )}
                 >
                   <span>{city}</span>
