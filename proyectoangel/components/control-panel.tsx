@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
-import { SearchIcon, SettingsIcon, UserIcon, PhoneIcon, MapPinIcon, AlertTriangleIcon } from "@/components/icons";
+import { SearchIcon, SettingsIcon, AlertTriangleIcon } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,42 +28,59 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
   const [timeRemaining, setTimeRemaining] = useState<{ minutes: number; seconds: number } | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
 
+  // 🆕 Actualizar countdown cada segundo localmente
   useEffect(() => {
-    if (!browser.republishStatus) {
+    if (!browser.republishStatus || browser.isPaused) {
       setTimeRemaining(null);
       setProgressPercent(0);
       return;
     }
 
-    // Usar directamente los datos de Firebase (que se actualizan en el parent)
-    const { remainingSeconds, totalSeconds } = browser.republishStatus;
+    // Calcular tiempo inicial desde Firebase
+    const initialRemaining = browser.republishStatus.remainingSeconds;
+    const totalSeconds = browser.republishStatus.totalSeconds;
     
-    // Calcular minutos y segundos
-    const minutes = Math.floor(remainingSeconds / 60);
-    const seconds = remainingSeconds % 60;
-    setTimeRemaining({ minutes, seconds });
+    let currentRemaining = initialRemaining;
 
-    // Calcular progreso
-    const elapsedSeconds = totalSeconds - remainingSeconds;
-    const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
-    setProgressPercent(Math.min(100, Math.max(0, progress)));
+    // Actualizar inmediatamente
+    const updateDisplay = () => {
+      const minutes = Math.floor(currentRemaining / 60);
+      const seconds = currentRemaining % 60;
+      setTimeRemaining({ minutes, seconds });
 
-  }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds]);
+      const elapsedSeconds = totalSeconds - currentRemaining;
+      const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
+      setProgressPercent(Math.min(100, Math.max(0, progress)));
+    };
+
+    updateDisplay();
+
+    // 🔥 Actualizar cada segundo localmente
+    const interval = setInterval(() => {
+      currentRemaining = Math.max(0, currentRemaining - 1);
+      updateDisplay();
+
+      // Si llega a 0, detener
+      if (currentRemaining <= 0) {
+        clearInterval(interval);
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds, browser.isPaused]);
   
   // Determinar si está completada (para mostrar el mensaje)
   const isCompleted = timeRemaining !== null && timeRemaining.minutes === 0 && timeRemaining.seconds === 0;
   
-  // 🆕 Detectar errores por datos N/A (indica problema en la página)
+  // Detectar errores
   const hasDataExtractionError = 
     (browser.phoneNumber === "N/A" || browser.phoneNumber === "Manual") &&
     (browser.city === "N/A" || browser.city === "Manual") &&
     (browser.location === "N/A" || browser.location === "Manual");
   
-  // 🆕 Detectar si hay un error reportado recientemente (últimos 5 minutos)
   const hasRecentError = browser.lastError && 
     (Date.now() - new Date(browser.lastError.timestamp).getTime()) < 5 * 60 * 1000;
   
-  // 🆕 Detectar fallo de republicación (tiempo > totalSeconds + 60s)
   const hasRepublishFailure = browser.republishStatus && 
     browser.republishStatus.elapsedSeconds > (browser.republishStatus.totalSeconds + 60);
   
@@ -79,7 +96,7 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
           : "border-border bg-gradient-to-br from-card to-card/50 hover:border-primary/50"
       )}
     >
-      {/* 🆕 ALERTA DE ERROR */}
+      {/* ALERTA DE ERROR */}
       {hasError && (
         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
           <div className="flex items-center gap-2 mb-2">
@@ -106,7 +123,7 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
         </div>
       )}
 
-      {/* 🔥 BANNER DE ADVERTENCIA DE RENTA (<3 DÍAS) */}
+      {/* BANNER DE ADVERTENCIA DE RENTA (<3 DÍAS) */}
       {browser.rentalRemaining && 
        browser.rentalRemaining.days <= 3 && 
        browser.rentalRemaining.days >= 0 && (
@@ -278,11 +295,17 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span className="text-xs font-semibold uppercase tracking-wider text-pink-400">
-            {isCompleted ? "Republicación" : "Próxima Republicación"}
+            {browser.isPaused ? "Pausado" : isCompleted ? "Republicación" : "Próxima Republicación"}
           </span>
         </div>
         
-        {timeRemaining ? (
+        {browser.isPaused ? (
+          <div className="text-center">
+            <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
+              ⏸ En Pausa
+            </span>
+          </div>
+        ) : timeRemaining ? (
           <>
             <div className="mb-3 text-center">
               {isCompleted ? (
@@ -290,7 +313,7 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
                   ✓ Completada
                 </span>
               ) : (
-                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
+                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 tabular-nums">
                   {timeRemaining.minutes}m {timeRemaining.seconds}s
                 </span>
               )}
@@ -348,11 +371,10 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
   
-  // 🆕 Estado para modal crítico
   const [showCriticalModal, setShowCriticalModal] = useState(false);
   const [criticalBrowser, setCriticalBrowser] = useState<BrowserData | null>(null);
 
-  // 🆕 Escuchar cambios en Firebase para actualizar las tarjetas en tiempo real
+  // Escuchar cambios en Firebase para actualizar las tarjetas en tiempo real
   useEffect(() => {
     if (browserList.length === 0) return;
 
@@ -378,9 +400,9 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [browserList.length]); // Solo cuando cambia la cantidad de navegadores
+  }, [browserList.length]);
 
-  // 🆕 Detectar navegadores con <24h y mostrar modal automáticamente
+  // Detectar navegadores con <24h y mostrar modal automáticamente
   useEffect(() => {
     if (browserList.length === 0) return;
 
@@ -435,12 +457,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const handleSelectBrowser = (browser: BrowserData) => {
     // NO limpiar browserList - solo abrir el dashboard
     setBrowserData(browser);
-  };
-
-  const handleBackToList = () => {
-    setBrowserData(null);
-    setBrowserList([]);
-    // NO borrar clientSearch - mantener para que el usuario pueda buscar de nuevo
   };
 
   return (
@@ -516,12 +532,11 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           onClose={() => {
             // Solo cerrar el modal, NO limpiar la lista ni el campo de búsqueda
             setBrowserData(null);
-            // browserList y clientSearch se mantienen para que el usuario pueda seguir viendo sus tarjetas
           }}
         />
       )}
 
-      {/* 🔥 MODAL CRÍTICO (<24 HORAS) */}
+      {/* MODAL CRÍTICO (<24 HORAS) */}
       {showCriticalModal && criticalBrowser && criticalBrowser.rentalRemaining && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
           <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
