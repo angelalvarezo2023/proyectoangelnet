@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationSettings } from "@/components/notification-settings";
-import { CitySelector } from "@/components/city-selector"; // 🆕 AGREGADO
+import { CitySelector } from "@/components/CitySelector"; // 🆕 AGREGADO
 
 interface DashboardProps {
   browserData: BrowserData;
