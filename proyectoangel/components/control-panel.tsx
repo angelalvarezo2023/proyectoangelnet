@@ -23,18 +23,24 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
-// 🎨 Función para determinar el color según tiempo de renta
-function getRentalColorClass(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "border-muted-foreground/20";
-  if (rental.days === 0 && rental.hours === 0) return "border-red-500/50 bg-red-500/5";
-  if (rental.days === 0 && rental.hours < 24) return "border-red-500/50 bg-red-500/5 animate-pulse";
-  if (rental.days <= 1) return "border-orange-500/50 bg-orange-500/5";
-  if (rental.days <= 3) return "border-yellow-500/50 bg-yellow-500/5";
-  return "border-green-500/50 bg-green-500/5";
+function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
+  if (!rental || rental.days === -1) return "from-gray-500/10 to-gray-600/10";
+  if (rental.days === 0 && rental.hours < 24) return "from-red-500/20 via-pink-500/20 to-red-600/20";
+  if (rental.days <= 1) return "from-orange-500/20 via-amber-500/20 to-orange-600/20";
+  if (rental.days <= 3) return "from-yellow-500/20 via-amber-400/20 to-yellow-600/20";
+  return "from-green-500/20 via-emerald-500/20 to-green-600/20";
+}
+
+function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
+  if (!rental || rental.days === -1) return "shadow-gray-500/0";
+  if (rental.days === 0 && rental.hours < 24) return "shadow-red-500/50 shadow-lg";
+  if (rental.days <= 1) return "shadow-orange-500/30 shadow-md";
+  if (rental.days <= 3) return "shadow-yellow-500/20 shadow-sm";
+  return "shadow-green-500/20 shadow-sm";
 }
 
 function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "text-muted-foreground";
+  if (!rental || rental.days === -1) return "text-gray-400";
   if (rental.days === 0 && rental.hours < 24) return "text-red-400";
   if (rental.days <= 1) return "text-orange-400";
   if (rental.days <= 3) return "text-yellow-400";
@@ -46,7 +52,6 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
   const [localRemaining, setLocalRemaining] = useState<number | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastFirebaseUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     if (!browser.republishStatus || browser.isPaused) {
@@ -68,7 +73,6 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
 
     if (shouldUpdate) {
       setLocalRemaining(firebaseRemaining);
-      lastFirebaseUpdateRef.current = Date.now();
     }
 
     if (intervalRef.current) {
@@ -122,12 +126,12 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
   
   const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
-  // 🔥 Solo mostrar alerta cuando quedan menos de 24 horas
   const showRentalAlert = browser.rentalRemaining && 
     browser.rentalRemaining.days === 0 && 
     browser.rentalRemaining.hours < 24;
 
-  const rentalColorClass = getRentalColorClass(browser.rentalRemaining);
+  const rentalGradient = getRentalGradient(browser.rentalRemaining);
+  const rentalBorderGlow = getRentalBorderGlow(browser.rentalRemaining);
   const rentalTextColor = getRentalTextColor(browser.rentalRemaining);
 
   // 📋 VISTA DE LISTA
@@ -136,291 +140,276 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
       <div
         onClick={onClick}
         className={cn(
-          "group cursor-pointer rounded-xl border p-4 transition-all hover:shadow-lg hover:shadow-primary/5 flex items-center gap-4",
+          "group cursor-pointer rounded-2xl border border-white/10 p-4 transition-all duration-300 hover:scale-[1.01] flex items-center gap-4 backdrop-blur-xl",
           hasError 
-            ? "border-red-500/50 bg-gradient-to-r from-red-500/10 to-card/50" 
-            : rentalColorClass
+            ? "bg-gradient-to-r from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-lg" 
+            : `bg-gradient-to-r ${rentalGradient} ${rentalBorderGlow}`
         )}
       >
         {/* Estado */}
         <div className="flex items-center gap-2 min-w-[100px]">
           <div className={cn(
-            "h-3 w-3 rounded-full",
-            browser.isPaused ? "bg-yellow-400" : "animate-pulse bg-green-400"
-          )} />
+            "h-3 w-3 rounded-full relative",
+            browser.isPaused ? "bg-yellow-400" : "bg-green-400"
+          )}>
+            {!browser.isPaused && (
+              <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
+            )}
+          </div>
           <span className={cn(
-            "text-sm font-semibold",
+            "text-sm font-bold",
             browser.isPaused ? "text-yellow-400" : "text-green-400"
           )}>
-            {browser.isPaused ? "Pausado" : "En línea"}
+            {browser.isPaused ? "Pausado" : "Activo"}
           </span>
         </div>
 
         {/* Nombre */}
         <div className="flex-1 min-w-[150px]">
-          <h3 className="text-lg font-bold text-foreground">{browser.browserName}</h3>
+          <h3 className="text-lg font-bold text-white">{browser.browserName}</h3>
           {browser.postName && browser.postName !== "N/A" && (
-            <p className="text-sm text-muted-foreground">{browser.postName}</p>
+            <p className="text-sm text-white/60">{browser.postName}</p>
           )}
         </div>
 
         {/* Countdown */}
-        <div className="min-w-[140px] text-center">
+        <div className="min-w-[140px] text-center bg-black/20 rounded-xl p-3 border border-white/5">
           {browser.isPaused ? (
             <span className="text-lg font-bold text-yellow-400">⏸ Pausado</span>
           ) : timeRemaining ? (
-            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 tabular-nums">
+            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
               {timeRemaining.minutes}m {timeRemaining.seconds}s
             </span>
           ) : (
-            <span className="text-sm text-muted-foreground">Sin datos</span>
+            <span className="text-sm text-white/40">Sin datos</span>
           )}
         </div>
 
         {/* Tiempo de Renta */}
-        <div className="min-w-[120px] text-right">
-          <div className="text-xs text-muted-foreground mb-1">RENTA</div>
+        <div className="min-w-[120px] text-right bg-black/20 rounded-xl p-3 border border-white/5">
+          <div className="text-xs text-white/60 mb-1">RENTA</div>
           <div className={cn("text-xl font-black", rentalTextColor)}>
             {formatRentalTime(browser.rentalRemaining)}
           </div>
         </div>
 
-        {/* Alerta si <24h */}
         {showRentalAlert && (
-          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
-            <AlertTriangleIcon className="h-5 w-5 text-destructive animate-pulse" />
-            <span className="text-sm font-bold text-destructive">¡Expira hoy!</span>
+          <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-4 py-2 backdrop-blur-sm">
+            <AlertTriangleIcon className="h-5 w-5 text-red-400 animate-pulse" />
+            <span className="text-sm font-bold text-red-400">¡Expira hoy!</span>
           </div>
         )}
 
-        {/* Error si existe */}
         {hasError && (
-          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
-            <span className="text-red-400">⚠️</span>
-            <span className="text-sm font-semibold text-red-400">Error</span>
+          <div className="flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-4 py-2">
+            <span className="text-red-400 text-lg">⚠️</span>
+            <span className="text-sm font-bold text-red-400">Error</span>
           </div>
         )}
 
-        {/* Arrow */}
-        <div className="text-primary opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="text-white/40 opacity-0 transition-opacity group-hover:opacity-100 text-xl">
           →
         </div>
       </div>
     );
   }
 
-  // 🔲 VISTA DE GRID (Original)
+  // 🔲 VISTA DE GRID MEJORADA
   return (
     <div
       onClick={onClick}
       className={cn(
-        "group cursor-pointer rounded-xl border p-6 transition-all hover:shadow-xl hover:shadow-primary/5",
+        "group cursor-pointer rounded-3xl border border-white/10 p-6 transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 backdrop-blur-xl relative overflow-hidden",
         hasError 
-          ? "border-red-500/50 bg-gradient-to-br from-red-500/10 to-card/50" 
-          : rentalColorClass
+          ? "bg-gradient-to-br from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-xl" 
+          : `bg-gradient-to-br ${rentalGradient} ${rentalBorderGlow}`
       )}
     >
-      {/* ALERTA DE ERROR */}
+      {/* Efecto de brillo animado */}
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+
+      {/* Alerta de Error */}
       {hasError && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="text-red-400">⚠️</span>
-            <span className="text-sm font-semibold text-red-400">
-              {hasRepublishFailure ? "Fallo en Republicación" :
-               hasDataExtractionError ? "Error de Extracción de Datos" :
-               "Error Detectado"}
-            </span>
+        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm relative overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 animate-pulse" />
+          <div className="relative flex items-center gap-3">
+            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
+              <span className="text-2xl">⚠️</span>
+            </div>
+            <div>
+              <p className="text-sm font-bold text-red-400">
+                {hasRepublishFailure ? "⏰ Fallo en Republicación" :
+                 hasDataExtractionError ? "📋 Error de Extracción" :
+                 "❌ Error Detectado"}
+              </p>
+              <p className="text-xs text-red-300/70 mt-1">
+                Verifica el navegador manualmente
+              </p>
+            </div>
           </div>
         </div>
       )}
 
-      {/* 🔥 BANNER DE ADVERTENCIA DE RENTA (SOLO <24 HORAS) */}
+      {/* Banner de Alerta de Renta */}
       {showRentalAlert && (
-        <div className="mb-4 rounded-xl border-l-4 p-4 bg-destructive/10 border-destructive animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="flex-shrink-0 rounded-full p-2 bg-destructive/20">
-              <AlertTriangleIcon className="h-6 w-6 text-destructive" />
+        <div className="mb-4 rounded-2xl border-2 border-red-500/50 bg-gradient-to-br from-red-500/20 to-pink-500/20 p-4 backdrop-blur-sm animate-pulse">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-red-500/30 flex items-center justify-center border border-red-500/50">
+              <span className="text-3xl">🚨</span>
             </div>
             
             <div className="flex-1">
-              <p className="font-bold text-sm mb-1 text-destructive">
-                🚨 ¡Expira en {browser.rentalRemaining.hours}h {browser.rentalRemaining.minutes}m!
+              <p className="font-black text-base text-red-400 mb-1">
+                ¡Expira en {browser.rentalRemaining.hours}h {browser.rentalRemaining.minutes}m!
               </p>
-              <p className="text-xs text-muted-foreground">
-                Tu anuncio será ELIMINADO si no renuevas AHORA
+              <p className="text-xs text-red-300/80">
+                Tu anuncio será ELIMINADO automáticamente
               </p>
             </div>
             
             <a 
               href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                `URGENTE: Necesito renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
+                `🚨 URGENTE: Renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="px-4 py-2 rounded-lg font-bold text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse transition-all duration-200 hover:scale-105 shadow-lg flex-shrink-0"
+              className="px-5 py-3 rounded-xl font-black text-sm bg-gradient-to-r from-red-500 to-pink-600 text-white hover:scale-105 transition-all duration-200 shadow-lg shadow-red-500/50 border border-red-400/50"
             >
               🔥 RENOVAR
             </a>
           </div>
-          
-          {/* Countdown mini */}
-          <div className="mt-3 pt-3 border-t border-destructive/20">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-black/30 rounded-lg p-1.5">
-                <div className="text-lg font-bold text-destructive">
-                  {browser.rentalRemaining.hours}
-                </div>
-                <div className="text-xs text-muted-foreground">Horas</div>
-              </div>
-              <div className="bg-black/30 rounded-lg p-1.5">
-                <div className="text-lg font-bold text-destructive">
-                  {browser.rentalRemaining.minutes}
-                </div>
-                <div className="text-xs text-muted-foreground">Min</div>
-              </div>
-              <div className="bg-black/30 rounded-lg p-1.5">
-                <div className="text-lg font-bold text-destructive animate-pulse">
-                  ⏰
-                </div>
-                <div className="text-xs text-muted-foreground">Urgente</div>
-              </div>
-            </div>
-          </div>
         </div>
       )}
 
-      {/* Header con estado */}
-      <div className="mb-4 flex items-start justify-between">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-1.5",
-              browser.isPaused 
-                ? "bg-yellow-500/20" 
-                : "bg-green-500/20"
-            )}
-          >
-            <div
-              className={cn(
-                "h-2 w-2 rounded-full",
-                browser.isPaused 
-                  ? "bg-yellow-400" 
-                  : "animate-pulse bg-green-400"
+      {/* Header - Estado y Nombre */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className={cn(
+            "flex items-center gap-3 px-4 py-2 rounded-full backdrop-blur-md border",
+            browser.isPaused 
+              ? "bg-yellow-500/20 border-yellow-500/30" 
+              : "bg-green-500/20 border-green-500/30"
+          )}>
+            <div className="relative">
+              <div className={cn(
+                "h-3 w-3 rounded-full",
+                browser.isPaused ? "bg-yellow-400" : "bg-green-400"
+              )} />
+              {!browser.isPaused && (
+                <div className="absolute inset-0 rounded-full bg-green-400 animate-ping" />
               )}
-            />
+            </div>
             <span className={cn(
-              "text-xs font-semibold",
+              "text-sm font-bold",
               browser.isPaused ? "text-yellow-400" : "text-green-400"
             )}>
-              En línea
+              {browser.isPaused ? "Pausado" : "En Línea"}
             </span>
           </div>
+          
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/60 text-sm font-medium">
+            Ver detalles →
+          </div>
         </div>
-        <div className="text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-          Ver detalles →
-        </div>
-      </div>
 
-      {/* Nombre del navegador */}
-      <h3 className="mb-4 text-xl font-bold text-foreground">
-        {browser.browserName}
-      </h3>
-
-      {/* Información del perfil */}
-      <div className="mb-4 space-y-2 rounded-lg border border-border/50 bg-background/50 p-4">
+        <h3 className="text-3xl font-black text-white mb-2 tracking-tight">
+          {browser.browserName}
+        </h3>
         {browser.postName && browser.postName !== "N/A" && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Nombre del Post:</span>
-            <span className="font-semibold text-foreground">{browser.postName}</span>
-          </div>
-        )}
-        {browser.phoneNumber && browser.phoneNumber !== "N/A" && browser.phoneNumber !== "Manual" && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Teléfono:</span>
-            <span className="font-semibold text-foreground">{browser.phoneNumber}</span>
-          </div>
-        )}
-        {browser.city && browser.city !== "N/A" && browser.city !== "Manual" && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Ciudad:</span>
-            <span className="font-semibold text-foreground">{browser.city}</span>
-          </div>
-        )}
-        {browser.location && browser.location !== "N/A" && browser.location !== "Manual" && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Ubicación:</span>
-            <span className="font-semibold text-foreground">{browser.location}</span>
-          </div>
+          <p className="text-sm text-white/60">{browser.postName}</p>
         )}
       </div>
 
-      {/* PRÓXIMA REPUBLICACIÓN */}
-      <div className="mb-4 overflow-hidden rounded-xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 to-purple-500/10 p-4">
-        <div className="mb-2 flex items-center gap-2">
-          <svg className="h-4 w-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span className="text-xs font-semibold uppercase tracking-wider text-pink-400">
-            {browser.isPaused ? "Pausado" : isCompleted ? "Republicación" : "Próxima Republicación"}
-          </span>
-        </div>
+      {/* Countdown de Republicación */}
+      <div className="mb-4 rounded-2xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
         
-        {browser.isPaused ? (
-          <div className="text-center">
-            <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
-              ⏸ En Pausa
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center">
+              <svg className="w-4 h-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">
+              {browser.isPaused ? "⏸ Sistema Pausado" : isCompleted ? "✓ Republicación Completa" : "Próxima Republicación"}
             </span>
           </div>
-        ) : timeRemaining ? (
-          <>
-            <div className="mb-3 text-center">
-              {isCompleted ? (
-                <span className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
-                  ✓ Completada
-                </span>
-              ) : (
-                <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 tabular-nums">
-                  {timeRemaining.minutes}m {timeRemaining.seconds}s
-                </span>
-              )}
+          
+          {browser.isPaused ? (
+            <div className="text-center py-4">
+              <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
+                ⏸ En Pausa
+              </span>
             </div>
-            
-            {/* Barra de progreso */}
-            <div className="h-2 w-full overflow-hidden rounded-full bg-background/50">
-              <div
-                className={cn(
-                  "h-full rounded-full transition-all duration-1000 ease-linear",
-                  isCompleted 
-                    ? "bg-gradient-to-r from-green-500 to-emerald-500" 
-                    : "bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"
+          ) : timeRemaining ? (
+            <>
+              <div className="text-center py-2 mb-3">
+                {isCompleted ? (
+                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
+                    ✓ Lista
+                  </span>
+                ) : (
+                  <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
+                    {timeRemaining.minutes}<span className="text-3xl">m</span> {timeRemaining.seconds}<span className="text-3xl">s</span>
+                  </span>
                 )}
-                style={{ width: `${progressPercent}%` }}
-              />
+              </div>
+              
+              {/* Barra de progreso mejorada */}
+              <div className="relative h-3 w-full overflow-hidden rounded-full bg-black/30 border border-white/10">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden",
+                    isCompleted 
+                      ? "bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" 
+                      : "bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"
+                  )}
+                  style={{ width: `${progressPercent}%` }}
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-6 text-white/40">
+              Sin datos de republicación
             </div>
-          </>
-        ) : (
-          <div className="text-center text-sm text-muted-foreground">
-            Sin datos de republicación
+          )}
+        </div>
+      </div>
+
+      {/* Tiempo de Renta */}
+      <div className={cn(
+        "rounded-2xl border p-5 backdrop-blur-sm relative overflow-hidden",
+        `bg-gradient-to-br ${rentalGradient} border-white/10`
+      )}>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,0.05),transparent)]" />
+        
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", 
+              browser.rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
+            )}>
+              <span className="text-lg">⏰</span>
+            </div>
+            <span className="text-xs font-bold uppercase tracking-wider text-white/60">
+              Tiempo de Renta
+            </span>
           </div>
-        )}
-      </div>
-
-      {/* TIEMPO DE RENTA */}
-      <div className={cn("overflow-hidden rounded-xl border p-4", rentalColorClass)}>
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Tiempo de Renta
-        </div>
-        <div className="text-center">
-          <span className={cn("text-3xl font-black", rentalTextColor)}>
-            {formatRentalTime(browser.rentalRemaining)}
-          </span>
+          
+          <div className="text-center py-2">
+            <span className={cn("text-5xl font-black", rentalTextColor)}>
+              {formatRentalTime(browser.rentalRemaining)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Botón oculto para click */}
-      <div className="mt-4 text-center text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100">
-        👆 Click para ver detalles y controles
+      {/* Hover Tooltip */}
+      <div className="mt-4 text-center text-xs text-white/40 opacity-0 transition-opacity group-hover:opacity-100">
+        👆 Click para abrir panel de control
       </div>
     </div>
   );
@@ -461,7 +450,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     };
   }, [browserList.length]);
 
-  // 🆕 Modal solo cuando quedan menos de 12 horas
   useEffect(() => {
     if (browserList.length === 0) return;
 
@@ -553,7 +541,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           </div>
         </div>
 
-        {/* Lista de Navegadores */}
         {browserList.length > 0 && (
           <div className="mt-8 space-y-6">
             <div className="flex items-center justify-between">
@@ -566,14 +553,13 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 </p>
               </div>
 
-              {/* 🆕 Toggle Vista */}
-              <div className="flex items-center gap-2 bg-secondary rounded-lg p-1">
+              <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1 border border-border">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
                     viewMode === 'grid'
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background text-foreground shadow-lg"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -582,9 +568,9 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 <button
                   onClick={() => setViewMode('list')}
                   className={cn(
-                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200",
                     viewMode === 'list'
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background text-foreground shadow-lg"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -593,7 +579,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
               </div>
             </div>
 
-            {/* Grid o Lista */}
             <div className={cn(
               viewMode === 'grid' 
                 ? "grid gap-6 md:grid-cols-2" 
@@ -612,7 +597,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         )}
       </div>
 
-      {/* Dashboard Modal */}
       {browserData && (
         <Dashboard
           browserData={browserData}
@@ -622,7 +606,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         />
       )}
 
-      {/* MODAL CRÍTICO (<12 HORAS) */}
       {showCriticalModal && criticalBrowser && criticalBrowser.rentalRemaining && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
           <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
@@ -640,8 +623,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 </p>
                 
                 <div className="bg-destructive/20 border-2 border-destructive rounded-xl p-6 mb-6 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent" 
-                       style={{ animation: 'shimmer 2s infinite' }} />
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
                   <p className="text-lg font-bold text-destructive mb-2">
                     Tu cuenta expira en
                   </p>
@@ -738,6 +720,10 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           100% {
             transform: translateX(100%);
           }
+        }
+        
+        .animate-shimmer {
+          animation: shimmer 3s infinite;
         }
       `}</style>
     </>
