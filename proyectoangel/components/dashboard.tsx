@@ -718,11 +718,11 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 {editForm.body && <p className="mt-1 text-xs text-muted-foreground">{editForm.body.length}/2000</p>}
               </div>
 
-              {/* 🆕 CAMPO DE CIUDAD MODIFICADO */}
-              <div className="grid grid-cols-2 gap-4">
+              {/* 🆕 CAMPO DE CIUDAD MODIFICADO - RESPONSIVE */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">
-                    City / Estado
+                    Ciudad / Estado
                   </label>
                   <div className="flex gap-2">
                     <Input
@@ -731,13 +731,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                       placeholder="Selecciona un estado"
                       maxLength={100}
-                      className="bg-input text-foreground"
+                      className="bg-input text-foreground flex-1 min-w-0"
                       readOnly
                     />
                     <Button
                       type="button"
                       onClick={() => setShowCitySelector(true)}
-                      className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 whitespace-nowrap"
+                      className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 whitespace-nowrap flex-shrink-0"
                     >
                       🗺️ Cambiar
                     </Button>
