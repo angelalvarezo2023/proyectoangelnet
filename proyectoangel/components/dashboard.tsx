@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationSettings } from "@/components/notification-settings";
+import { CitySelector } from "@/components/city-selector"; // 🆕 AGREGADO
 
 interface DashboardProps {
   browserData: BrowserData;
@@ -55,6 +56,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [captchaCode, setCaptchaCode] = useState("");
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
+  const [showCitySelector, setShowCitySelector] = useState(false); // 🆕 AGREGADO
 
   const [editForm, setEditForm] = useState({
     name: "",
@@ -212,6 +214,11 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       location: "",
     });
     setShowEditForm(true);
+  };
+
+  // 🆕 FUNCIÓN AGREGADA
+  const handleCitySelect = (city: string) => {
+    setEditForm(prev => ({ ...prev, city }));
   };
 
   const handleSaveAllEdits = async () => {
@@ -480,7 +487,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {/* 🆕 SECCIÓN: VER ANUNCIO EN VIVO */}
             {liveData.postId && liveData.postUrl ? (
               <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
@@ -712,17 +718,35 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 {editForm.body && <p className="mt-1 text-xs text-muted-foreground">{editForm.body.length}/2000</p>}
               </div>
 
+              {/* 🆕 CAMPO DE CIUDAD MODIFICADO */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-muted-foreground">City</label>
-                  <Input
-                    type="text"
-                    value={editForm.city}
-                    onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                    placeholder="No cambiar"
-                    maxLength={100}
-                    className="bg-input text-foreground"
-                  />
+                  <label className="mb-2 block text-sm font-medium text-muted-foreground">
+                    City / Estado
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={editForm.city}
+                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
+                      placeholder="Selecciona un estado"
+                      maxLength={100}
+                      className="bg-input text-foreground"
+                      readOnly
+                    />
+                    <Button
+                      type="button"
+                      onClick={() => setShowCitySelector(true)}
+                      className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 whitespace-nowrap"
+                    >
+                      🗺️ Cambiar
+                    </Button>
+                  </div>
+                  {editForm.city && (
+                    <p className="mt-1 text-xs text-accent">
+                      ✓ Seleccionado: {editForm.city}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-muted-foreground">Location/Area</label>
@@ -832,6 +856,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
           onClose={() => setShowNotificationSettings(false)}
         />
       )}
+
+      {/* 🆕 COMPONENTE CITY SELECTOR AGREGADO */}
+      <CitySelector
+        isOpen={showCitySelector}
+        onClose={() => setShowCitySelector(false)}
+        onSelectCity={handleCitySelect}
+        currentCity={editForm.city}
+      />
     </>
   );
 }
