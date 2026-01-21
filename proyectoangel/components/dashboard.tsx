@@ -8,7 +8,6 @@ import {
   PauseIcon,
   PlayIcon,
   RefreshIcon,
-  CameraIcon,
   EditIcon,
   ClockIcon,
 } from "@/components/icons";
@@ -51,7 +50,6 @@ function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
 export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [liveData, setLiveData] = useState(browserData);
   const [actionLoading, setActionLoading] = useState(false);
-  const [screenshot, setScreenshot] = useState<string | null>(null);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
@@ -203,56 +201,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       }
     });
   }, [liveData, debounce, actionLoading]);
-
-  const executeAction = useCallback(async (actionType: string, payload: Record<string, unknown> = {}) => {
-    if (commandInProgressRef.current || actionLoading) {
-      return;
-    }
-
-    commandInProgressRef.current = true;
-    setActionLoading(true);
-
-    try {
-      const result = await FirebaseAPI.sendCommand(
-        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-        actionType,
-        payload
-      );
-
-      if (result.success) {
-        if (actionType === "screenshot") {
-          alert("Capturando...");
-
-          let attempts = 0;
-          const checkScreenshot = setInterval(async () => {
-            attempts++;
-            const data = await FirebaseAPI.findBrowserByName(
-              liveData.browserName || (liveData as BrowserData & { name?: string }).name || ""
-            );
-
-            if (data?.lastScreenshot) {
-              clearInterval(checkScreenshot);
-              setScreenshot(data.lastScreenshot);
-              setActionLoading(false);
-              commandInProgressRef.current = false;
-            } else if (attempts >= 10) {
-              clearInterval(checkScreenshot);
-              alert("No se recibió screenshot");
-              setActionLoading(false);
-              commandInProgressRef.current = false;
-            }
-          }, 1000);
-
-          return;
-        }
-      } else {
-        alert(`Error: ${result.error}`);
-      }
-    } finally {
-      setActionLoading(false);
-      commandInProgressRef.current = false;
-    }
-  }, [actionLoading, liveData]);
 
   const handleOpenEditor = () => {
     setEditForm({
@@ -532,6 +480,55 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
+            {/* 🆕 SECCIÓN: VER ANUNCIO EN VIVO */}
+            {liveData.postId && liveData.postUrl ? (
+              <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
+                
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
+                      <span className="text-2xl">👁️</span>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-foreground text-lg">Tu Anuncio en Vivo</h4>
+                      <p className="text-sm text-muted-foreground">Mira cómo lo ven tus clientes</p>
+                    </div>
+                  </div>
+                  
+                  <a
+                    href={liveData.postUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="block w-full bg-gradient-to-r from-primary via-purple-500 to-pink-500 text-white py-4 rounded-xl font-bold text-center hover:scale-105 transition-all duration-200 shadow-lg shadow-primary/50 text-lg"
+                  >
+                    🔗 Ver Mi Anuncio Ahora
+                  </a>
+                  
+                  {liveData.postIdCapturedAt && (
+                    <p className="text-xs text-center text-muted-foreground mt-3">
+                      ✅ Sincronizado {new Date(liveData.postIdCapturedAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-5 backdrop-blur-sm">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                    <span className="text-xl">⚠️</span>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-yellow-400">Anuncio No Sincronizado</h4>
+                    <p className="text-sm text-yellow-300/80">
+                      El link se capturará automáticamente en la próxima republicación
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {liveData.republishStatus && (
               <div className={cn("rounded-xl border border-border bg-secondary/30 p-4", liveData.isPaused && "opacity-60")}>
                 <div className="mb-4 flex items-center justify-between">
@@ -602,7 +599,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
             <div className="rounded-xl border border-border bg-secondary/30 p-4">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <Button
                   onClick={handleTogglePause}
                   disabled={actionLoading || commandInProgressRef.current}
@@ -627,15 +624,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 </Button>
 
                 <Button
-                  onClick={() => executeAction("screenshot")}
-                  disabled={actionLoading || commandInProgressRef.current}
-                  className="flex h-auto flex-col gap-2 bg-chart-3/10 py-4 text-chart-3 hover:bg-chart-3/20"
-                >
-                  <CameraIcon className="h-5 w-5" />
-                  <span className="text-xs">Captura</span>
-                </Button>
-
-                <Button
                   onClick={handleOpenEditor}
                   disabled={actionLoading || liveData.editInProgress || commandInProgressRef.current}
                   className="flex h-auto flex-col gap-2 bg-chart-4/10 py-4 text-chart-4 hover:bg-chart-4/20"
@@ -646,7 +634,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
                 <Button
                   onClick={() => setShowNotificationSettings(true)}
-                  className="col-span-2 flex h-auto flex-col gap-2 bg-blue-500/10 py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
+                  className="col-span-3 flex h-auto flex-col gap-2 bg-blue-500/10 py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
                 >
                   <span className="text-xl">🔔</span>
                   <span className="text-xs">Configurar Notificaciones</span>
@@ -834,24 +822,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             <p className="mt-4 text-center text-xs text-muted-foreground">
               La extensión guardará los cambios automáticamente después de verificar el código
             </p>
-          </div>
-        </div>
-      )}
-
-      {screenshot && (
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-background/95 p-5 backdrop-blur-sm"
-          onClick={() => setScreenshot(null)}
-        >
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setScreenshot(null)}
-              className="absolute -right-4 -top-4 rounded-full bg-card p-2 shadow-lg"
-            >
-              <XIcon className="h-5 w-5" />
-            </button>
-            <img src={screenshot || "/placeholder.svg"} alt="Screenshot" className="max-h-[90vh] max-w-[90vw] rounded-xl shadow-2xl" />
           </div>
         </div>
       )}
