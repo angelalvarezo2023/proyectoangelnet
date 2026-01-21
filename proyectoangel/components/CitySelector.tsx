@@ -84,7 +84,9 @@ export function CitySelector({
   };
 
   const handleCityClick = (city: string) => {
-    onSelectCity(city);
+    // Enviar ciudad con formato "Ciudad, Estado" para que la extensión pueda navegar el modal
+    const cityWithState = selectedState ? `${city}, ${selectedState}` : city;
+    onSelectCity(cityWithState);
     onClose();
     // Reset view
     setView('countries');
