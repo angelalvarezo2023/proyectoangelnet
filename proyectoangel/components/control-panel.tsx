@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
 import { SearchIcon, SettingsIcon, AlertTriangleIcon } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
@@ -23,56 +23,92 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
-// Componente para tarjeta de navegador con datos en tiempo real desde Firebase
-function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () => void }) {
-  const [timeRemaining, setTimeRemaining] = useState<{ minutes: number; seconds: number } | null>(null);
-  const [progressPercent, setProgressPercent] = useState(0);
+// 🎨 Función para determinar el color según tiempo de renta
+function getRentalColorClass(rental: BrowserData["rentalRemaining"]) {
+  if (!rental || rental.days === -1) return "border-muted-foreground/20";
+  if (rental.days === 0 && rental.hours === 0) return "border-red-500/50 bg-red-500/5";
+  if (rental.days === 0 && rental.hours < 24) return "border-red-500/50 bg-red-500/5 animate-pulse";
+  if (rental.days <= 1) return "border-orange-500/50 bg-orange-500/5";
+  if (rental.days <= 3) return "border-yellow-500/50 bg-yellow-500/5";
+  return "border-green-500/50 bg-green-500/5";
+}
 
-  // 🆕 Actualizar countdown cada segundo localmente
+function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
+  if (!rental || rental.days === -1) return "text-muted-foreground";
+  if (rental.days === 0 && rental.hours < 24) return "text-red-400";
+  if (rental.days <= 1) return "text-orange-400";
+  if (rental.days <= 3) return "text-yellow-400";
+  return "text-green-400";
+}
+
+// Componente para tarjeta de navegador
+function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onClick: () => void; viewMode: 'grid' | 'list' }) {
+  const [localRemaining, setLocalRemaining] = useState<number | null>(null);
+  const [progressPercent, setProgressPercent] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastFirebaseUpdateRef = useRef<number>(0);
+
   useEffect(() => {
     if (!browser.republishStatus || browser.isPaused) {
-      setTimeRemaining(null);
+      setLocalRemaining(null);
       setProgressPercent(0);
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
       return;
     }
 
-    // Calcular tiempo inicial desde Firebase
-    const initialRemaining = browser.republishStatus.remainingSeconds;
+    const firebaseRemaining = browser.republishStatus.remainingSeconds;
     const totalSeconds = browser.republishStatus.totalSeconds;
-    
-    let currentRemaining = initialRemaining;
 
-    // Actualizar inmediatamente
-    const updateDisplay = () => {
-      const minutes = Math.floor(currentRemaining / 60);
-      const seconds = currentRemaining % 60;
-      setTimeRemaining({ minutes, seconds });
+    const shouldUpdate = 
+      localRemaining === null || 
+      Math.abs(firebaseRemaining - localRemaining) > 5;
 
-      const elapsedSeconds = totalSeconds - currentRemaining;
-      const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
-      setProgressPercent(Math.min(100, Math.max(0, progress)));
-    };
+    if (shouldUpdate) {
+      setLocalRemaining(firebaseRemaining);
+      lastFirebaseUpdateRef.current = Date.now();
+    }
 
-    updateDisplay();
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
 
-    // 🔥 Actualizar cada segundo localmente
-    const interval = setInterval(() => {
-      currentRemaining = Math.max(0, currentRemaining - 1);
-      updateDisplay();
-
-      // Si llega a 0, detener
-      if (currentRemaining <= 0) {
-        clearInterval(interval);
-      }
+    intervalRef.current = setInterval(() => {
+      setLocalRemaining(prev => {
+        if (prev === null || prev <= 0) {
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
 
-    return () => clearInterval(interval);
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
   }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds, browser.isPaused]);
+
+  useEffect(() => {
+    if (localRemaining !== null && browser.republishStatus) {
+      const totalSeconds = browser.republishStatus.totalSeconds;
+      const elapsedSeconds = totalSeconds - localRemaining;
+      const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
+      setProgressPercent(Math.min(100, Math.max(0, progress)));
+    }
+  }, [localRemaining, browser.republishStatus?.totalSeconds]);
+
+  const timeRemaining = localRemaining !== null ? {
+    minutes: Math.floor(localRemaining / 60),
+    seconds: localRemaining % 60
+  } : null;
   
-  // Determinar si está completada (para mostrar el mensaje)
   const isCompleted = timeRemaining !== null && timeRemaining.minutes === 0 && timeRemaining.seconds === 0;
   
-  // Detectar errores
   const hasDataExtractionError = 
     (browser.phoneNumber === "N/A" || browser.phoneNumber === "Manual") &&
     (browser.city === "N/A" || browser.city === "Manual") &&
@@ -86,6 +122,94 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
   
   const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
+  // 🔥 Solo mostrar alerta cuando quedan menos de 24 horas
+  const showRentalAlert = browser.rentalRemaining && 
+    browser.rentalRemaining.days === 0 && 
+    browser.rentalRemaining.hours < 24;
+
+  const rentalColorClass = getRentalColorClass(browser.rentalRemaining);
+  const rentalTextColor = getRentalTextColor(browser.rentalRemaining);
+
+  // 📋 VISTA DE LISTA
+  if (viewMode === 'list') {
+    return (
+      <div
+        onClick={onClick}
+        className={cn(
+          "group cursor-pointer rounded-xl border p-4 transition-all hover:shadow-lg hover:shadow-primary/5 flex items-center gap-4",
+          hasError 
+            ? "border-red-500/50 bg-gradient-to-r from-red-500/10 to-card/50" 
+            : rentalColorClass
+        )}
+      >
+        {/* Estado */}
+        <div className="flex items-center gap-2 min-w-[100px]">
+          <div className={cn(
+            "h-3 w-3 rounded-full",
+            browser.isPaused ? "bg-yellow-400" : "animate-pulse bg-green-400"
+          )} />
+          <span className={cn(
+            "text-sm font-semibold",
+            browser.isPaused ? "text-yellow-400" : "text-green-400"
+          )}>
+            {browser.isPaused ? "Pausado" : "En línea"}
+          </span>
+        </div>
+
+        {/* Nombre */}
+        <div className="flex-1 min-w-[150px]">
+          <h3 className="text-lg font-bold text-foreground">{browser.browserName}</h3>
+          {browser.postName && browser.postName !== "N/A" && (
+            <p className="text-sm text-muted-foreground">{browser.postName}</p>
+          )}
+        </div>
+
+        {/* Countdown */}
+        <div className="min-w-[140px] text-center">
+          {browser.isPaused ? (
+            <span className="text-lg font-bold text-yellow-400">⏸ Pausado</span>
+          ) : timeRemaining ? (
+            <span className="text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400 tabular-nums">
+              {timeRemaining.minutes}m {timeRemaining.seconds}s
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground">Sin datos</span>
+          )}
+        </div>
+
+        {/* Tiempo de Renta */}
+        <div className="min-w-[120px] text-right">
+          <div className="text-xs text-muted-foreground mb-1">RENTA</div>
+          <div className={cn("text-xl font-black", rentalTextColor)}>
+            {formatRentalTime(browser.rentalRemaining)}
+          </div>
+        </div>
+
+        {/* Alerta si <24h */}
+        {showRentalAlert && (
+          <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-lg px-3 py-2">
+            <AlertTriangleIcon className="h-5 w-5 text-destructive animate-pulse" />
+            <span className="text-sm font-bold text-destructive">¡Expira hoy!</span>
+          </div>
+        )}
+
+        {/* Error si existe */}
+        {hasError && (
+          <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2">
+            <span className="text-red-400">⚠️</span>
+            <span className="text-sm font-semibold text-red-400">Error</span>
+          </div>
+        )}
+
+        {/* Arrow */}
+        <div className="text-primary opacity-0 transition-opacity group-hover:opacity-100">
+          →
+        </div>
+      </div>
+    );
+  }
+
+  // 🔲 VISTA DE GRID (Original)
   return (
     <div
       onClick={onClick}
@@ -93,7 +217,7 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
         "group cursor-pointer rounded-xl border p-6 transition-all hover:shadow-xl hover:shadow-primary/5",
         hasError 
           ? "border-red-500/50 bg-gradient-to-br from-red-500/10 to-card/50" 
-          : "border-border bg-gradient-to-br from-card to-card/50 hover:border-primary/50"
+          : rentalColorClass
       )}
     >
       {/* ALERTA DE ERROR */}
@@ -107,119 +231,62 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
                "Error Detectado"}
             </span>
           </div>
-          {browser.lastError && hasRecentError && (
-            <p className="text-xs text-red-300">{browser.lastError.message}</p>
-          )}
-          {hasDataExtractionError && (
-            <p className="text-xs text-red-300">
-              No se pudieron extraer los datos de la página. Posible error en Megapersonals.
-            </p>
-          )}
-          {hasRepublishFailure && (
-            <p className="text-xs text-red-300">
-              El tiempo de republicación excedió el límite. El robot podría estar bloqueado.
-            </p>
-          )}
         </div>
       )}
 
-      {/* BANNER DE ADVERTENCIA DE RENTA (<3 DÍAS) */}
-      {browser.rentalRemaining && 
-       browser.rentalRemaining.days <= 3 && 
-       browser.rentalRemaining.days >= 0 && (
-        <div className={cn(
-          "mb-4 rounded-xl border-l-4 p-4 transition-all duration-300",
-          browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-            ? "bg-destructive/10 border-destructive animate-pulse"
-            : browser.rentalRemaining.days === 0
-            ? "bg-warning/10 border-warning"
-            : "bg-orange-500/10 border-orange-500"
-        )}>
+      {/* 🔥 BANNER DE ADVERTENCIA DE RENTA (SOLO <24 HORAS) */}
+      {showRentalAlert && (
+        <div className="mb-4 rounded-xl border-l-4 p-4 bg-destructive/10 border-destructive animate-pulse">
           <div className="flex items-center gap-3">
-            <div className={cn(
-              "flex-shrink-0 rounded-full p-2",
-              browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                ? "bg-destructive/20"
-                : "bg-warning/20"
-            )}>
-              <AlertTriangleIcon className={cn(
-                "h-6 w-6",
-                browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? "text-destructive"
-                  : "text-warning"
-              )} />
+            <div className="flex-shrink-0 rounded-full p-2 bg-destructive/20">
+              <AlertTriangleIcon className="h-6 w-6 text-destructive" />
             </div>
             
             <div className="flex-1">
-              <p className={cn(
-                "font-bold text-sm mb-1",
-                browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? "text-destructive"
-                  : "text-warning"
-              )}>
-                {browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? `🚨 ¡Expira en ${browser.rentalRemaining.hours}h ${browser.rentalRemaining.minutes}m!`
-                  : browser.rentalRemaining.days === 0
-                  ? `⚠️ Vence hoy en ${browser.rentalRemaining.hours}h ${browser.rentalRemaining.minutes}m`
-                  : `⏰ Vence en ${browser.rentalRemaining.days}d ${browser.rentalRemaining.hours}h`
-                }
+              <p className="font-bold text-sm mb-1 text-destructive">
+                🚨 ¡Expira en {browser.rentalRemaining.hours}h {browser.rentalRemaining.minutes}m!
               </p>
               <p className="text-xs text-muted-foreground">
-                {browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? "Tu anuncio será ELIMINADO si no renuevas AHORA"
-                  : "Tu anuncio será eliminado si no renuevas"
-                }
+                Tu anuncio será ELIMINADO si no renuevas AHORA
               </p>
             </div>
             
             <a 
               href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? `URGENTE: Necesito renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
-                  : `Hola, quiero renovar ${browser.browserName}`
+                `URGENTE: Necesito renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className={cn(
-                "px-4 py-2 rounded-lg font-bold text-xs transition-all duration-200 hover:scale-105 shadow-lg flex-shrink-0",
-                browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                  ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
-                  : "bg-accent text-accent-foreground hover:bg-accent/90"
-              )}
+              className="px-4 py-2 rounded-lg font-bold text-xs bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse transition-all duration-200 hover:scale-105 shadow-lg flex-shrink-0"
             >
-              {browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24
-                ? "🔥 RENOVAR"
-                : "💬 Renovar"
-              }
+              🔥 RENOVAR
             </a>
           </div>
           
-          {/* Countdown mini para <24h */}
-          {browser.rentalRemaining.days === 0 && browser.rentalRemaining.hours < 24 && (
-            <div className="mt-3 pt-3 border-t border-destructive/20">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-black/30 rounded-lg p-1.5">
-                  <div className="text-lg font-bold text-destructive">
-                    {browser.rentalRemaining.hours}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Horas</div>
+          {/* Countdown mini */}
+          <div className="mt-3 pt-3 border-t border-destructive/20">
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-black/30 rounded-lg p-1.5">
+                <div className="text-lg font-bold text-destructive">
+                  {browser.rentalRemaining.hours}
                 </div>
-                <div className="bg-black/30 rounded-lg p-1.5">
-                  <div className="text-lg font-bold text-destructive">
-                    {browser.rentalRemaining.minutes}
-                  </div>
-                  <div className="text-xs text-muted-foreground">Min</div>
+                <div className="text-xs text-muted-foreground">Horas</div>
+              </div>
+              <div className="bg-black/30 rounded-lg p-1.5">
+                <div className="text-lg font-bold text-destructive">
+                  {browser.rentalRemaining.minutes}
                 </div>
-                <div className="bg-black/30 rounded-lg p-1.5">
-                  <div className="text-lg font-bold text-destructive animate-pulse">
-                    ⏰
-                  </div>
-                  <div className="text-xs text-muted-foreground">Urgente</div>
+                <div className="text-xs text-muted-foreground">Min</div>
+              </div>
+              <div className="bg-black/30 rounded-lg p-1.5">
+                <div className="text-lg font-bold text-destructive animate-pulse">
+                  ⏰
                 </div>
+                <div className="text-xs text-muted-foreground">Urgente</div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -340,17 +407,12 @@ function BrowserCard({ browser, onClick }: { browser: BrowserData; onClick: () =
       </div>
 
       {/* TIEMPO DE RENTA */}
-      <div className="overflow-hidden rounded-xl border border-red-500/20 bg-gradient-to-br from-red-500/10 to-orange-500/10 p-4">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-red-400">
+      <div className={cn("overflow-hidden rounded-xl border p-4", rentalColorClass)}>
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Tiempo de Renta
         </div>
         <div className="text-center">
-          <span className={cn(
-            "text-3xl font-black",
-            browser.rentalRemaining?.days === 0 
-              ? "text-red-400" 
-              : "text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-orange-400"
-          )}>
+          <span className={cn("text-3xl font-black", rentalTextColor)}>
             {formatRentalTime(browser.rentalRemaining)}
           </span>
         </div>
@@ -370,22 +432,20 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const [browserList, setBrowserList] = useState<BrowserData[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const [showCriticalModal, setShowCriticalModal] = useState(false);
   const [criticalBrowser, setCriticalBrowser] = useState<BrowserData | null>(null);
 
-  // Escuchar cambios en Firebase para actualizar las tarjetas en tiempo real
   useEffect(() => {
     if (browserList.length === 0) return;
 
     const unsubscribers: (() => void)[] = [];
 
-    // Suscribirse a cada navegador en la lista
     browserList.forEach((browser, index) => {
       const unsubscribe = FirebaseAPI.listenToBrowser(
         browser.browserName,
         (updatedData) => {
-          // Actualizar solo este navegador en la lista
           setBrowserList(prev => {
             const newList = [...prev];
             newList[index] = updatedData;
@@ -396,27 +456,24 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
       unsubscribers.push(unsubscribe);
     });
 
-    // Limpiar todas las suscripciones al desmontar
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
   }, [browserList.length]);
 
-  // Detectar navegadores con <24h y mostrar modal automáticamente
+  // 🆕 Modal solo cuando quedan menos de 12 horas
   useEffect(() => {
     if (browserList.length === 0) return;
 
-    // Buscar el primer navegador con <24h
     const criticalBrowsers = browserList.filter(browser => {
       if (!browser.rentalRemaining) return false;
       const { days, hours } = browser.rentalRemaining;
-      return days === 0 && hours < 24;
+      return days === 0 && hours < 12;
     });
 
     if (criticalBrowsers.length > 0) {
       const browser = criticalBrowsers[0];
       
-      // Verificar si ya vio el modal en las últimas 6 horas
       const lastShown = localStorage.getItem(`modal-renta-${browser.browserName}`);
       const sixHoursAgo = Date.now() - (6 * 60 * 60 * 1000);
       
@@ -438,16 +495,13 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     setBrowserData(null);
     setBrowserList([]);
 
-    // Buscar TODOS los navegadores del cliente
     const results = await FirebaseAPI.findAllBrowsersByClientName(clientSearch);
 
     if (results.length === 0) {
       setError("No se encontró ningún cliente con ese nombre");
     } else if (results.length === 1) {
-      // Si solo hay 1 resultado, abrir dashboard directamente
       setBrowserData(results[0]);
     } else {
-      // Si hay múltiples resultados, mostrar tarjetas
       setBrowserList(results);
     }
 
@@ -455,7 +509,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   };
 
   const handleSelectBrowser = (browser: BrowserData) => {
-    // NO limpiar browserList - solo abrir el dashboard
     setBrowserData(browser);
   };
 
@@ -500,24 +553,58 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           </div>
         </div>
 
-        {/* Lista de Navegadores (Múltiples Resultados) */}
+        {/* Lista de Navegadores */}
         {browserList.length > 0 && (
           <div className="mt-8 space-y-6">
-            <div className="text-center">
-              <h3 className="text-2xl font-bold text-foreground">
-                Tus Perfiles
-              </h3>
-              <p className="text-sm text-muted-foreground">
-                Se encontraron {browserList.length} {browserList.length === 1 ? "perfil" : "perfiles"} para "{clientSearch}"
-              </p>
+            <div className="flex items-center justify-between">
+              <div className="text-center flex-1">
+                <h3 className="text-2xl font-bold text-foreground">
+                  Tus Perfiles
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Se encontraron {browserList.length} {browserList.length === 1 ? "perfil" : "perfiles"} para "{clientSearch}"
+                </p>
+              </div>
+
+              {/* 🆕 Toggle Vista */}
+              <div className="flex items-center gap-2 bg-secondary rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    viewMode === 'grid'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  🔲 Grid
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={cn(
+                    "px-4 py-2 rounded-lg text-sm font-medium transition-all",
+                    viewMode === 'list'
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  📋 Lista
+                </button>
+              </div>
             </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
+            {/* Grid o Lista */}
+            <div className={cn(
+              viewMode === 'grid' 
+                ? "grid gap-6 md:grid-cols-2" 
+                : "space-y-3"
+            )}>
               {browserList.map((browser) => (
                 <BrowserCard
                   key={browser.browserName}
                   browser={browser}
                   onClick={() => handleSelectBrowser(browser)}
+                  viewMode={viewMode}
                 />
               ))}
             </div>
@@ -530,25 +617,21 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         <Dashboard
           browserData={browserData}
           onClose={() => {
-            // Solo cerrar el modal, NO limpiar la lista ni el campo de búsqueda
             setBrowserData(null);
           }}
         />
       )}
 
-      {/* MODAL CRÍTICO (<24 HORAS) */}
+      {/* MODAL CRÍTICO (<12 HORAS) */}
       {showCriticalModal && criticalBrowser && criticalBrowser.rentalRemaining && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
           <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
-            {/* Efecto de glow rojo */}
             <div className="absolute inset-0 bg-gradient-to-br from-destructive/20 via-transparent to-destructive/20 animate-pulse" />
             
             <div className="relative p-8">
               <div className="text-center">
-                {/* Icono animado */}
                 <div className="text-7xl mb-4 animate-bounce">🚨</div>
                 
-                {/* Título */}
                 <h2 className="text-3xl font-black text-destructive mb-2 uppercase tracking-tight">
                   ¡Atención Urgente!
                 </h2>
@@ -556,7 +639,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   Tu cuenta está a punto de expirar
                 </p>
                 
-                {/* Countdown grande */}
                 <div className="bg-destructive/20 border-2 border-destructive rounded-xl p-6 mb-6 relative overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent" 
                        style={{ animation: 'shimmer 2s infinite' }} />
@@ -580,7 +662,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   </div>
                 </div>
                 
-                {/* Lista de consecuencias */}
                 <div className="bg-black/60 rounded-xl p-5 mb-6 text-left border border-destructive/30">
                   <p className="text-destructive font-bold mb-3 text-center text-lg flex items-center justify-center gap-2">
                     <span>💀</span>
@@ -615,7 +696,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   </ul>
                 </div>
 
-                {/* Botón de renovación */}
                 <a
                   href={`https://wa.me/18293837695?text=${encodeURIComponent(
                     `🚨 URGENTE: Necesito renovar mi cuenta ${criticalBrowser.browserName} - Expira en ${criticalBrowser.rentalRemaining.hours}h ${criticalBrowser.rentalRemaining.minutes}m`
@@ -631,7 +711,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   🔥 Renovar Ahora 🔥
                 </a>
                 
-                {/* Botón secundario */}
                 <button
                   onClick={() => {
                     localStorage.setItem(`modal-renta-${criticalBrowser.browserName}`, Date.now().toString());
@@ -642,7 +721,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   Recordar en 6 horas
                 </button>
                 
-                {/* Warning final */}
                 <p className="mt-4 text-xs text-destructive/70">
                   ⚠️ Este mensaje se mostrará cada 6 horas hasta que renueves
                 </p>
