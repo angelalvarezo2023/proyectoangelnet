@@ -64,11 +64,16 @@ export interface BrowserData {
   editLogType?: "error" | "success" | "info";
   captchaWaiting?: boolean;
   captchaImage?: string;
-  notificationConfig?: NotificationConfig; // 🆕 Config de notificaciones
+  notificationConfig?: NotificationConfig;
   lastScreenshot?: string;
   postName?: string;
   
-  // NUEVOS CAMPOS PARA MONITOREO EN TIEMPO REAL
+  // 🆕 NUEVOS CAMPOS PARA VER ANUNCIO EN VIVO
+  postId?: string;
+  postUrl?: string;
+  postIdCapturedAt?: number;
+  
+  // CAMPOS PARA MONITOREO EN TIEMPO REAL
   connectionStatus?: "online" | "offline" | "error";
   lastHeartbeat?: string;
   lastError?: {
@@ -460,7 +465,7 @@ export const SERVICES = [
     subtitle: "Los mejores del mercado",
     description: "Proxies rápidos y confiables para tus necesidades.",
     features: ["Alta velocidad", "IP dedicadas", "Soporte 24/7", "Uptime 99.9%"],
-    price: "$15/mes",
+    price: "$20/mes",
     stock: 15,
     gradient: "from-cyan-500 to-teal-500",
   },
@@ -482,7 +487,7 @@ export const SERVICES = [
     subtitle: "Flexible y económico",
     description: "Alquiler por día o semana según tus necesidades.",
     features: ["Sin compromisos", "Renovable", "Soporte técnico", "Activación rápida"],
-    price: "$30/día - $140/semana",
+    price: "$30/día - $150/semana",
     stock: 20,
     gradient: "from-amber-500 to-orange-500",
   },
@@ -493,7 +498,7 @@ export const SERVICES = [
     subtitle: "Automatización inteligente",
     description: "Sistema de republicación automática con detección de bans y sincronización multi-PC.",
     features: ["Republicación automática", "Detección de bloqueos", "Control remoto desde celular", "Sincronización multi-PC"],
-    price: "Desde $29.99",
+    price: "Desde $19.99",
     stock: 99,
     gradient: "from-purple-500 to-pink-500",
   },
