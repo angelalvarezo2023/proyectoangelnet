@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { FirebaseAPI, SERVICES, CONTACT, type BrowserData } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -16,11 +16,31 @@ type View = "home" | "control" | "admin";
 
 function HomeContent() {
   const searchParams = useSearchParams();
-  const [currentView, setCurrentView] = useState<View>("home");
+  const router = useRouter();
+  
+  // 🆕 Leer la vista desde la URL o usar "home" por defecto
+  const [currentView, setCurrentView] = useState<View>(() => {
+    const viewParam = searchParams.get("view");
+    if (viewParam === "control" || viewParam === "admin") {
+      return viewParam;
+    }
+    return "home";
+  });
+  
   const [browserData, setBrowserData] = useState<BrowserData | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // 🆕 Función para cambiar vista y actualizar URL
+  const handleViewChange = (newView: View) => {
+    setCurrentView(newView);
+    
+    // Actualizar URL sin recargar la página
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("view", newView);
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
 
   useEffect(() => {
     const userId = searchParams.get("id");
@@ -56,7 +76,7 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation currentView={currentView} onViewChange={setCurrentView} />
+      <Navigation currentView={currentView} onViewChange={handleViewChange} />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Home View - Services */}
