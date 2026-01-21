@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 const CONFIG = {
   RESEND_API_KEY: 're_CV3xyyrE_3xwhULkaRM8hZecVLsWvxhrc',
-  FROM_EMAIL: 'angel15dobleu@gmail.com',
+  FROM_EMAIL: 'onboarding@resend.dev',
   FIREBASE_URL: 'https://megapersonals-4f24c-default-rtdb.firebaseio.com'
 };
 
