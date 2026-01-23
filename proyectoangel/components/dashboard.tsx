@@ -654,317 +654,434 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* MODAL DE EDICIÓN - ESTILO MEGAPERSONALS */}
+      {/* MODAL DE EDICIÓN - RÉPLICA EXACTA DE MEGAPERSONALS */}
       {showEditForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
           <div 
-            className="my-8 w-full max-w-2xl rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            className="my-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto relative"
             style={{
-              background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)',
-              border: '3px solid #FF1493'
+              background: 'linear-gradient(180deg, #E6C9E6 0%, #D4A5D4 20%, #C28AC2 40%, #B06FB0 60%, #9E549E 80%, #8C398C 100%)',
+              borderRadius: '0 0 20px 20px',
+              border: 'none'
             }}
           >
-            {/* 🆕 IMAGEN DE LA CHICA - ESQUINA SUPERIOR IZQUIERDA */}
+            {/* BORDE ONDULADO SUPERIOR */}
             <div 
-              className="absolute top-0 left-0 pointer-events-none"
               style={{
-                width: '180px',
-                height: '180px',
-                zIndex: 10,
-                marginTop: '-20px',
-                marginLeft: '-10px'
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '20px',
+                background: 'linear-gradient(90deg, #FF69B4 0%, #FF1493 50%, #FF69B4 100%)',
+                borderRadius: '20px 20px 0 0',
               }}
             >
-              <img
-                src="https://megapersonals.eu/resources/img/writepost1_devilgirl.png?v=1768750586"
-                alt="Devil Girl"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'contain',
-                  filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.3))'
-                }}
-                onError={(e) => {
-                  // Fallback si la imagen no carga
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              <svg
+                width="100%"
+                height="20"
+                viewBox="0 0 100 20"
+                preserveAspectRatio="none"
+                style={{ position: 'absolute', top: 0, left: 0 }}
+              >
+                <path
+                  d="M0,20 Q2.5,0 5,0 T10,0 T15,0 T20,0 T25,0 T30,0 T35,0 T40,0 T45,0 T50,0 T55,0 T60,0 T65,0 T70,0 T75,0 T80,0 T85,0 T90,0 T95,0 T100,0 L100,20 Z"
+                  fill="#FF69B4"
+                />
+              </svg>
             </div>
 
-            <h2 
-              className="mb-6 text-center text-3xl sm:text-2xl font-black relative z-20"
+            {/* HEADER MEGAPERSONALS */}
+            <div 
+              className="text-center pt-6 pb-2"
               style={{
-                color: '#FFFF00',
-                textShadow: '2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.5)'
+                background: 'linear-gradient(180deg, rgba(255,105,180,0.3) 0%, transparent 100%)',
+                marginTop: '20px'
               }}
             >
-              Editar Anuncio
-            </h2>
+              <h1 
+                style={{
+                  fontSize: '32px',
+                  fontWeight: 'bold',
+                  color: '#E8E8E8',
+                  textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                  letterSpacing: '2px',
+                  fontFamily: 'Arial, sans-serif'
+                }}
+              >
+                Mega<span style={{ color: '#87CEEB' }}>Personals</span>
+              </h1>
+              <p 
+                style={{
+                  fontSize: '11px',
+                  color: '#E8E8E8',
+                  marginTop: '-5px',
+                  letterSpacing: '3px'
+                }}
+              >
+                personals classifieds
+              </p>
+            </div>
 
-            <div className="space-y-4 relative z-20">
-              {/* NAME/ALIAS */}
-              <div>
-                <label 
-                  className="mb-2 block text-base font-bold uppercase"
+            {/* CONTAINER PRINCIPAL CON IMAGEN */}
+            <div className="relative" style={{ padding: '20px 30px 30px 30px' }}>
+              
+              {/* IMAGEN DE LA CHICA + LOGO "CREATE POST" */}
+              <div 
+                className="absolute pointer-events-none"
+                style={{
+                  top: '-60px',
+                  left: '20px',
+                  width: '400px',
+                  height: '300px',
+                  zIndex: 20
+                }}
+              >
+                <img
+                  src="https://megapersonals.eu/resources/img/writepost1_devilgirl.png?v=1768750586"
+                  alt="Create Post"
                   style={{
-                    color: '#FFFF00',
-                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'contain',
+                    filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))'
                   }}
-                >
-                  Name/Alias:
-                </label>
-                <Input
-                  type="text"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  placeholder="Deja vacío si no quieres cambiar"
-                  maxLength={50}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '2px solid #888888',
-                    borderRadius: '5px',
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    color: '#555555'
-                  }}
-                  className="w-full h-12"
-                />
-                {editForm.name && (
-                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
-                    {editForm.name.length}/50
-                  </p>
-                )}
-              </div>
-
-              {/* AGE */}
-              <div>
-                <label 
-                  className="mb-2 block text-base font-bold uppercase"
-                  style={{
-                    color: '#FFFF00',
-                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
-                  }}
-                >
-                  Age:
-                </label>
-                <select
-                  value={editForm.age}
-                  onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '2px solid #888888',
-                    borderRadius: '5px',
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    color: '#555555'
-                  }}
-                  className="w-full h-12"
-                >
-                  <option value="">-- No cambiar --</option>
-                  {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
-                    <option key={age} value={age}>
-                      {age}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* HEADLINE */}
-              <div>
-                <label 
-                  className="mb-2 block text-base font-bold uppercase"
-                  style={{
-                    color: '#FFFF00',
-                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
-                  }}
-                >
-                  Headline:
-                </label>
-                <Input
-                  type="text"
-                  value={editForm.headline}
-                  onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
-                  placeholder="Deja vacío si no quieres cambiar"
-                  maxLength={250}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '2px solid #888888',
-                    borderRadius: '5px',
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    color: '#555555'
-                  }}
-                  className="w-full h-12"
-                />
-                {editForm.headline && (
-                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
-                    {editForm.headline.length}/250
-                  </p>
-                )}
-              </div>
-
-              {/* BODY */}
-              <div>
-                <label 
-                  className="mb-2 block text-base font-bold uppercase"
-                  style={{
-                    color: '#FFFF00',
-                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
-                  }}
-                >
-                  Body:
-                </label>
-                <textarea
-                  value={editForm.body}
-                  onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
-                  placeholder="Deja vacío si no quieres cambiar"
-                  rows={5}
-                  maxLength={2000}
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '2px solid #888888',
-                    borderRadius: '5px',
-                    padding: '8px 12px',
-                    fontSize: '14px',
-                    color: '#555555',
-                    resize: 'none',
-                    width: '100%'
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
                   }}
                 />
-                {editForm.body && (
-                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
-                    {editForm.body.length}/2000
-                  </p>
-                )}
               </div>
 
-              {/* CITY & LOCATION */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* TÍTULO "EDITAR ANUNCIO" */}
+              <div className="text-center mb-6 relative z-20">
+                <h2 
+                  style={{
+                    fontSize: '36px',
+                    fontWeight: 900,
+                    color: '#FFFF00',
+                    textShadow: '3px 3px 6px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.5)',
+                    fontFamily: 'Arial Black, sans-serif',
+                    letterSpacing: '1px'
+                  }}
+                >
+                  Editar Anuncio
+                </h2>
+              </div>
+
+              {/* FORMULARIO */}
+              <div className="space-y-4 relative z-20" style={{ marginTop: '20px' }}>
+                
+                {/* NAME/ALIAS */}
                 <div>
                   <label 
-                    className="mb-2 block text-base font-bold uppercase"
                     style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '15px',
+                      fontWeight: 'bold',
                       color: '#FFFF00',
-                      textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                      fontFamily: 'Arial, sans-serif'
                     }}
                   >
-                    City:
-                  </label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="text"
-                      value={editForm.city}
-                      onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
-                      placeholder="Selecciona un estado"
-                      maxLength={100}
-                      readOnly
-                      style={{
-                        backgroundColor: '#FFFFFF',
-                        border: '2px solid #888888',
-                        borderRadius: '5px',
-                        padding: '8px 12px',
-                        fontSize: '14px',
-                        color: '#555555'
-                      }}
-                      className="flex-1 h-12"
-                    />
-                    <Button
-                      type="button"
-                      onClick={() => setShowCitySelector(true)}
-                      style={{
-                        background: 'linear-gradient(135deg, #FF6B00 0%, #FF8C00 100%)',
-                        border: '2px solid #FF6B00',
-                        borderRadius: '5px',
-                        color: '#FFFFFF',
-                        fontWeight: 'bold',
-                        padding: '8px 16px'
-                      }}
-                      className="h-12"
-                    >
-                      🗺️ Cambiar
-                    </Button>
-                  </div>
-                  {editForm.city && (
-                    <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
-                      ✓ Seleccionado: {editForm.city}
-                    </p>
-                  )}
-                </div>
-                <div>
-                  <label 
-                    className="mb-2 block text-base font-bold uppercase"
-                    style={{
-                      color: '#FFFF00',
-                      textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
-                    }}
-                  >
-                    Location/Area:
+                    Name/Alias:
                   </label>
                   <Input
                     type="text"
-                    value={editForm.location}
-                    onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                    placeholder="No cambiar"
-                    maxLength={100}
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    placeholder="Deja vacío si no quieres cambiar"
+                    maxLength={50}
                     style={{
+                      width: '100%',
+                      height: '45px',
                       backgroundColor: '#FFFFFF',
                       border: '2px solid #888888',
                       borderRadius: '5px',
-                      padding: '8px 12px',
-                      fontSize: '14px',
-                      color: '#555555'
+                      padding: '10px 15px',
+                      fontSize: '15px',
+                      color: '#555555',
+                      fontFamily: 'Arial, sans-serif'
                     }}
-                    className="w-full h-12"
                   />
+                  {editForm.name && (
+                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                      {editForm.name.length}/50
+                    </p>
+                  )}
+                </div>
+
+                {/* AGE */}
+                <div>
+                  <label 
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      color: '#FFFF00',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  >
+                    Age:
+                  </label>
+                  <select
+                    value={editForm.age}
+                    onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                    style={{
+                      width: '100%',
+                      height: '45px',
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #888888',
+                      borderRadius: '5px',
+                      padding: '10px 15px',
+                      fontSize: '15px',
+                      color: '#555555',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  >
+                    <option value="">-- No cambiar --</option>
+                    {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
+                      <option key={age} value={age}>
+                        {age}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* HEADLINE */}
+                <div>
+                  <label 
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      color: '#FFFF00',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  >
+                    Headline:
+                  </label>
+                  <Input
+                    type="text"
+                    value={editForm.headline}
+                    onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
+                    placeholder="Deja vacío si no quieres cambiar"
+                    maxLength={250}
+                    style={{
+                      width: '100%',
+                      height: '45px',
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #888888',
+                      borderRadius: '5px',
+                      padding: '10px 15px',
+                      fontSize: '15px',
+                      color: '#555555',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  />
+                  {editForm.headline && (
+                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                      {editForm.headline.length}/250
+                    </p>
+                  )}
+                </div>
+
+                {/* BODY */}
+                <div>
+                  <label 
+                    style={{
+                      display: 'block',
+                      marginBottom: '8px',
+                      fontSize: '15px',
+                      fontWeight: 'bold',
+                      color: '#FFFF00',
+                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                      fontFamily: 'Arial, sans-serif'
+                    }}
+                  >
+                    Body:
+                  </label>
+                  <textarea
+                    value={editForm.body}
+                    onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
+                    placeholder="Deja vacío si no quieres cambiar"
+                    rows={6}
+                    maxLength={2000}
+                    style={{
+                      width: '100%',
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #888888',
+                      borderRadius: '5px',
+                      padding: '12px 15px',
+                      fontSize: '15px',
+                      color: '#555555',
+                      fontFamily: 'Arial, sans-serif',
+                      resize: 'none'
+                    }}
+                  />
+                  {editForm.body && (
+                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                      {editForm.body.length}/2000
+                    </p>
+                  )}
+                </div>
+
+                {/* CITY & LOCATION */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label 
+                      style={{
+                        display: 'block',
+                        marginBottom: '8px',
+                        fontSize: '15px',
+                        fontWeight: 'bold',
+                        color: '#FFFF00',
+                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                        fontFamily: 'Arial, sans-serif'
+                      }}
+                    >
+                      City:
+                    </label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={editForm.city}
+                        readOnly
+                        placeholder="Selecciona un estado"
+                        style={{
+                          flex: 1,
+                          height: '45px',
+                          backgroundColor: '#FFFFFF',
+                          border: '2px solid #888888',
+                          borderRadius: '5px',
+                          padding: '10px 15px',
+                          fontSize: '15px',
+                          color: '#555555',
+                          fontFamily: 'Arial, sans-serif'
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        onClick={() => setShowCitySelector(true)}
+                        style={{
+                          height: '45px',
+                          background: 'linear-gradient(135deg, #FF8C00 0%, #FFA500 100%)',
+                          border: '2px solid #FF8C00',
+                          borderRadius: '5px',
+                          color: '#FFFFFF',
+                          fontWeight: 'bold',
+                          padding: '0 20px',
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          fontFamily: 'Arial, sans-serif'
+                        }}
+                      >
+                        🗺️ Cambiar
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <label 
+                      style={{
+                        display: 'block',
+                        marginBottom: '8px',
+                        fontSize: '15px',
+                        fontWeight: 'bold',
+                        color: '#FFFF00',
+                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                        fontFamily: 'Arial, sans-serif'
+                      }}
+                    >
+                      Location/Area:
+                    </label>
+                    <Input
+                      type="text"
+                      value={editForm.location}
+                      onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                      placeholder="No cambiar"
+                      maxLength={100}
+                      style={{
+                        width: '100%',
+                        height: '45px',
+                        backgroundColor: '#FFFFFF',
+                        border: '2px solid #888888',
+                        borderRadius: '5px',
+                        padding: '10px 15px',
+                        fontSize: '15px',
+                        color: '#555555',
+                        fontFamily: 'Arial, sans-serif'
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* BUTTONS */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <Button
-                onClick={handleSaveAllEdits}
-                disabled={actionLoading || commandInProgressRef.current}
-                style={{
-                  background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
-                  border: '2px solid #00C853',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: 'bold',
-                  fontSize: '16px',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
-                }}
-                className="flex-1 h-14"
-              >
-                {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowEditForm(false);
-                  setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-                }}
-                disabled={actionLoading || commandInProgressRef.current}
-                style={{
-                  background: '#666666',
-                  border: '2px solid #555555',
-                  borderRadius: '8px',
-                  color: '#FFFFFF',
-                  fontWeight: 'bold'
-                }}
-                className="flex-1 h-14"
-              >
-                Cancelar
-              </Button>
-            </div>
+              {/* BOTONES */}
+              <div className="mt-8 flex flex-col sm:flex-row gap-4 relative z-20">
+                <Button
+                  onClick={handleSaveAllEdits}
+                  disabled={actionLoading || commandInProgressRef.current}
+                  style={{
+                    flex: 1,
+                    height: '55px',
+                    background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
+                    border: '3px solid #00C853',
+                    borderRadius: '10px',
+                    color: '#FFFFFF',
+                    fontWeight: 'bold',
+                    fontSize: '18px',
+                    textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
+                    cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    fontFamily: 'Arial Black, sans-serif',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
+                </Button>
+                <Button
+                  onClick={() => {
+                    setShowEditForm(false);
+                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                  }}
+                  disabled={actionLoading || commandInProgressRef.current}
+                  style={{
+                    flex: 1,
+                    height: '55px',
+                    background: '#666666',
+                    border: '3px solid #555555',
+                    borderRadius: '10px',
+                    color: '#FFFFFF',
+                    fontWeight: 'bold',
+                    fontSize: '18px',
+                    cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    fontFamily: 'Arial Black, sans-serif',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </div>
 
-            <p 
-              className="mt-4 text-center text-sm"
-              style={{ color: '#FFFFFF' }}
-            >
-              Solo llena los campos que quieras cambiar
-            </p>
+              {/* TEXTO INFERIOR */}
+              <p 
+                className="mt-6 text-center"
+                style={{
+                  fontSize: '14px',
+                  color: '#FFFFFF',
+                  fontFamily: 'Arial, sans-serif',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                }}
+              >
+                Solo llena los campos que quieras cambiar
+              </p>
+            </div>
           </div>
         </div>
+      )}
       )}
 
       {/* MODAL DE CAPTCHA - MEJORADO PARA MÓVILES */}
