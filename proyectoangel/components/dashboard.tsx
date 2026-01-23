@@ -138,6 +138,22 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     return () => unsubscribe();
   }, [browserData, showCaptchaForm]);
 
+  // 🆕 Auto-ocultar mensajes de éxito después de 5 segundos
+  useEffect(() => {
+    if (liveData.editLog && liveData.editLogType === "success") {
+      const timer = setTimeout(() => {
+        setLiveData(prev => ({
+          ...prev,
+          editLog: "",
+          editLogType: undefined
+        }));
+      }, 5000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [liveData.editLog, liveData.editLogType]);
+
+
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < delay) {
