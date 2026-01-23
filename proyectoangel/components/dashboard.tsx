@@ -212,13 +212,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, [liveData, debounce, actionLoading]);
 
   const handleOpenEditor = () => {
+    // 🆕 PRE-LLENAR con datos actuales del anuncio
     setEditForm({
-      name: "",
-      age: "",
-      headline: "",
-      body: "",
-      city: "",
-      location: "",
+      name: liveData.name || "",
+      age: liveData.age ? String(liveData.age) : "",
+      headline: liveData.headline || "",
+      body: liveData.body || "",
+      city: liveData.city || "",
+      location: liveData.location || "",
     });
     setShowEditForm(true);
   };
@@ -232,16 +233,31 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       return;
     }
 
+    // 🆕 Solo enviar campos que CAMBIARON comparados con los valores originales
     const changes: Record<string, string> = {};
-    if (editForm.name.trim()) changes.name = editForm.name.trim();
-    if (editForm.age.trim()) changes.age = editForm.age.trim();
-    if (editForm.headline.trim()) changes.headline = editForm.headline.trim();
-    if (editForm.body.trim()) changes.body = editForm.body.trim();
-    if (editForm.city.trim()) changes.city = editForm.city.trim();
-    if (editForm.location.trim()) changes.location = editForm.location.trim();
+    
+    // Comparar cada campo con el valor original
+    if (editForm.name.trim() && editForm.name.trim() !== (liveData.name || "")) {
+      changes.name = editForm.name.trim();
+    }
+    if (editForm.age.trim() && editForm.age.trim() !== String(liveData.age || "")) {
+      changes.age = editForm.age.trim();
+    }
+    if (editForm.headline.trim() && editForm.headline.trim() !== (liveData.headline || "")) {
+      changes.headline = editForm.headline.trim();
+    }
+    if (editForm.body.trim() && editForm.body.trim() !== (liveData.body || "")) {
+      changes.body = editForm.body.trim();
+    }
+    if (editForm.city.trim() && editForm.city.trim() !== (liveData.city || "")) {
+      changes.city = editForm.city.trim();
+    }
+    if (editForm.location.trim() && editForm.location.trim() !== (liveData.location || "")) {
+      changes.location = editForm.location.trim();
+    }
 
     if (Object.keys(changes).length === 0) {
-      alert("Debes cambiar al menos un campo");
+      alert("No has realizado ningún cambio. Modifica los campos que quieras actualizar.");
       return;
     }
 
@@ -790,7 +806,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     type="text"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                    placeholder="Deja vacío si no quieres cambiar"
                     maxLength={50}
                     style={{
                       width: '100%',
@@ -869,7 +884,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     type="text"
                     value={editForm.headline}
                     onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
-                    placeholder="Deja vacío si no quieres cambiar"
                     maxLength={250}
                     style={{
                       width: '100%',
@@ -908,7 +922,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <textarea
                     value={editForm.body}
                     onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
-                    placeholder="Deja vacío si no quieres cambiar"
                     rows={6}
                     maxLength={2000}
                     style={{
@@ -951,7 +964,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         type="text"
                         value={editForm.city}
                         readOnly
-                        placeholder="Selecciona un estado"
                         style={{
                           flex: 1,
                           height: '45px',
@@ -1002,7 +1014,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       type="text"
                       value={editForm.location}
                       onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
-                      placeholder="No cambiar"
                       maxLength={100}
                       style={{
                         width: '100%',
@@ -1076,7 +1087,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
                 }}
               >
-                Solo llena los campos que quieras cambiar
+                Modifica los campos que quieras actualizar
               </p>
             </div>
           </div>
