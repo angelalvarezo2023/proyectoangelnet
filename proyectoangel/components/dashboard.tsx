@@ -654,32 +654,111 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* MODAL DE EDICIÓN - MEJORADO PARA MÓVILES */}
+      {/* MODAL DE EDICIÓN - ESTILO MEGAPERSONALS */}
       {showEditForm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-background/90 p-4 backdrop-blur-sm">
-          <div className="my-8 w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="mb-6 text-center text-3xl sm:text-2xl font-bold text-foreground">Editar Anuncio</h2>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
+          <div 
+            className="my-8 w-full max-w-2xl rounded-xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            style={{
+              background: 'linear-gradient(135deg, #FF1493 0%, #FF69B4 100%)',
+              border: '3px solid #FF1493'
+            }}
+          >
+            {/* 🆕 IMAGEN DE LA CHICA - ESQUINA SUPERIOR IZQUIERDA */}
+            <div 
+              className="absolute top-0 left-0 pointer-events-none"
+              style={{
+                width: '180px',
+                height: '180px',
+                zIndex: 10,
+                marginTop: '-20px',
+                marginLeft: '-10px'
+              }}
+            >
+              <img
+                src="https://megapersonals.eu/resources/img/writepost1_devilgirl.png?v=1768750586"
+                alt="Devil Girl"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.3))'
+                }}
+                onError={(e) => {
+                  // Fallback si la imagen no carga
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            </div>
 
-            <div className="space-y-5 sm:space-y-4">
+            <h2 
+              className="mb-6 text-center text-3xl sm:text-2xl font-black relative z-20"
+              style={{
+                color: '#FFFF00',
+                textShadow: '2px 2px 4px rgba(0,0,0,0.8), -1px -1px 2px rgba(0,0,0,0.5)'
+              }}
+            >
+              Editar Anuncio
+            </h2>
+
+            <div className="space-y-4 relative z-20">
+              {/* NAME/ALIAS */}
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Name/Alias</label>
+                <label 
+                  className="mb-2 block text-base font-bold uppercase"
+                  style={{
+                    color: '#FFFF00',
+                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                  }}
+                >
+                  Name/Alias:
+                </label>
                 <Input
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                   placeholder="Deja vacío si no quieres cambiar"
                   maxLength={50}
-                  className="bg-input text-foreground h-14 sm:h-12 text-base sm:text-sm"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '2px solid #888888',
+                    borderRadius: '5px',
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    color: '#555555'
+                  }}
+                  className="w-full h-12"
                 />
-                {editForm.name && <p className="mt-1 text-xs text-muted-foreground">{editForm.name.length}/50</p>}
+                {editForm.name && (
+                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
+                    {editForm.name.length}/50
+                  </p>
+                )}
               </div>
 
+              {/* AGE */}
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Age</label>
+                <label 
+                  className="mb-2 block text-base font-bold uppercase"
+                  style={{
+                    color: '#FFFF00',
+                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                  }}
+                >
+                  Age:
+                </label>
                 <select
                   value={editForm.age}
                   onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
-                  className="w-full rounded-lg border border-border bg-input px-4 py-3 sm:py-2 text-foreground h-14 sm:h-12 text-base sm:text-sm"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '2px solid #888888',
+                    borderRadius: '5px',
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    color: '#555555'
+                  }}
+                  className="w-full h-12"
                 >
                   <option value="">-- No cambiar --</option>
                   {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
@@ -690,38 +769,86 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 </select>
               </div>
 
+              {/* HEADLINE */}
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Headline</label>
+                <label 
+                  className="mb-2 block text-base font-bold uppercase"
+                  style={{
+                    color: '#FFFF00',
+                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                  }}
+                >
+                  Headline:
+                </label>
                 <Input
                   type="text"
                   value={editForm.headline}
                   onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
                   placeholder="Deja vacío si no quieres cambiar"
                   maxLength={250}
-                  className="bg-input text-foreground h-14 sm:h-12 text-base sm:text-sm"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '2px solid #888888',
+                    borderRadius: '5px',
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    color: '#555555'
+                  }}
+                  className="w-full h-12"
                 />
                 {editForm.headline && (
-                  <p className="mt-1 text-xs text-muted-foreground">{editForm.headline.length}/250</p>
+                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
+                    {editForm.headline.length}/250
+                  </p>
                 )}
               </div>
 
+              {/* BODY */}
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Body</label>
+                <label 
+                  className="mb-2 block text-base font-bold uppercase"
+                  style={{
+                    color: '#FFFF00',
+                    textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                  }}
+                >
+                  Body:
+                </label>
                 <textarea
                   value={editForm.body}
                   onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
                   placeholder="Deja vacío si no quieres cambiar"
-                  rows={4}
+                  rows={5}
                   maxLength={2000}
-                  className="w-full resize-none rounded-lg border border-border bg-input px-4 py-3 sm:py-2 text-foreground text-base sm:text-sm"
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '2px solid #888888',
+                    borderRadius: '5px',
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    color: '#555555',
+                    resize: 'none',
+                    width: '100%'
+                  }}
                 />
-                {editForm.body && <p className="mt-1 text-xs text-muted-foreground">{editForm.body.length}/2000</p>}
+                {editForm.body && (
+                  <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
+                    {editForm.body.length}/2000
+                  </p>
+                )}
               </div>
 
+              {/* CITY & LOCATION */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">
-                    City
+                  <label 
+                    className="mb-2 block text-base font-bold uppercase"
+                    style={{
+                      color: '#FFFF00',
+                      textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                    }}
+                  >
+                    City:
                   </label>
                   <div className="flex gap-2">
                     <Input
@@ -730,63 +857,115 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       onChange={(e) => setEditForm({ ...editForm, city: e.target.value })}
                       placeholder="Selecciona un estado"
                       maxLength={100}
-                      className="bg-input text-foreground flex-1 min-w-0 h-14 sm:h-12 text-base sm:text-sm"
                       readOnly
+                      style={{
+                        backgroundColor: '#FFFFFF',
+                        border: '2px solid #888888',
+                        borderRadius: '5px',
+                        padding: '8px 12px',
+                        fontSize: '14px',
+                        color: '#555555'
+                      }}
+                      className="flex-1 h-12"
                     />
                     <Button
                       type="button"
                       onClick={() => setShowCitySelector(true)}
-                      className="bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 whitespace-nowrap flex-shrink-0 h-14 sm:h-12 px-5 sm:px-4"
+                      style={{
+                        background: 'linear-gradient(135deg, #FF6B00 0%, #FF8C00 100%)',
+                        border: '2px solid #FF6B00',
+                        borderRadius: '5px',
+                        color: '#FFFFFF',
+                        fontWeight: 'bold',
+                        padding: '8px 16px'
+                      }}
+                      className="h-12"
                     >
                       🗺️ Cambiar
                     </Button>
                   </div>
                   {editForm.city && (
-                    <p className="mt-1 text-xs text-accent">
+                    <p className="mt-1 text-xs" style={{ color: '#FFFFFF' }}>
                       ✓ Seleccionado: {editForm.city}
                     </p>
                   )}
                 </div>
                 <div>
-                  <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Location/Area</label>
+                  <label 
+                    className="mb-2 block text-base font-bold uppercase"
+                    style={{
+                      color: '#FFFF00',
+                      textShadow: '1px 1px 3px rgba(0,0,0,0.8)'
+                    }}
+                  >
+                    Location/Area:
+                  </label>
                   <Input
                     type="text"
                     value={editForm.location}
                     onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
                     placeholder="No cambiar"
                     maxLength={100}
-                    className="bg-input text-foreground h-14 sm:h-12 text-base sm:text-sm"
+                    style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '2px solid #888888',
+                      borderRadius: '5px',
+                      padding: '8px 12px',
+                      fontSize: '14px',
+                      color: '#555555'
+                    }}
+                    className="w-full h-12"
                   />
                 </div>
               </div>
             </div>
 
+            {/* BUTTONS */}
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={handleSaveAllEdits}
                 disabled={actionLoading || commandInProgressRef.current}
-                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 h-14 sm:h-12 text-base sm:text-sm"
+                style={{
+                  background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
+                  border: '2px solid #00C853',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontWeight: 'bold',
+                  fontSize: '16px',
+                  textShadow: '1px 1px 2px rgba(0,0,0,0.3)'
+                }}
+                className="flex-1 h-14"
               >
                 {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
               </Button>
               <Button
-                variant="outline"
                 onClick={() => {
                   setShowEditForm(false);
                   setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
                 }}
                 disabled={actionLoading || commandInProgressRef.current}
-                className="flex-1 h-14 sm:h-12 text-base sm:text-sm"
+                style={{
+                  background: '#666666',
+                  border: '2px solid #555555',
+                  borderRadius: '8px',
+                  color: '#FFFFFF',
+                  fontWeight: 'bold'
+                }}
+                className="flex-1 h-14"
               >
                 Cancelar
               </Button>
             </div>
 
-            <p className="mt-4 text-center text-sm sm:text-xs text-muted-foreground">
+            <p 
+              className="mt-4 text-center text-sm"
+              style={{ color: '#FFFFFF' }}
+            >
               Solo llena los campos que quieras cambiar
             </p>
           </div>
         </div>
+      )}
       )}
 
       {/* MODAL DE CAPTCHA - MEJORADO PARA MÓVILES */}
