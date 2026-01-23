@@ -966,7 +966,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
           </div>
         </div>
       )}
-      )}
 
       {/* MODAL DE CAPTCHA - MEJORADO PARA MÓVILES */}
       {showCaptchaForm && (
