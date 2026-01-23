@@ -223,31 +223,48 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         {}
       );
       
-      // Esperar a que el bot extraiga y actualice Firebase (3-5 segundos)
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // Esperar a que el bot termine de extraer
+      // El bot marcará extractingData: false cuando termine
+      let updatedData = null;
+      let attempts = 0;
+      const maxAttempts = 15; // 15 segundos máximo
       
-      // Obtener datos actualizados de Firebase
-      const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
-      const updatedData = await response.json();
-      
-      if (updatedData) {
-        setLiveData(updatedData);
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Pre-llenar con datos actualizados
-        setEditForm({
-          name: updatedData.name || "",
-          age: updatedData.age ? String(updatedData.age) : "",
-          headline: updatedData.headline || "",
-          body: updatedData.body || "",
-          city: updatedData.city || "",
-          location: updatedData.location || "",
-        });
+        const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
+        updatedData = await response.json();
+        
+        // Verificar si el bot terminó de extraer (extractingData es false Y tiene datos)
+        if (updatedData && updatedData.extractingData === false && updatedData.headline) {
+          break;
+        }
+        
+        attempts++;
       }
+      
+      // Verificar que obtuvimos datos válidos
+      if (!updatedData || !updatedData.headline) {
+        throw new Error('No se pudieron extraer los datos. El bot pudo no estar en la página de edición o hubo un problema con la extracción.');
+      }
+      
+      // Actualizar estado
+      setLiveData(updatedData);
+      
+      // Pre-llenar con datos actualizados
+      setEditForm({
+        name: updatedData.name || "",
+        age: updatedData.age ? String(updatedData.age) : "",
+        headline: updatedData.headline || "",
+        body: updatedData.body || "",
+        city: updatedData.city || "",
+        location: updatedData.location || "",
+      });
       
       setShowEditForm(true);
     } catch (error) {
       console.error('Error extracting data:', error);
-      alert('Error al extraer datos. Intenta nuevamente.');
+      alert(error instanceof Error ? error.message : 'Error al extraer datos. Intenta nuevamente.');
     } finally {
       setExtractingData(false);
     }
