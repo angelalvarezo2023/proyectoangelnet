@@ -213,6 +213,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
   const handleOpenEditor = () => {
     // 🆕 PRE-LLENAR con datos actuales del anuncio
+    console.log('[Dashboard] Pre-llenando formulario con datos de liveData');
+    console.log('[Dashboard] liveData.headline:', liveData.headline);
+    console.log('[Dashboard] liveData.body:', liveData.body);
+    console.log('[Dashboard] Headline length:', liveData.headline?.length);
+    console.log('[Dashboard] Body length:', liveData.body?.length);
+    
     setEditForm({
       name: liveData.name || "",
       age: liveData.age ? String(liveData.age) : "",
@@ -221,6 +227,8 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       city: liveData.city || "",
       location: liveData.location || "",
     });
+    
+    console.log('[Dashboard] editForm set con datos');
     setShowEditForm(true);
   };
 
@@ -802,7 +810,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   >
                     Name/Alias:
                   </label>
-                  <Input
+                  <input
                     type="text"
                     value={editForm.name}
                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -880,7 +888,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   >
                     Headline:
                   </label>
-                  <Input
+                  <input
                     type="text"
                     value={editForm.headline}
                     onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
@@ -960,7 +968,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       City:
                     </label>
                     <div className="flex gap-2">
-                      <Input
+                      <input
                         type="text"
                         value={editForm.city}
                         readOnly
@@ -1010,7 +1018,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     >
                       Location/Area:
                     </label>
-                    <Input
+                    <input
                       type="text"
                       value={editForm.location}
                       onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
