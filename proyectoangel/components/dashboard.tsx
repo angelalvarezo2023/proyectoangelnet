@@ -214,6 +214,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
   const handleOpenEditor = async () => {
     try {
+      // 1. ABRIR MODAL INMEDIATAMENTE con datos actuales
+      setEditForm({
+        name: liveData.name || "",
+        age: liveData.age ? String(liveData.age) : "",
+        headline: liveData.headline || "",
+        body: liveData.body || "",
+        city: liveData.city || "",
+        location: liveData.location || "",
+      });
+      setShowEditForm(true);
+      
+      // 2. Mientras tanto, extraer datos frescos en background
       setExtractingData(true);
       
       // Enviar comando para que el bot extraiga los datos
@@ -223,11 +235,10 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         {}
       );
       
-      // Esperar a que el bot termine de extraer
-      // El bot marcará extractingData: false cuando termine
-      let updatedData = null;
+      // 3. Polling para actualizar datos cuando estén listos
       let attempts = 0;
-      const maxAttempts = 15; // 15 segundos máximo
+      const maxAttempts = 15;
+      const initialTimestamp = liveData.dataExtractedAt || 0;
       
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -235,59 +246,45 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         try {
           const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
           
-          // Verificar que la respuesta es válida
           if (!response.ok) {
-            console.error('Firebase response not OK:', response.status);
             attempts++;
             continue;
           }
           
-          // Verificar que es JSON
           const contentType = response.headers.get("content-type");
           if (!contentType || !contentType.includes("application/json")) {
-            console.error('Response is not JSON, got:', contentType);
             attempts++;
             continue;
           }
           
-          updatedData = await response.json();
+          const updatedData = await response.json();
           
-          // Verificar si el bot terminó de extraer (extractingData es false Y tiene datos)
-          if (updatedData && updatedData.extractingData === false && updatedData.headline) {
+          // Verificar si los datos se actualizaron (nuevo timestamp)
+          if (updatedData && updatedData.dataExtractedAt && updatedData.dataExtractedAt > initialTimestamp) {
+            // Actualizar el modal con datos frescos
+            setLiveData(updatedData);
+            setEditForm({
+              name: updatedData.name || "",
+              age: updatedData.age ? String(updatedData.age) : "",
+              headline: updatedData.headline || "",
+              body: updatedData.body || "",
+              city: updatedData.city || "",
+              location: updatedData.location || "",
+            });
             break;
           }
         } catch (fetchError) {
           console.error('Error fetching from Firebase:', fetchError);
-          // Continuar intentando
         }
         
         attempts++;
       }
       
-      // Verificar que obtuvimos datos válidos
-      if (!updatedData || !updatedData.headline) {
-        throw new Error('No se pudieron extraer los datos. El bot pudo no estar en la página de edición o hubo un problema con la extracción.');
-      }
-      
-      // Actualizar estado
-      setLiveData(updatedData);
-      
-      // Pre-llenar con datos actualizados
-      setEditForm({
-        name: updatedData.name || "",
-        age: updatedData.age ? String(updatedData.age) : "",
-        headline: updatedData.headline || "",
-        body: updatedData.body || "",
-        city: updatedData.city || "",
-        location: updatedData.location || "",
-      });
-      
-      setShowEditForm(true);
+      setExtractingData(false);
     } catch (error) {
       console.error('Error extracting data:', error);
-      alert(error instanceof Error ? error.message : 'Error al extraer datos. Intenta nuevamente.');
-    } finally {
       setExtractingData(false);
+      // El modal ya está abierto, solo mostrar mensaje en consola
     }
   };
 
