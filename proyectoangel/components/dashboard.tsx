@@ -51,6 +51,7 @@ function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
 export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [liveData, setLiveData] = useState(browserData);
   const [actionLoading, setActionLoading] = useState(false);
+  const [extractingData, setExtractingData] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
@@ -211,17 +212,45 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     });
   }, [liveData, debounce, actionLoading]);
 
-  const handleOpenEditor = () => {
-    // Pre-llenar con datos actuales del anuncio
-    setEditForm({
-      name: liveData.name || "",
-      age: liveData.age ? String(liveData.age) : "",
-      headline: liveData.headline || "",
-      body: liveData.body || "",
-      city: liveData.city || "",
-      location: liveData.location || "",
-    });
-    setShowEditForm(true);
+  const handleOpenEditor = async () => {
+    try {
+      setExtractingData(true);
+      
+      // Enviar comando para que el bot extraiga los datos
+      await FirebaseAPI.sendCommand(
+        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+        "extract_edit_data",
+        {}
+      );
+      
+      // Esperar a que el bot extraiga y actualice Firebase (3-5 segundos)
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      
+      // Obtener datos actualizados de Firebase
+      const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
+      const updatedData = await response.json();
+      
+      if (updatedData) {
+        setLiveData(updatedData);
+        
+        // Pre-llenar con datos actualizados
+        setEditForm({
+          name: updatedData.name || "",
+          age: updatedData.age ? String(updatedData.age) : "",
+          headline: updatedData.headline || "",
+          body: updatedData.body || "",
+          city: updatedData.city || "",
+          location: updatedData.location || "",
+        });
+      }
+      
+      setShowEditForm(true);
+    } catch (error) {
+      console.error('Error extracting data:', error);
+      alert('Error al extraer datos. Intenta nuevamente.');
+    } finally {
+      setExtractingData(false);
+    }
   };
 
   const handleCitySelect = (city: string) => {
@@ -646,11 +675,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
                 <Button
                   onClick={handleOpenEditor}
-                  disabled={actionLoading || liveData.editInProgress || commandInProgressRef.current}
+                  disabled={actionLoading || extractingData || liveData.editInProgress || commandInProgressRef.current}
                   className="flex h-auto flex-col gap-2 bg-chart-4/10 py-5 sm:py-4 text-chart-4 hover:bg-chart-4/20 text-base sm:text-sm"
                 >
                   <EditIcon className="h-6 w-6 sm:h-5 sm:w-5" />
-                  <span className="text-xs">{liveData.editInProgress ? "Editando..." : "Editar"}</span>
+                  <span className="text-xs">
+                    {extractingData ? "Cargando..." : liveData.editInProgress ? "Editando..." : "Editar"}
+                  </span>
                 </Button>
 
                 <Button
@@ -1054,7 +1085,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
                 </Button>
                 <Button
-                  onClick={() => {
+                  onClick={async () => {
+                    // Enviar comando para que el bot vuelva atrás
+                    try {
+                      await FirebaseAPI.sendCommand(
+                        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+                        "cancel_edit",
+                        {}
+                      );
+                    } catch (error) {
+                      console.error('Error sending cancel command:', error);
+                    }
+                    
                     setShowEditForm(false);
                     setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
                   }}
