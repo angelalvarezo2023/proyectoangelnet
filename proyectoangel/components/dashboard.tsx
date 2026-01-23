@@ -213,79 +213,70 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, [liveData, debounce, actionLoading]);
 
   const handleOpenEditor = async () => {
-    try {
-      // 1. ABRIR MODAL INMEDIATAMENTE con datos actuales
-      setEditForm({
-        name: liveData.name || "",
-        age: liveData.age ? String(liveData.age) : "",
-        headline: liveData.headline || "",
-        body: liveData.body || "",
-        city: liveData.city || "",
-        location: liveData.location || "",
-      });
-      setShowEditForm(true);
-      
-      // 2. Mientras tanto, extraer datos frescos en background
-      setExtractingData(true);
-      
-      // Enviar comando para que el bot extraiga los datos
-      await FirebaseAPI.sendCommand(
-        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-        "extract_edit_data",
-        {}
-      );
-      
-      // 3. Polling para actualizar datos cuando estén listos
-      let attempts = 0;
-      const maxAttempts = 15;
-      const initialTimestamp = liveData.dataExtractedAt || 0;
-      
-      while (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+    // 1. ABRIR MODAL INMEDIATAMENTE - SIN CONDICIONES
+    setEditForm({
+      name: liveData.name || "",
+      age: liveData.age ? String(liveData.age) : "",
+      headline: liveData.headline || "",
+      body: liveData.body || "",
+      city: liveData.city || "",
+      location: liveData.location || "",
+    });
+    setShowEditForm(true); // ✅ MODAL ABIERTO - PUNTO
+    
+    // 2. Extraer datos frescos en background (sin bloquear)
+    (async () => {
+      try {
+        setExtractingData(true);
         
-        try {
-          const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
+        // Enviar comando
+        await FirebaseAPI.sendCommand(
+          liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+          "extract_edit_data",
+          {}
+        );
+        
+        // Polling para actualizar datos
+        const initialTimestamp = liveData.dataExtractedAt || 0;
+        
+        for (let i = 0; i < 15; i++) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
-          if (!response.ok) {
-            attempts++;
-            continue;
+          try {
+            const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
+            
+            if (!response.ok) continue;
+            
+            const contentType = response.headers.get("content-type");
+            if (!contentType || !contentType.includes("application/json")) continue;
+            
+            const updatedData = await response.json();
+            
+            // Si hay datos nuevos, actualizar el modal
+            if (updatedData && updatedData.dataExtractedAt > initialTimestamp) {
+              setLiveData(updatedData);
+              setEditForm({
+                name: updatedData.name || "",
+                age: updatedData.age ? String(updatedData.age) : "",
+                headline: updatedData.headline || "",
+                body: updatedData.body || "",
+                city: updatedData.city || "",
+                location: updatedData.location || "",
+              });
+              break;
+            }
+          } catch (e) {
+            // Ignorar errores y seguir intentando
+            console.log('Polling attempt failed, retrying...');
           }
-          
-          const contentType = response.headers.get("content-type");
-          if (!contentType || !contentType.includes("application/json")) {
-            attempts++;
-            continue;
-          }
-          
-          const updatedData = await response.json();
-          
-          // Verificar si los datos se actualizaron (nuevo timestamp)
-          if (updatedData && updatedData.dataExtractedAt && updatedData.dataExtractedAt > initialTimestamp) {
-            // Actualizar el modal con datos frescos
-            setLiveData(updatedData);
-            setEditForm({
-              name: updatedData.name || "",
-              age: updatedData.age ? String(updatedData.age) : "",
-              headline: updatedData.headline || "",
-              body: updatedData.body || "",
-              city: updatedData.city || "",
-              location: updatedData.location || "",
-            });
-            break;
-          }
-        } catch (fetchError) {
-          console.error('Error fetching from Firebase:', fetchError);
         }
-        
-        attempts++;
+      } catch (error) {
+        console.error('Background extraction error:', error);
+        // NO hacer nada - el modal ya está abierto
+      } finally {
+        setExtractingData(false);
       }
-      
-      setExtractingData(false);
-    } catch (error) {
-      console.error('Error extracting data:', error);
-      setExtractingData(false);
-      // El modal ya está abierto, solo mostrar mensaje en consola
-    }
+    })();
   };
 
   const handleCitySelect = (city: string) => {
