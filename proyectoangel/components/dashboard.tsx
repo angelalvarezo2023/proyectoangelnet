@@ -232,12 +232,33 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       while (attempts < maxAttempts) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
-        updatedData = await response.json();
-        
-        // Verificar si el bot terminó de extraer (extractingData es false Y tiene datos)
-        if (updatedData && updatedData.extractingData === false && updatedData.headline) {
-          break;
+        try {
+          const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
+          
+          // Verificar que la respuesta es válida
+          if (!response.ok) {
+            console.error('Firebase response not OK:', response.status);
+            attempts++;
+            continue;
+          }
+          
+          // Verificar que es JSON
+          const contentType = response.headers.get("content-type");
+          if (!contentType || !contentType.includes("application/json")) {
+            console.error('Response is not JSON, got:', contentType);
+            attempts++;
+            continue;
+          }
+          
+          updatedData = await response.json();
+          
+          // Verificar si el bot terminó de extraer (extractingData es false Y tiene datos)
+          if (updatedData && updatedData.extractingData === false && updatedData.headline) {
+            break;
+          }
+        } catch (fetchError) {
+          console.error('Error fetching from Firebase:', fetchError);
+          // Continuar intentando
         }
         
         attempts++;
