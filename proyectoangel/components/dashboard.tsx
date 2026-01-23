@@ -722,7 +722,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   color: '#E8E8E8',
                   textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
                   letterSpacing: '2px',
-                  fontFamily: 'Arial, sans-serif'
+                  fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                 }}
               >
                 Mega<span style={{ color: '#87CEEB' }}>Personals</span>
@@ -776,7 +776,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     fontWeight: 900,
                     color: '#FFFF00',
                     textShadow: '3px 3px 6px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.5)',
-                    fontFamily: 'Arial Black, sans-serif',
+                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
                     letterSpacing: '1px'
                   }}
                 >
@@ -797,7 +797,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
                     Name/Alias:
@@ -816,7 +816,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       padding: '10px 15px',
                       fontSize: '15px',
                       color: '#555555',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   />
                   {editForm.name && (
@@ -836,7 +836,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
                     Age:
@@ -853,7 +853,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       padding: '10px 15px',
                       fontSize: '15px',
                       color: '#555555',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
                     <option value="">-- No cambiar --</option>
@@ -875,7 +875,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
                     Headline:
@@ -894,7 +894,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       padding: '10px 15px',
                       fontSize: '15px',
                       color: '#555555',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   />
                   {editForm.headline && (
@@ -914,7 +914,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'Arial, sans-serif'
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
                     Body:
@@ -932,7 +932,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       padding: '12px 15px',
                       fontSize: '15px',
                       color: '#555555',
-                      fontFamily: 'Arial, sans-serif',
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
                       resize: 'none'
                     }}
                   />
@@ -954,7 +954,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         fontWeight: 'bold',
                         color: '#FFFF00',
                         textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                        fontFamily: 'Arial, sans-serif'
+                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                       }}
                     >
                       City:
@@ -973,7 +973,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                           padding: '10px 15px',
                           fontSize: '15px',
                           color: '#555555',
-                          fontFamily: 'Arial, sans-serif'
+                          fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                         }}
                       />
                       <Button
@@ -989,7 +989,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                           padding: '0 20px',
                           fontSize: '14px',
                           cursor: 'pointer',
-                          fontFamily: 'Arial, sans-serif'
+                          fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                         }}
                       >
                         🗺️ Cambiar
@@ -1005,7 +1005,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         fontWeight: 'bold',
                         color: '#FFFF00',
                         textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                        fontFamily: 'Arial, sans-serif'
+                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                       }}
                     >
                       Location/Area:
@@ -1024,7 +1024,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         padding: '10px 15px',
                         fontSize: '15px',
                         color: '#555555',
-                        fontFamily: 'Arial, sans-serif'
+                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                       }}
                     />
                   </div>
@@ -1047,7 +1047,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     fontSize: '18px',
                     textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
                     cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'Arial Black, sans-serif',
+                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
                     boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                   }}
                 >
@@ -1069,7 +1069,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     fontWeight: 'bold',
                     fontSize: '18px',
                     cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'Arial Black, sans-serif',
+                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
                     boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                   }}
                 >
@@ -1083,7 +1083,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 style={{
                   fontSize: '14px',
                   color: '#FFFFFF',
-                  fontFamily: 'Arial, sans-serif',
+                  fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
                   textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
                 }}
               >
