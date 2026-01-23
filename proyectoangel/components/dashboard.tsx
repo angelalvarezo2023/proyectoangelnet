@@ -138,22 +138,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     return () => unsubscribe();
   }, [browserData, showCaptchaForm]);
 
-  // 🆕 Auto-ocultar mensajes de éxito después de 5 segundos
-  useEffect(() => {
-    if (liveData.editLog && liveData.editLogType === "success") {
-      const timer = setTimeout(() => {
-        setLiveData(prev => ({
-          ...prev,
-          editLog: "",
-          editLogType: undefined
-        }));
-      }, 5000);
-
-      return () => clearTimeout(timer);
-    }
-  }, [liveData.editLog, liveData.editLogType]);
-
-
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < delay) {
@@ -430,10 +414,46 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   "rounded-xl border p-4",
                   liveData.editLogType === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
                   liveData.editLogType === "success" && "border-accent/30 bg-accent/10 text-accent",
-                  liveData.editLogType === "info" && "border-primary/30 bg-primary/10 text-primary"
+                  liveData.editLogType === "info" && "border-primary/30 bg-primary/10 text-primary",
+                  liveData.editLogType === "warning" && "border-orange-500/30 bg-orange-500/10 text-orange-400"
                 )}
               >
                 <p className="text-center text-base sm:text-sm font-medium">{liveData.editLog}</p>
+              </div>
+            )}
+
+            {/* 🆕 ADVERTENCIA: Navegador oculto */}
+            {(liveData as any).tabHidden && (
+              <div className="rounded-xl border-2 border-orange-500/50 bg-orange-500/20 p-4 animate-pulse">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-orange-500/30">
+                    <span className="text-2xl">⚠️</span>
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-lg text-orange-400">
+                      NAVEGADOR OCULTO
+                    </h4>
+                    <p className="text-sm text-orange-300">
+                      Este navegador no está visible en pantalla
+                    </p>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-orange-500/10 border border-orange-500/30 p-3 text-sm text-orange-200">
+                  <p className="mb-2">
+                    <strong>⚠️ Chrome está ralentizando este bot porque la pestaña no está visible.</strong>
+                  </p>
+                  <p className="mb-3">
+                    Para que el bot funcione a velocidad normal:
+                  </p>
+                  <ul className="ml-4 list-disc space-y-1 text-xs">
+                    <li>Abre el perfil de Chrome donde está este navegador</li>
+                    <li>Mantén la pestaña de Megapersonals VISIBLE en pantalla</li>
+                    <li>No cambies a otras pestañas mientras el bot trabaja</li>
+                  </ul>
+                  <p className="mt-3 text-xs text-orange-300/80">
+                    💡 Esto es una limitación de Chrome para ahorrar recursos
+                  </p>
+                </div>
               </div>
             )}
 
