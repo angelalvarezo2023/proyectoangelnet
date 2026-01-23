@@ -212,13 +212,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, [liveData, debounce, actionLoading]);
 
   const handleOpenEditor = () => {
-    // 🆕 PRE-LLENAR con datos actuales del anuncio
-    console.log('[Dashboard] Pre-llenando formulario con datos de liveData');
-    console.log('[Dashboard] liveData.headline:', liveData.headline);
-    console.log('[Dashboard] liveData.body:', liveData.body);
-    console.log('[Dashboard] Headline length:', liveData.headline?.length);
-    console.log('[Dashboard] Body length:', liveData.body?.length);
-    
+    // Pre-llenar con datos actuales del anuncio
     setEditForm({
       name: liveData.name || "",
       age: liveData.age ? String(liveData.age) : "",
@@ -227,8 +221,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       city: liveData.city || "",
       location: liveData.location || "",
     });
-    
-    console.log('[Dashboard] editForm set con datos');
     setShowEditForm(true);
   };
 
