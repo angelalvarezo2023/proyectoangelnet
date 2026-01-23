@@ -115,6 +115,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
           previousRepublishRef.current = newData.republishStatus;
         }
 
+        // 🆕 FIX: Cerrar modal automáticamente cuando captchaWaiting = false
+        if (!newData.captchaWaiting && showCaptchaForm) {
+          setShowCaptchaForm(false);
+          setCaptchaCode("");
+          modalManuallyControlledRef.current = false;
+        }
+
         if (modalManuallyControlledRef.current) {
           return;
         }
@@ -300,12 +307,8 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        alert("✅ Código enviado correctamente");
-        setTimeout(() => {
-          setShowCaptchaForm(false);
-          setCaptchaCode("");
-          modalManuallyControlledRef.current = false;
-        }, 1000);
+        // 🆕 El modal se cerrará automáticamente cuando Firebase actualice captchaWaiting=false
+        alert("✅ Código enviado. La ventana se cerrará automáticamente.");
       } else {
         alert(`Error: ${result.error}`);
       }
