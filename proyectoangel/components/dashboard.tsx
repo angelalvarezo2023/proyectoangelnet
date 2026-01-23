@@ -662,7 +662,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
             <div className="space-y-5 sm:space-y-4">
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Nombre/Alias</label>
+                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Name/Alias</label>
                 <Input
                   type="text"
                   value={editForm.name}
@@ -675,7 +675,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
 
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Edad</label>
+                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Age</label>
                 <select
                   value={editForm.age}
                   onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
@@ -691,7 +691,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
 
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Encabezado</label>
+                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Headline</label>
                 <Input
                   type="text"
                   value={editForm.headline}
@@ -706,7 +706,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
 
               <div>
-                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Descripción</label>
+                <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Body</label>
                 <textarea
                   value={editForm.body}
                   onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
@@ -721,7 +721,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">
-                    Ciudad / Estado
+                    City
                   </label>
                   <div className="flex gap-2">
                     <Input
@@ -748,7 +748,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   )}
                 </div>
                 <div>
-                  <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Área/Zona</label>
+                  <label className="mb-2 block text-base sm:text-sm font-medium text-muted-foreground">Location/Area</label>
                   <Input
                     type="text"
                     value={editForm.location}
