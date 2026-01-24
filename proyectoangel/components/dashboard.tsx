@@ -75,8 +75,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
   const lastExtractedTimestampRef = useRef<number>(0);
-  const userIsEditingRef = useRef(false);
-  const autoUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
