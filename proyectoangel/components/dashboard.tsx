@@ -714,12 +714,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
                 <Button
                   onClick={handleOpenEditor}
-                  disabled={actionLoading || extractingData || liveData.editInProgress || commandInProgressRef.current}
+                  disabled={actionLoading || liveData.editInProgress || commandInProgressRef.current}
                   className="flex h-auto flex-col gap-2 bg-chart-4/10 py-5 sm:py-4 text-chart-4 hover:bg-chart-4/20 text-base sm:text-sm"
                 >
                   <EditIcon className="h-6 w-6 sm:h-5 sm:w-5" />
                   <span className="text-xs">
-                    {extractingData ? "Cargando..." : liveData.editInProgress ? "Editando..." : "Editar"}
+                    {liveData.editInProgress ? "Editando..." : "Editar"}
                   </span>
                 </Button>
 
