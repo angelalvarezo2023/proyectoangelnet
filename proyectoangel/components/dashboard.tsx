@@ -74,6 +74,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
+  const lastExtractedTimestampRef = useRef<number>(0);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
@@ -257,30 +258,31 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, [liveData, debounce, actionLoading]);
 
   const handleOpenEditor = async () => {
-    // Resetear flags
-    userIsEditingRef.current = false;
-    lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
-    
-    // ABRIR MODAL INMEDIATAMENTE con datos actuales
-    setEditForm({
-      name: liveData.name || "",
-      age: liveData.age ? String(liveData.age) : "",
-      headline: liveData.headline || "",
-      body: liveData.body || "",
-      city: liveData.city || "",
-      location: liveData.location || "",
-    });
-    setShowEditForm(true);
-    
-    // Extraer datos frescos en background
     try {
+      // Resetear flags
+      userIsEditingRef.current = false;
+      lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
+      
+      // ABRIR MODAL INMEDIATAMENTE con datos actuales
+      setEditForm({
+        name: liveData.name || "",
+        age: liveData.age ? String(liveData.age) : "",
+        headline: liveData.headline || "",
+        body: liveData.body || "",
+        city: liveData.city || "",
+        location: liveData.location || "",
+      });
+      
+      setShowEditForm(true);
+      
+      // Extraer datos frescos en background
       await FirebaseAPI.sendCommand(
         liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
         "extract_edit_data",
         {}
       );
     } catch (error) {
-      console.error('Background extraction error:', error);
+      console.error('Error in handleOpenEditor:', error);
     }
   };
 
@@ -728,7 +730,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   className="col-span-3 flex h-auto flex-col gap-2 bg-blue-500/10 py-5 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
                 >
                   <span className="text-2xl sm:text-xl">🔔</span>
-                  <span className="text-sm sm:text-xs">Configurar Notificaciones1</span>
+                  <span className="text-sm sm:text-xs">Configurar Notificaciones</span>
                 </Button>
               </div>
             </div>
