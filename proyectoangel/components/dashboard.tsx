@@ -51,7 +51,6 @@ function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
 export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [liveData, setLiveData] = useState(browserData);
   const [actionLoading, setActionLoading] = useState(false);
-  const [extractingData, setExtractingData] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
@@ -380,19 +379,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     : 0;
 
   const status = getRentalStatus(liveData.rentalRemaining);
-  
-  const hasDataExtractionError = 
-    (liveData.phoneNumber === "N/A" || liveData.phoneNumber === "Manual") &&
-    (liveData.city === "N/A" || liveData.city === "Manual") &&
-    (liveData.location === "N/A" || liveData.location === "Manual");
-  
-  const hasRecentError = liveData.lastError && 
-    (Date.now() - new Date(liveData.lastError.timestamp).getTime()) < 5 * 60 * 1000;
-  
-  const hasRepublishFailure = liveData.republishStatus && 
-    liveData.republishStatus.elapsedSeconds > (liveData.republishStatus.totalSeconds + 60);
-  
-  const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
   return (
     <>
@@ -473,47 +459,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             )}
 
-            {hasError && (
-              <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4">
-                <div className="mb-3 flex items-center gap-3">
-                  <div className="flex h-12 w-12 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-red-500/20">
-                    <span className="text-2xl sm:text-xl">⚠️</span>
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-semibold text-base sm:text-sm text-red-400">
-                      {hasRepublishFailure ? "⏰ Problema con Republicación" :
-                       hasDataExtractionError ? "📋 Error de Datos" :
-                       "❌ Hay un problema"}
-                    </h4>
-                    <p className="text-sm sm:text-xs text-red-300">
-                      {hasRepublishFailure && "El tiempo excedió el límite normal"}
-                      {hasDataExtractionError && "No se pudieron obtener los datos"}
-                      {hasRecentError && liveData.lastError && liveData.lastError.message}
-                    </p>
-                  </div>
-                </div>
-                <div className="rounded-lg bg-red-500/5 p-3 text-xs text-red-200">
-                  💡 <strong>Posibles causas:</strong>
-                  <ul className="ml-4 mt-1 list-disc space-y-1">
-                    {hasDataExtractionError && (
-                      <>
-                        <li>El sitio web cambió su estructura</li>
-                        <li>Problema de conexión</li>
-                      </>
-                    )}
-                    {hasRepublishFailure && (
-                      <>
-                        <li>Esperando código de seguridad</li>
-                        <li>Error en la página</li>
-                      </>
-                    )}
-                  </ul>
-                  <p className="mt-2">
-                    <strong>Recomendación:</strong> Revisa manualmente o contacta soporte
-                  </p>
-                </div>
-              </div>
-            )}
+
 
             {!liveData.manuallyCreated && (
               <div className="rounded-xl border border-border bg-secondary/30 p-4">
@@ -608,7 +554,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 <div className="mb-4 text-center">
                   <div className="text-5xl sm:text-4xl font-bold tabular-nums text-foreground">
                     {liveData.editInProgress ? (
-                      <span className="text-primary">Editando...</span>
+                      <div className="flex flex-col items-center gap-2">
+                        <span className="text-primary">Editando...</span>
+                        {liveData.republishStatus && liveData.republishStatus.remainingSeconds > 0 && (
+                          <span className="text-2xl sm:text-xl text-muted-foreground">
+                            Se publicará en {formatTime(liveData.republishStatus.remainingSeconds)}
+                          </span>
+                        )}
+                      </div>
                     ) : (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage) ? (
                       <span className="text-accent">✓ Completada</span>
                     ) : showSuccessMessage ? (
@@ -707,7 +660,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* MODAL DE EDICIÓN - RÉPLICA EXACTA DE MEGAPERSONALS */}
+      {/* MODAL DE EDICIÓN - TUTORIAL PASO A PASO */}
       {showEditForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
           <div 
@@ -805,7 +758,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 />
               </div>
 
-              {/* TÍTULO "EDITAR ANUNCIO" */}
+              {/* TÍTULO "TUTORIAL DE EDICIÓN" */}
               <div className="text-center mb-6 relative z-20">
                 <h2 
                   style={{
@@ -817,8 +770,94 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     letterSpacing: '1px'
                   }}
                 >
-                  Editar Anuncio
+                  📚 Tutorial de Edición
                 </h2>
+                <p 
+                  style={{
+                    fontSize: '16px',
+                    color: '#FFFFFF',
+                    marginTop: '10px',
+                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+                  }}
+                >
+                  ✨ Sigue estos pasos para editar tu anuncio
+                </p>
+              </div>
+
+              {/* INSTRUCCIONES PASO A PASO */}
+              <div 
+                className="mb-6 p-5 relative z-20"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  borderRadius: '15px',
+                  border: '3px solid #FF69B4',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                }}
+              >
+                <h3 
+                  style={{
+                    fontSize: '20px',
+                    fontWeight: 'bold',
+                    color: '#8C398C',
+                    marginBottom: '15px',
+                    textAlign: 'center',
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+                  }}
+                >
+                  📋 Instrucciones
+                </h3>
+                <ol 
+                  style={{
+                    fontSize: '15px',
+                    color: '#333333',
+                    lineHeight: '1.8',
+                    paddingLeft: '25px',
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+                  }}
+                >
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 1:</strong> Cambia <u>SOLO</u> los campos que quieras actualizar
+                  </li>
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 2:</strong> Si NO quieres cambiar un campo, <u>déjalo como está</u>
+                  </li>
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 3:</strong> Haz click en "✅ Guardar Cambios"
+                  </li>
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 4:</strong> El sistema procesará automáticamente
+                  </li>
+                  <li>
+                    <strong style={{ color: '#8C398C' }}>Paso 5:</strong> ¡Listo! Tus cambios se publicarán pronto
+                  </li>
+                </ol>
+                
+                {/* ADVERTENCIA IMPORTANTE */}
+                <div 
+                  style={{
+                    marginTop: '20px',
+                    padding: '15px',
+                    background: '#FFF3CD',
+                    border: '2px solid #FFC107',
+                    borderRadius: '10px'
+                  }}
+                >
+                  <p 
+                    style={{
+                      fontSize: '14px',
+                      color: '#856404',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      margin: 0,
+                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+                    }}
+                  >
+                    ⚠️ <u>MUY IMPORTANTE</u> ⚠️<br />
+                    Después de guardar, NO toques nada en el navegador.<br />
+                    El sistema trabajará automáticamente.
+                  </p>
+                </div>
               </div>
 
               {/* FORMULARIO */}
@@ -837,13 +876,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
-                    Name/Alias:
+                    <span style={{ color: '#87CEEB' }}>1️⃣</span> Name/Alias:
                   </label>
                   <input
                     type="text"
                     value={editForm.name}
                     onChange={(e) => handleFieldChange('name', e.target.value)}
                     maxLength={50}
+                    placeholder="Ejemplo: Sofia"
                     style={{
                       width: '100%',
                       height: '45px',
@@ -858,7 +898,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   />
                   {editForm.name && (
                     <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.name.length}/50
+                      {editForm.name.length}/50 caracteres
                     </p>
                   )}
                 </div>
@@ -876,7 +916,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
-                    Age:
+                    <span style={{ color: '#87CEEB' }}>2️⃣</span> Age:
                   </label>
                   <select
                     value={editForm.age}
@@ -915,13 +955,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
-                    Headline:
+                    <span style={{ color: '#87CEEB' }}>3️⃣</span> Headline:
                   </label>
                   <input
                     type="text"
                     value={editForm.headline}
                     onChange={(e) => handleFieldChange('headline', e.target.value)}
                     maxLength={250}
+                    placeholder="Ejemplo: SEXY COLOMBIANA 🔥💋"
                     style={{
                       width: '100%',
                       height: '45px',
@@ -936,7 +977,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   />
                   {editForm.headline && (
                     <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.headline.length}/250
+                      {editForm.headline.length}/250 caracteres
                     </p>
                   )}
                 </div>
@@ -954,13 +995,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                     }}
                   >
-                    Body:
+                    <span style={{ color: '#87CEEB' }}>4️⃣</span> Body:
                   </label>
                   <textarea
                     value={editForm.body}
                     onChange={(e) => handleFieldChange('body', e.target.value)}
                     rows={6}
                     maxLength={2000}
+                    placeholder="Ejemplo: Hola 💕 soy muy caliente 🔥..."
                     style={{
                       width: '100%',
                       backgroundColor: '#FFFFFF',
@@ -975,7 +1017,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   />
                   {editForm.body && (
                     <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.body.length}/2000
+                      {editForm.body.length}/2000 caracteres
                     </p>
                   )}
                 </div>
@@ -994,7 +1036,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                       }}
                     >
-                      City:
+                      <span style={{ color: '#87CEEB' }}>5️⃣</span> City:
                     </label>
                     <div className="flex gap-2">
                       <input
@@ -1045,13 +1087,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                         fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
                       }}
                     >
-                      Location/Area:
+                      <span style={{ color: '#87CEEB' }}>6️⃣</span> Location/Area:
                     </label>
                     <input
                       type="text"
                       value={editForm.location}
                       onChange={(e) => handleFieldChange('location', e.target.value)}
                       maxLength={100}
+                      placeholder="Ejemplo: Downtown"
                       style={{
                         width: '100%',
                         height: '45px',
@@ -1126,18 +1169,29 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 </Button>
               </div>
 
-              {/* TEXTO INFERIOR */}
-              <p 
-                className="mt-6 text-center"
+              {/* RECORDATORIO FINAL */}
+              <div 
+                className="mt-6 p-4 relative z-20"
                 style={{
-                  fontSize: '14px',
-                  color: '#FFFFFF',
-                  fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
-                  textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                  background: 'rgba(255, 255, 255, 0.95)',
+                  borderRadius: '12px',
+                  border: '2px solid #00E676',
+                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                 }}
               >
-                Modifica los campos que quieras actualizar
-              </p>
+                <p 
+                  style={{
+                    fontSize: '14px',
+                    color: '#333333',
+                    fontWeight: 'bold',
+                    textAlign: 'center',
+                    margin: 0,
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
+                  }}
+                >
+                  ✅ Recuerda: Solo cambia los campos que quieras actualizar
+                </p>
+              </div>
             </div>
           </div>
         </div>
