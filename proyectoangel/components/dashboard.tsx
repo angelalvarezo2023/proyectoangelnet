@@ -74,7 +74,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
-  const lastExtractedTimestampRef = useRef<number>(0);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
@@ -144,33 +143,11 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         }
 
         setLiveData(newData);
-        
-        // 🆕 ACTUALIZAR MODAL DE EDICIÓN SOLO SI:
-        // 1. El modal está abierto
-        // 2. El usuario NO está editando activamente
-        // 3. Es la primera vez que llegan estos datos (timestamp nuevo)
-        if (showEditForm && 
-            !userIsEditingRef.current && 
-            newData.dataExtractedAt && 
-            newData.dataExtractedAt > lastExtractedTimestampRef.current) {
-          
-          lastExtractedTimestampRef.current = newData.dataExtractedAt;
-          
-          setEditForm(prev => ({
-            ...prev,
-            name: newData.name || "",
-            age: newData.age ? String(newData.age) : "",
-            headline: newData.headline || "",
-            body: newData.body || "",
-            city: newData.city || "",
-            location: newData.location || "",
-          }));
-        }
       }
     );
 
     return () => unsubscribe();
-  }, [browserData, showCaptchaForm, showEditForm]);
+  }, [browserData, showCaptchaForm]);
 
   // ✅ SOLUCIÓN DEFINITIVA: UseEffect dedicado para auto-ocultar mensaje de éxito
   useEffect(() => {
@@ -257,33 +234,21 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     });
   }, [liveData, debounce, actionLoading]);
 
-  const handleOpenEditor = async () => {
-    try {
-      // Resetear flags
-      userIsEditingRef.current = false;
-      lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
-      
-      // ABRIR MODAL INMEDIATAMENTE con datos actuales
-      setEditForm({
-        name: liveData.name || "",
-        age: liveData.age ? String(liveData.age) : "",
-        headline: liveData.headline || "",
-        body: liveData.body || "",
-        city: liveData.city || "",
-        location: liveData.location || "",
-      });
-      
-      setShowEditForm(true);
-      
-      // Extraer datos frescos en background
-      await FirebaseAPI.sendCommand(
-        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-        "extract_edit_data",
-        {}
-      );
-    } catch (error) {
-      console.error('Error in handleOpenEditor:', error);
-    }
+  const handleOpenEditor = () => {
+    // Resetear flag
+    userIsEditingRef.current = false;
+    
+    // Abrir modal con datos actuales
+    setEditForm({
+      name: liveData.name || "",
+      age: liveData.age ? String(liveData.age) : "",
+      headline: liveData.headline || "",
+      body: liveData.body || "",
+      city: liveData.city || "",
+      location: liveData.location || "",
+    });
+    
+    setShowEditForm(true);
   };
 
   // Helper para marcar que usuario está editando
