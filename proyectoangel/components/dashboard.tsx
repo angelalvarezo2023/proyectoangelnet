@@ -256,7 +256,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     });
   }, [liveData, debounce, actionLoading]);
 
-  const handleOpenEditor = useCallback(async () => {
+  const handleOpenEditor = async () => {
     // Resetear flags
     userIsEditingRef.current = false;
     lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
@@ -282,18 +282,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     } catch (error) {
       console.error('Background extraction error:', error);
     }
-  }, [liveData]);
+  };
 
-  // Helper para marcar que usuario está editando (usando patrón funcional recomendado)
-  const handleFieldChange = useCallback((field: keyof typeof editForm, value: string) => {
+  // Helper para marcar que usuario está editando
+  const handleFieldChange = (field: keyof typeof editForm, value: string) => {
     userIsEditingRef.current = true;
     setEditForm(prev => ({ ...prev, [field]: value }));
-  }, []);
+  };
 
-  const handleCitySelect = useCallback((city: string) => {
+  const handleCitySelect = (city: string) => {
     userIsEditingRef.current = true;
     setEditForm(prev => ({ ...prev, city }));
-  }, []);
+  };
 
   const handleSaveAllEdits = async () => {
     if (commandInProgressRef.current || actionLoading) {
