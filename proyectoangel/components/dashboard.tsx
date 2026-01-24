@@ -56,6 +56,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [captchaCode, setCaptchaCode] = useState("");
   const [captchaSubmitting, setCaptchaSubmitting] = useState(false); // 🆕 Bloqueo inmediato
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+  const [showSavedMessage, setShowSavedMessage] = useState(false); // 🆕 Para "Cambios guardados"
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showCitySelector, setShowCitySelector] = useState(false);
 
@@ -71,6 +72,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const modalManuallyControlledRef = useRef(false);
   const commandInProgressRef = useRef(false);
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
+  const previousEditInProgressRef = useRef<boolean>(false); // 🆕 Para detectar cuando termina edición
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
@@ -160,6 +162,26 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       return () => clearTimeout(timer);
     }
   }, [showSuccessMessage]);
+
+  // 🆕 Detectar cuando termina la edición (editInProgress: true → false)
+  useEffect(() => {
+    const wasEditing = previousEditInProgressRef.current;
+    const isEditingNow = liveData.editInProgress;
+
+    // Si estaba editando y ahora ya NO, mostrar "Cambios guardados"
+    if (wasEditing && !isEditingNow) {
+      console.log('[Dashboard]: Edición completada, mostrando mensaje de guardado');
+      setShowSavedMessage(true);
+      
+      // Ocultar después de 5 segundos
+      setTimeout(() => {
+        setShowSavedMessage(false);
+      }, 5000);
+    }
+
+    // Actualizar ref para próxima comparación
+    previousEditInProgressRef.current = isEditingNow;
+  }, [liveData.editInProgress]);
 
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
@@ -545,13 +567,15 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 <div className="mb-4 flex items-center justify-between">
                   <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     <ClockIcon className="h-4 w-4" />
-                    {liveData.editInProgress
-                      ? "Editando"
-                      : (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage)
-                        ? "Republicación"
-                        : showSuccessMessage
-                          ? "Exitoso"
-                          : "Próximo Anuncio"}
+                    {showSavedMessage
+                      ? "Guardado"
+                      : liveData.editInProgress
+                        ? "Editando"
+                        : (liveData.republishStatus.remainingSeconds <= 0 && !showSuccessMessage)
+                          ? "Republicación"
+                          : showSuccessMessage
+                            ? "Exitoso"
+                            : "Próximo Anuncio"}
                   </h3>
                   {liveData.isPaused && (
                     <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
@@ -562,7 +586,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
                 <div className="mb-4 text-center">
                   <div className="text-5xl sm:text-4xl font-bold tabular-nums text-foreground">
-                    {liveData.editInProgress ? (
+                    {showSavedMessage ? (
+                      <span className="text-accent">✅ Cambios guardados</span>
+                    ) : liveData.editInProgress ? (
                       <div className="flex flex-col items-center gap-2">
                         <span className="text-primary">Editando...</span>
                         {liveData.republishStatus && liveData.republishStatus.remainingSeconds > 0 && (
