@@ -72,6 +72,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const commandInProgressRef = useRef(false);
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
   const lastActionTimeRef = useRef<number>(0);
+  const lastSuccessMessageTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
@@ -108,8 +109,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       (newData) => {
         if (previousRepublishRef.current && newData.republishStatus) {
           if (previousRepublishRef.current.elapsedSeconds > 800 && newData.republishStatus.elapsedSeconds < 10) {
-            setShowSuccessMessage(true);
-            setTimeout(() => setShowSuccessMessage(false), 5000);
+            // Evitar mostrar mensaje múltiples veces (debounce de 10 segundos)
+            const now = Date.now();
+            if (now - lastSuccessMessageTimeRef.current > 10000) {
+              lastSuccessMessageTimeRef.current = now;
+              setShowSuccessMessage(true);
+              setTimeout(() => setShowSuccessMessage(false), 5000);
+            }
           }
         }
         if (newData.republishStatus) {
@@ -133,11 +139,23 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         }
 
         setLiveData(newData);
+        
+        // 🆕 ACTUALIZAR MODAL DE EDICIÓN SI ESTÁ ABIERTO
+        if (showEditForm && newData.dataExtractedAt) {
+          setEditForm({
+            name: newData.name || "",
+            age: newData.age ? String(newData.age) : "",
+            headline: newData.headline || "",
+            body: newData.body || "",
+            city: newData.city || "",
+            location: newData.location || "",
+          });
+        }
       }
     );
 
     return () => unsubscribe();
-  }, [browserData, showCaptchaForm]);
+  }, [browserData, showCaptchaForm, showEditForm]);
 
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
