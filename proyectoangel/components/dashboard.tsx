@@ -54,6 +54,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
+  const [captchaSubmitting, setCaptchaSubmitting] = useState(false); // 🆕 Bloqueo inmediato
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showCitySelector, setShowCitySelector] = useState(false);
@@ -342,10 +343,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       return;
     }
 
-    if (commandInProgressRef.current || actionLoading) {
+    // 🆕 BLOQUEO INMEDIATO para evitar clicks múltiples
+    if (captchaSubmitting || commandInProgressRef.current || actionLoading) {
+      console.log('[CaptchaSubmit]: Bloqueado - ya hay un envío en progreso');
       return;
     }
 
+    // 🆕 Marcar INMEDIATAMENTE como "enviando"
+    setCaptchaSubmitting(true);
     commandInProgressRef.current = true;
     setActionLoading(true);
 
@@ -357,14 +362,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        // 🆕 El modal se cerrará automáticamente cuando Firebase actualice captchaWaiting=false
-        alert("✅ Código enviado. La ventana se cerrará automáticamente.");
+        // ✅ CERRAR VENTANA AUTOMÁTICAMENTE (sin alert que retrasa)
+        console.log('[CaptchaSubmit]: ✅ Código enviado correctamente');
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
       } else {
         alert(`Error: ${result.error}`);
       }
     } finally {
       setActionLoading(false);
       commandInProgressRef.current = false;
+      setCaptchaSubmitting(false);
     }
   };
 
@@ -828,8 +837,14 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <li style={{ marginBottom: '10px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 4:</strong> El sistema procesará automáticamente
                   </li>
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 5:</strong> Aparecerá una ventana con código de seguridad
+                  </li>
+                  <li style={{ marginBottom: '10px' }}>
+                    <strong style={{ color: '#8C398C' }}>Paso 6:</strong> Escribe el código y presiona "Enviar" <u>UNA SOLA VEZ</u>
+                  </li>
                   <li>
-                    <strong style={{ color: '#8C398C' }}>Paso 5:</strong> ¡Listo! Tus cambios se publicarán pronto
+                    <strong style={{ color: '#8C398C' }}>Paso 7:</strong> ¡Listo! La ventana se cerrará automáticamente
                   </li>
                 </ol>
                 
@@ -854,8 +869,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     }}
                   >
                     ⚠️ <u>MUY IMPORTANTE</u> ⚠️<br />
-                    Después de guardar, NO toques nada en el navegador.<br />
-                    El sistema trabajará automáticamente.
+                    Cuando aparezca el captcha, presiona "Enviar" <u>UNA SOLA VEZ</u>.<br />
+                    La ventana se cerrará automáticamente en segundos.<br />
+                    NO hagas click múltiples veces. ¡Ten paciencia!
                   </p>
                 </div>
               </div>
@@ -1223,12 +1239,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   value={captchaCode}
                   onChange={(e) => setCaptchaCode(e.target.value)}
                   onKeyDown={(e) =>
-                    e.key === "Enter" && !actionLoading && !commandInProgressRef.current && handleCaptchaSubmit()
+                    e.key === "Enter" && !captchaSubmitting && !actionLoading && !commandInProgressRef.current && handleCaptchaSubmit()
                   }
                   placeholder="Ejemplo: 3uK>"
                   className="bg-input text-center font-mono text-xl sm:text-lg text-foreground h-16 sm:h-14"
                   autoFocus
-                  disabled={actionLoading || commandInProgressRef.current}
+                  disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
                 />
               </div>
             </div>
@@ -1236,15 +1252,15 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             <div className="mt-6 flex flex-col sm:flex-row gap-3">
               <Button
                 onClick={handleCaptchaSubmit}
-                disabled={actionLoading || !captchaCode.trim() || commandInProgressRef.current}
+                disabled={captchaSubmitting || actionLoading || !captchaCode.trim() || commandInProgressRef.current}
                 className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-14 sm:h-12 text-base sm:text-sm"
               >
-                {actionLoading ? "Verificando..." : "✅ Enviar"}
+                {captchaSubmitting || actionLoading ? "Enviando..." : "✅ Enviar"}
               </Button>
               <Button
                 variant="outline"
                 onClick={handleCaptchaCancel}
-                disabled={actionLoading || commandInProgressRef.current}
+                disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
                 className="flex-1 bg-transparent h-14 sm:h-12 text-base sm:text-sm"
               >
                 Cancelar
@@ -1252,7 +1268,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             </div>
 
             <p className="mt-4 text-center text-sm sm:text-xs text-muted-foreground">
-              El sistema guardará los cambios automáticamente
+              {captchaSubmitting ? "⏳ Procesando... NO hagas click nuevamente" : "Presiona Enviar UNA SOLA VEZ"}
             </p>
           </div>
         </div>
