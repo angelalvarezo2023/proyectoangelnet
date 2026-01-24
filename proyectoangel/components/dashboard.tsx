@@ -728,7 +728,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   className="col-span-3 flex h-auto flex-col gap-2 bg-blue-500/10 py-5 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
                 >
                   <span className="text-2xl sm:text-xl">🔔</span>
-                  <span className="text-sm sm:text-xs">Configurar Notificaciones</span>
+                  <span className="text-sm sm:text-xs">Configurar Notificaciones1</span>
                 </Button>
               </div>
             </div>
