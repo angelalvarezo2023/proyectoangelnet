@@ -73,6 +73,10 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
+  const userIsEditingRef = useRef(false);
+  const lastExtractedTimestampRef = useRef<number>(0);
+  const userIsEditingRef = useRef(false);
+  const autoUpdateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
@@ -107,17 +111,27 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     const unsubscribe = FirebaseAPI.listenToBrowser(
       browserData.browserName || (browserData as BrowserData & { name?: string }).name || "",
       (newData) => {
+        // MENSAJE DE ÉXITO - Solo cuando republicación se completa
         if (previousRepublishRef.current && newData.republishStatus) {
-          if (previousRepublishRef.current.elapsedSeconds > 800 && newData.republishStatus.elapsedSeconds < 10) {
-            // Evitar mostrar mensaje múltiples veces (debounce de 10 segundos)
+          const wasInProgress = previousRepublishRef.current.elapsedSeconds > 800;
+          const justCompleted = newData.republishStatus.elapsedSeconds < 10;
+          
+          if (wasInProgress && justCompleted) {
+            // Evitar mostrar mensaje múltiples veces (debounce de 15 segundos)
             const now = Date.now();
-            if (now - lastSuccessMessageTimeRef.current > 10000) {
+            if (now - lastSuccessMessageTimeRef.current > 15000) {
               lastSuccessMessageTimeRef.current = now;
               setShowSuccessMessage(true);
-              setTimeout(() => setShowSuccessMessage(false), 5000);
+              
+              // Auto-ocultar después de 5 segundos
+              setTimeout(() => {
+                setShowSuccessMessage(false);
+              }, 5000);
             }
           }
         }
+        
+        // Actualizar ref DESPUÉS de verificar
         if (newData.republishStatus) {
           previousRepublishRef.current = newData.republishStatus;
         }
@@ -140,8 +154,17 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
         setLiveData(newData);
         
-        // 🆕 ACTUALIZAR MODAL DE EDICIÓN SI ESTÁ ABIERTO
-        if (showEditForm && newData.dataExtractedAt) {
+        // 🆕 ACTUALIZAR MODAL DE EDICIÓN SOLO SI:
+        // 1. El modal está abierto
+        // 2. El usuario NO está editando activamente
+        // 3. Es la primera vez que llegan estos datos (timestamp nuevo)
+        if (showEditForm && 
+            !userIsEditingRef.current && 
+            newData.dataExtractedAt && 
+            newData.dataExtractedAt > lastExtractedTimestampRef.current) {
+          
+          lastExtractedTimestampRef.current = newData.dataExtractedAt;
+          
           setEditForm({
             name: newData.name || "",
             age: newData.age ? String(newData.age) : "",
@@ -231,6 +254,10 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, [liveData, debounce, actionLoading]);
 
   const handleOpenEditor = async () => {
+    // Resetear flags
+    userIsEditingRef.current = false;
+    lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
+    
     // 1. ABRIR MODAL INMEDIATAMENTE - SIN CONDICIONES
     setEditForm({
       name: liveData.name || "",
@@ -273,14 +300,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
             // Si hay datos nuevos, actualizar el modal
             if (updatedData && updatedData.dataExtractedAt > initialTimestamp) {
               setLiveData(updatedData);
-              setEditForm({
-                name: updatedData.name || "",
-                age: updatedData.age ? String(updatedData.age) : "",
-                headline: updatedData.headline || "",
-                body: updatedData.body || "",
-                city: updatedData.city || "",
-                location: updatedData.location || "",
-              });
+              
+              // Solo actualizar si usuario no ha empezado a editar
+              if (!userIsEditingRef.current) {
+                setEditForm({
+                  name: updatedData.name || "",
+                  age: updatedData.age ? String(updatedData.age) : "",
+                  headline: updatedData.headline || "",
+                  body: updatedData.body || "",
+                  city: updatedData.city || "",
+                  location: updatedData.location || "",
+                });
+              }
               break;
             }
           } catch (e) {
@@ -295,6 +326,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         setExtractingData(false);
       }
     })();
+  };
+
+  // Helper para marcar que usuario está editando
+  const handleFieldChange = (field: keyof typeof editForm, value: string) => {
+    userIsEditingRef.current = true;
+    setEditForm({ ...editForm, [field]: value });
   };
 
   const handleCitySelect = (city: string) => {
@@ -364,6 +401,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
       if (result.success) {
         alert("Edición iniciada. El sistema procesará los cambios automáticamente.");
+        userIsEditingRef.current = false;
         setShowEditForm(false);
         setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
       } else {
@@ -880,7 +918,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <input
                     type="text"
                     value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    onChange={(e) => handleFieldChange('name', e.target.value)}
                     maxLength={50}
                     style={{
                       width: '100%',
@@ -918,7 +956,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   </label>
                   <select
                     value={editForm.age}
-                    onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                    onChange={(e) => handleFieldChange('age', e.target.value)}
                     style={{
                       width: '100%',
                       height: '45px',
@@ -958,7 +996,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   <input
                     type="text"
                     value={editForm.headline}
-                    onChange={(e) => setEditForm({ ...editForm, headline: e.target.value })}
+                    onChange={(e) => handleFieldChange('headline', e.target.value)}
                     maxLength={250}
                     style={{
                       width: '100%',
@@ -996,7 +1034,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   </label>
                   <textarea
                     value={editForm.body}
-                    onChange={(e) => setEditForm({ ...editForm, body: e.target.value })}
+                    onChange={(e) => handleFieldChange('body', e.target.value)}
                     rows={6}
                     maxLength={2000}
                     style={{
@@ -1088,7 +1126,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     <input
                       type="text"
                       value={editForm.location}
-                      onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                      onChange={(e) => handleFieldChange('location', e.target.value)}
                       maxLength={100}
                       style={{
                         width: '100%',
@@ -1141,6 +1179,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                       console.error('Error sending cancel command:', error);
                     }
                     
+                    userIsEditingRef.current = false;
                     setShowEditForm(false);
                     setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
                   }}
