@@ -32,7 +32,19 @@ function formatTime(seconds: number) {
 
 function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "Sin renta";
-  if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Expirada";
+  
+  // 🆕 Si days es negativo, es tiempo de DEUDA
+  if (rental.days < 0 || (rental as any).isDebt) {
+    const absDays = Math.abs(rental.days);
+    const parts = [];
+    if (absDays > 0) parts.push(`${absDays}d`);
+    if (rental.hours > 0) parts.push(`${rental.hours}h`);
+    if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
+    return `⚠️ Deuda: ${parts.join(" ")}`;
+  }
+  
+  // Tiempo restante normal
+  if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Por expirar";
   const parts = [];
   if (rental.days > 0) parts.push(`${rental.days}d`);
   if (rental.hours > 0) parts.push(`${rental.hours}h`);
@@ -42,6 +54,10 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "neutral";
+  
+  // 🆕 Si está en deuda (days negativo), status especial
+  if (rental.days < 0 || (rental as any).isDebt) return "debt";
+  
   if (rental.days === 0 && rental.hours === 0) return "critical";
   if (rental.days === 0) return "warning";
   if (rental.days < 2) return "caution";
@@ -633,6 +649,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     status === "caution" && "text-chart-4",
                     status === "warning" && "text-warning",
                     status === "critical" && "text-destructive",
+                    status === "debt" && "text-red-500 animate-pulse", // 🆕 Estado de deuda
                     status === "neutral" && "text-muted-foreground"
                   )}
                 >
