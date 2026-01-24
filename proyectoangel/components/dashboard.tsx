@@ -74,7 +74,6 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
-  const lastExtractedTimestampRef = useRef<number>(0);
 
   useEffect(() => {
     if (!liveData.republishStatus || liveData.isPaused) return;
@@ -109,32 +108,25 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     const unsubscribe = FirebaseAPI.listenToBrowser(
       browserData.browserName || (browserData as BrowserData & { name?: string }).name || "",
       (newData) => {
-        // MENSAJE DE ÉXITO - Solo cuando republicación se completa
+        // MENSAJE DE ÉXITO - Detectar republicación completada
         if (previousRepublishRef.current && newData.republishStatus) {
           const wasInProgress = previousRepublishRef.current.elapsedSeconds > 800;
           const justCompleted = newData.republishStatus.elapsedSeconds < 10;
           
           if (wasInProgress && justCompleted) {
-            // Evitar mostrar mensaje múltiples veces (debounce de 15 segundos)
             const now = Date.now();
             if (now - lastSuccessMessageTimeRef.current > 15000) {
               lastSuccessMessageTimeRef.current = now;
               setShowSuccessMessage(true);
-              
-              // Auto-ocultar después de 5 segundos
-              setTimeout(() => {
-                setShowSuccessMessage(false);
-              }, 5000);
             }
           }
         }
         
-        // Actualizar ref DESPUÉS de verificar
         if (newData.republishStatus) {
           previousRepublishRef.current = newData.republishStatus;
         }
 
-        // 🆕 FIX: Cerrar modal automáticamente cuando captchaWaiting = false
+        // Cerrar modal de captcha automáticamente
         if (!newData.captchaWaiting && showCaptchaForm) {
           setShowCaptchaForm(false);
           setCaptchaCode("");
@@ -163,20 +155,33 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
           
           lastExtractedTimestampRef.current = newData.dataExtractedAt;
           
-          setEditForm({
+          setEditForm(prev => ({
+            ...prev,
             name: newData.name || "",
             age: newData.age ? String(newData.age) : "",
             headline: newData.headline || "",
             body: newData.body || "",
             city: newData.city || "",
             location: newData.location || "",
-          });
+          }));
         }
       }
     );
 
     return () => unsubscribe();
   }, [browserData, showCaptchaForm, showEditForm]);
+
+  // ✅ SOLUCIÓN DEFINITIVA: UseEffect dedicado para auto-ocultar mensaje de éxito
+  useEffect(() => {
+    if (showSuccessMessage) {
+      const timer = setTimeout(() => {
+        setShowSuccessMessage(false);
+      }, 5000);
+      
+      // Limpiar timeout si componente se desmonta o mensaje cambia
+      return () => clearTimeout(timer);
+    }
+  }, [showSuccessMessage]);
 
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
@@ -251,12 +256,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     });
   }, [liveData, debounce, actionLoading]);
 
-  const handleOpenEditor = async () => {
+  const handleOpenEditor = useCallback(async () => {
     // Resetear flags
     userIsEditingRef.current = false;
     lastExtractedTimestampRef.current = liveData.dataExtractedAt || 0;
     
-    // 1. ABRIR MODAL INMEDIATAMENTE - SIN CONDICIONES
+    // ABRIR MODAL INMEDIATAMENTE con datos actuales
     setEditForm({
       name: liveData.name || "",
       age: liveData.age ? String(liveData.age) : "",
@@ -265,76 +270,30 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       city: liveData.city || "",
       location: liveData.location || "",
     });
-    setShowEditForm(true); // ✅ MODAL ABIERTO - PUNTO
+    setShowEditForm(true);
     
-    // 2. Extraer datos frescos en background (sin bloquear)
-    (async () => {
-      try {
-        setExtractingData(true);
-        
-        // Enviar comando
-        await FirebaseAPI.sendCommand(
-          liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-          "extract_edit_data",
-          {}
-        );
-        
-        // Polling para actualizar datos
-        const initialTimestamp = liveData.dataExtractedAt || 0;
-        
-        for (let i = 0; i < 15; i++) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          try {
-            const response = await fetch(`${FirebaseAPI.FIREBASE_URL}/browsers/${liveData.browserName || (liveData as BrowserData & { name?: string }).name}.json`);
-            
-            if (!response.ok) continue;
-            
-            const contentType = response.headers.get("content-type");
-            if (!contentType || !contentType.includes("application/json")) continue;
-            
-            const updatedData = await response.json();
-            
-            // Si hay datos nuevos, actualizar el modal
-            if (updatedData && updatedData.dataExtractedAt > initialTimestamp) {
-              setLiveData(updatedData);
-              
-              // Solo actualizar si usuario no ha empezado a editar
-              if (!userIsEditingRef.current) {
-                setEditForm({
-                  name: updatedData.name || "",
-                  age: updatedData.age ? String(updatedData.age) : "",
-                  headline: updatedData.headline || "",
-                  body: updatedData.body || "",
-                  city: updatedData.city || "",
-                  location: updatedData.location || "",
-                });
-              }
-              break;
-            }
-          } catch (e) {
-            // Ignorar errores y seguir intentando
-            console.log('Polling attempt failed, retrying...');
-          }
-        }
-      } catch (error) {
-        console.error('Background extraction error:', error);
-        // NO hacer nada - el modal ya está abierto
-      } finally {
-        setExtractingData(false);
-      }
-    })();
-  };
+    // Extraer datos frescos en background
+    try {
+      await FirebaseAPI.sendCommand(
+        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+        "extract_edit_data",
+        {}
+      );
+    } catch (error) {
+      console.error('Background extraction error:', error);
+    }
+  }, [liveData]);
 
-  // Helper para marcar que usuario está editando
-  const handleFieldChange = (field: keyof typeof editForm, value: string) => {
+  // Helper para marcar que usuario está editando (usando patrón funcional recomendado)
+  const handleFieldChange = useCallback((field: keyof typeof editForm, value: string) => {
     userIsEditingRef.current = true;
-    setEditForm({ ...editForm, [field]: value });
-  };
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  }, []);
 
-  const handleCitySelect = (city: string) => {
+  const handleCitySelect = useCallback((city: string) => {
+    userIsEditingRef.current = true;
     setEditForm(prev => ({ ...prev, city }));
-  };
+  }, []);
 
   const handleSaveAllEdits = async () => {
     if (commandInProgressRef.current || actionLoading) {
