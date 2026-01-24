@@ -71,6 +71,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
   const [captchaCode, setCaptchaCode] = useState("");
   const [captchaSubmitting, setCaptchaSubmitting] = useState(false); // 🆕 Bloqueo inmediato
+  const [captchaRefreshing, setCaptchaRefreshing] = useState(false); // 🆕 Estado para refresh manual
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [showSavedMessage, setShowSavedMessage] = useState(false); // 🆕 Para "Cambios guardados"
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
@@ -419,6 +420,36 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     setShowCaptchaForm(false);
     setCaptchaCode("");
     modalManuallyControlledRef.current = false;
+  };
+
+  // 🆕 Función para refrescar captcha manualmente
+  const handleCaptchaRefresh = async () => {
+    if (captchaRefreshing || actionLoading || commandInProgressRef.current) {
+      return; // Bloquear si ya está procesando
+    }
+
+    try {
+      setCaptchaRefreshing(true);
+      commandInProgressRef.current = true;
+
+      // Enviar comando al bot para refrescar captcha
+      await FirebaseAPI.sendCommand(liveData.browserName || (liveData as any).name, {
+        type: 'refresh_captcha'
+      });
+
+      console.log('[Dashboard]: Comando de refresh enviado al bot');
+
+      // Cooldown de 5 segundos antes de permitir otro refresh
+      setTimeout(() => {
+        setCaptchaRefreshing(false);
+        commandInProgressRef.current = false;
+      }, 5000);
+
+    } catch (error) {
+      console.error('[Dashboard]: Error refrescando captcha:', error);
+      setCaptchaRefreshing(false);
+      commandInProgressRef.current = false;
+    }
   };
 
   const progressPercent = liveData.republishStatus
@@ -1269,6 +1300,34 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   alt="Captcha"
                   className="mx-auto max-w-full rounded-xl border border-border"
                 />
+                
+                {/* 🆕 Botón para refrescar captcha manualmente */}
+                <Button
+                  onClick={handleCaptchaRefresh}
+                  disabled={captchaRefreshing || actionLoading || commandInProgressRef.current}
+                  variant="ghost"
+                  className="mt-3 text-muted-foreground hover:text-foreground"
+                >
+                  {captchaRefreshing ? (
+                    <>
+                      <svg className="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Refrescando...
+                    </>
+                  ) : (
+                    <>
+                      🔄 Cambiar Captcha
+                    </>
+                  )}
+                </Button>
+                
+                {captchaRefreshing && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Espera 5 segundos antes de refrescar nuevamente
+                  </p>
+                )}
               </div>
             )}
 
