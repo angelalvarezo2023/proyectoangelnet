@@ -33,10 +33,8 @@ export function Navigation({
   isAdmin = false,
   onLogout 
 }: NavigationProps) {
-  // Combinar items: públicos + admin solo si es admin
-  const navItems = isAdmin 
-    ? [...publicNavItems, adminNavItem] 
-    : publicNavItems;
+  // 🔥 ADMIN SIEMPRE VISIBLE - Los 3 botones aparecen siempre
+  const navItems = [...publicNavItems, adminNavItem];
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/90 backdrop-blur-xl">
@@ -60,7 +58,7 @@ export function Navigation({
           </div>
         </div>
 
-        {/* Navigation */}
+        {/* Navigation - SERVICIOS | ANUNCIOS | ADMIN */}
         <nav className="flex items-center gap-1 rounded-xl bg-secondary/50 p-1">
           {navItems.map((item) => {
             const Icon = item.icon;
