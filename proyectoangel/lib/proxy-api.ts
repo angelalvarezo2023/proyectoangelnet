@@ -1,10 +1,5 @@
-// ==================== PROXY6.NET API SERVICE ====================
-// Servicio para gestionar proxies desde proxy6.net
-
-const PROXY6_CONFIG = {
-  API_KEY: "51048fc5cb-e13ec47656-a617da853f",
-  BASE_URL: "https://proxy6.net/api",
-};
+// ==================== PROXY6.NET API SERVICE (UPDATED) ====================
+// Servicio para gestionar proxies usando Next.js API route (evita CORS)
 
 export interface ProxyInfo {
   id: string;
@@ -32,13 +27,11 @@ export interface ProxyTimeRemaining {
 
 export const Proxy6API = {
   /**
-   * Obtener lista de proxies del usuario
+   * Obtener lista de proxies del usuario (via API route)
    */
   async getProxies(): Promise<{ success: boolean; proxies?: ProxyInfo[]; error?: string }> {
     try {
-      const url = `${PROXY6_CONFIG.BASE_URL}/${PROXY6_CONFIG.API_KEY}/getproxy?state=active&descr=yes`;
-      
-      const response = await fetch(url);
+      const response = await fetch('/api/proxy?action=getproxy');
       const data = await response.json();
 
       if (data.status === "yes") {
@@ -68,27 +61,44 @@ export const Proxy6API = {
       }
     } catch (error) {
       console.error("[Proxy6API]: Error:", error);
-      return { success: false, error: "Error de conexión con proxy6.net" };
+      return { success: false, error: "Error de conexión. Verifica tu conexión a internet." };
     }
   },
 
   /**
-   * Buscar proxy por IP específica
+   * Buscar proxy por IP específica (via API route)
    */
   async getProxyByIP(ip: string): Promise<{ success: boolean; proxy?: ProxyInfo; error?: string }> {
-    const result = await this.getProxies();
-    
-    if (!result.success || !result.proxies) {
-      return { success: false, error: result.error };
-    }
+    try {
+      const response = await fetch(`/api/proxy?action=getproxy_by_ip&ip=${encodeURIComponent(ip)}`);
+      const data = await response.json();
 
-    const proxy = result.proxies.find(p => p.ip === ip);
-    
-    if (!proxy) {
-      return { success: false, error: "Proxy no encontrado con esa IP" };
-    }
+      if (data.status === "yes" && data.proxy) {
+        // Transformar datos al formato esperado
+        const proxyData = data.proxy;
+        const proxy: ProxyInfo = {
+          id: proxyData.id,
+          ip: proxyData.host,
+          port: parseInt(proxyData.port),
+          user: proxyData.user,
+          pass: proxyData.pass,
+          type: proxyData.type,
+          country: proxyData.country,
+          city: proxyData.city || "Unknown",
+          date: proxyData.date,
+          date_end: proxyData.date_end,
+          active: proxyData.active === "1" || proxyData.active === true,
+          descr: proxyData.descr || "",
+        };
 
-    return { success: true, proxy };
+        return { success: true, proxy };
+      } else {
+        return { success: false, error: data.error || "Proxy no encontrado con esa IP" };
+      }
+    } catch (error) {
+      console.error("[Proxy6API]: Error:", error);
+      return { success: false, error: "Error de conexión. Verifica tu conexión a internet." };
+    }
   },
 
   /**
@@ -138,13 +148,11 @@ export const Proxy6API = {
   },
 
   /**
-   * Obtener precio para renovación
+   * Obtener precio para renovación (via API route)
    */
   async getRenewalPrice(period: number, count: number = 1): Promise<{ success: boolean; price?: number; error?: string }> {
     try {
-      const url = `${PROXY6_CONFIG.BASE_URL}/${PROXY6_CONFIG.API_KEY}/getprice?period=${period}&count=${count}`;
-      
-      const response = await fetch(url);
+      const response = await fetch(`/api/proxy?action=getprice&period=${period}&count=${count}`);
       const data = await response.json();
 
       if (data.status === "yes") {
@@ -163,34 +171,19 @@ export const Proxy6API = {
    * NOTA: Esta función genera un link de pago, no renueva automáticamente
    */
   async renewProxy(proxyId: string, period: number): Promise<{ success: boolean; message?: string; error?: string }> {
-    try {
-      const url = `${PROXY6_CONFIG.BASE_URL}/${PROXY6_CONFIG.API_KEY}/prolong?ids=${proxyId}&period=${period}&noactive=0`;
-      
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.status === "yes") {
-        return { 
-          success: true, 
-          message: `Proxy renovado por ${period} días exitosamente` 
-        };
-      } else {
-        return { success: false, error: data.error || "Error renovando proxy" };
-      }
-    } catch (error) {
-      console.error("[Proxy6API]: Error renovando proxy:", error);
-      return { success: false, error: "Error de conexión" };
-    }
+    // Por ahora, redirigir a WhatsApp para renovación manual
+    return { 
+      success: false, 
+      error: "Para renovar tu proxy, contacta por WhatsApp" 
+    };
   },
 
   /**
-   * Obtener balance de la cuenta
+   * Obtener balance de la cuenta (via API route)
    */
   async getBalance(): Promise<{ success: boolean; balance?: number; currency?: string; error?: string }> {
     try {
-      const url = `${PROXY6_CONFIG.BASE_URL}/${PROXY6_CONFIG.API_KEY}/getbalance`;
-      
-      const response = await fetch(url);
+      const response = await fetch('/api/proxy?action=getbalance');
       const data = await response.json();
 
       if (data.status === "yes") {
