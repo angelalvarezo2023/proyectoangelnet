@@ -1,4 +1,5 @@
 "use client";
+
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { RocketIcon, DiamondIcon, BoltIcon, CheckIcon, BotIcon } from "@/components/icons";
@@ -16,6 +17,7 @@ interface ServiceCardProps {
     stock: number;
     gradient: string;
   };
+  onProxyClick?: () => void; // 🆕 NUEVO: Callback para abrir panel de proxies
 }
 
 const iconMap = {
@@ -25,7 +27,7 @@ const iconMap = {
   bot: BotIcon,
 };
 
-export function ServiceCard({ service }: ServiceCardProps) {
+export function ServiceCard({ service, onProxyClick }: ServiceCardProps) { // 🆕 Agregar onProxyClick
   const [isMegaBotOpen, setIsMegaBotOpen] = useState(false);
   const IconComponent = iconMap[service.icon as keyof typeof iconMap] || RocketIcon;
   
@@ -33,6 +35,8 @@ export function ServiceCard({ service }: ServiceCardProps) {
     if (service.id === "megabot") {
       setIsMegaBotOpen(true);
     }
+    // 🆕 No abrir el panel automáticamente para proxies al hacer click en la card
+    // El botón específico lo hará
   };
 
   return (
@@ -85,6 +89,20 @@ export function ServiceCard({ service }: ServiceCardProps) {
               </div>
             ))}
           </div>
+          
+          {/* 🆕 NUEVO: Botón de Verificar Proxy (solo para servicio de proxy) */}
+          {service.id === "proxy" && onProxyClick && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation(); // Evitar que se propague el click a la card
+                onProxyClick();
+              }}
+              className="w-full mb-4 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white font-semibold transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] flex items-center justify-center gap-2"
+            >
+              <span>🔍</span>
+              <span>Verificar Mi Proxy</span>
+            </button>
+          )}
           
           {/* Price & Stock */}
           <div className="flex items-end justify-between border-t border-border/50 pt-5">
