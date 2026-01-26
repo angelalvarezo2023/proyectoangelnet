@@ -6,6 +6,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
+import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 Import ProxyPanel
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -19,6 +20,7 @@ function HomeContent() {
   const { user, userData, signOut } = useAuth();
   const [currentView, setCurrentView] = useState<View>("home");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [showProxyPanel, setShowProxyPanel] = useState(false); // 🆕 Estado para panel de proxies
 
   const handleViewChange = (newView: View) => {
     if (newView === "admin") {
@@ -109,6 +111,7 @@ function HomeContent() {
                   <ServiceCard 
                     key={service.id} 
                     service={service}
+                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined} // 🆕 Handler para proxies
                   />
                 ))}
               </div>
@@ -169,6 +172,12 @@ function HomeContent() {
 
       {/* Chatbot */}
       <Chatbot />
+
+      {/* ProxyPanel Modal - PÚBLICO (sin login) */}
+      <ProxyPanel 
+        isOpen={showProxyPanel} 
+        onClose={() => setShowProxyPanel(false)} 
+      />
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 py-8">
