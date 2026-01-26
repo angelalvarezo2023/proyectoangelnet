@@ -1,115 +1,162 @@
-// Componente de Login
-// Ubicación: components/LoginForm.tsx
-
 "use client";
 
-import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from "react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
 
-export function LoginForm() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+interface LoginFormProps {
+  onSuccess?: () => void;
+}
+
+export function LoginForm({ onSuccess }: LoginFormProps) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  
-  const { signIn } = useAuth();
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!email || !password) {
-      setError('Completa todos los campos');
-      return;
-    }
-
+    setError("");
     setLoading(true);
-    setError('');
 
     try {
-      await signIn(email, password);
-      // El AuthContext manejará la redirección
+      // 1. Autenticar con Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // 2. Obtener datos del usuario de Firestore
+      const userDocRef = doc(db, "users", user.uid);
+      const userDoc = await getDoc(userDocRef);
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // 3. Verificar si es admin (chequeando tanto 'role' como 'isAdmin')
+        const isAdmin = userData.role === "admin" || userData.isAdmin === true;
+
+        if (isAdmin) {
+          // 4. Si tiene role: "admin" pero no tiene isAdmin: true, actualizar
+          if (userData.role === "admin" && !userData.isAdmin) {
+            await updateDoc(userDocRef, {
+              isAdmin: true
+            });
+            console.log("✅ Campo isAdmin agregado al usuario");
+          }
+
+          // 5. Login exitoso
+          console.log("✅ Login exitoso como admin:", userData.name);
+          
+          // Llamar callback si existe
+          if (onSuccess) {
+            onSuccess();
+          }
+          
+          // Pequeño delay para asegurar que el estado se actualice
+          setTimeout(() => {
+            router.refresh();
+          }, 100);
+        } else {
+          setError("No tienes permisos de administrador");
+          await auth.signOut();
+        }
+      } else {
+        setError("Usuario no encontrado en la base de datos");
+        await auth.signOut();
+      }
     } catch (err: any) {
-      setError(err.message || 'Error al iniciar sesión');
+      console.error("❌ Error en login:", err);
+      
+      // Mensajes de error más amigables
+      if (err.code === "auth/user-not-found") {
+        setError("Usuario no encontrado");
+      } else if (err.code === "auth/wrong-password") {
+        setError("Contraseña incorrecta");
+      } else if (err.code === "auth/invalid-email") {
+        setError("Email inválido");
+      } else if (err.code === "auth/too-many-requests") {
+        setError("Demasiados intentos. Espera un momento");
+      } else if (err.code === "auth/invalid-credential") {
+        setError("Credenciales inválidas. Verifica tu email y contraseña");
+      } else {
+        setError("Error de autenticación. Intenta nuevamente");
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-pink-500 to-purple-500 text-white text-2xl mb-4">
-            🚀
-          </div>
-          <h1 className="text-3xl font-bold text-foreground">MegaPersonals</h1>
-          <p className="text-muted-foreground mt-2">Panel de Administración</p>
-        </div>
-
-        <div className="rounded-2xl border border-border bg-card p-8 shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
-                Email
-              </label>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@email.com"
-                disabled={loading}
-                className="w-full"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-muted-foreground mb-2">
-                Contraseña
-              </label>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                disabled={loading}
-                className="w-full"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4">
-                <p className="text-red-400 text-sm text-center">{error}</p>
-              </div>
-            )}
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="w-full h-12 bg-gradient-to-r from-pink-500 to-purple-500 hover:from-pink-600 hover:to-purple-600 text-white font-semibold"
-            >
-              {loading ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Iniciando sesión...
-                </span>
-              ) : (
-                '🔓 Iniciar Sesión'
-              )}
-            </Button>
-          </form>
-
-          <div className="mt-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              ¿Olvidaste tu contraseña? Contacta al administrador
-            </p>
-          </div>
-        </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Email */}
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-muted-foreground mb-2">
+          Email
+        </label>
+        <input
+          id="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="admin@ejemplo.com"
+          required
+          className="w-full px-4 py-3 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+        />
       </div>
-    </div>
+
+      {/* Password */}
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium text-muted-foreground mb-2">
+          Contraseña
+        </label>
+        <input
+          id="password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="••••••••"
+          required
+          className="w-full px-4 py-3 rounded-lg bg-secondary border border-border text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+        />
+      </div>
+
+      {/* Error Message */}
+      {error && (
+        <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
+      {/* Submit Button */}
+      <button
+        type="submit"
+        disabled={loading}
+        className="w-full px-4 py-3 rounded-lg bg-gradient-to-r from-primary to-accent text-white font-medium transition-all hover:shadow-lg hover:shadow-primary/50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {loading ? (
+          <>
+            <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            </svg>
+            <span>Iniciando sesión...</span>
+          </>
+        ) : (
+          <>
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+            </svg>
+            <span>Iniciar Sesión</span>
+          </>
+        )}
+      </button>
+
+      {/* Help Text */}
+      <p className="text-xs text-center text-muted-foreground">
+        ¿Olvidaste tu contraseña? Contacta al administrador
+      </p>
+    </form>
   );
 }
