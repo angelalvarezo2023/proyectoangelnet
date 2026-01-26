@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { HomeIcon, SettingsIcon, ShieldIcon } from "@/components/icons";
 import Image from "next/image";
 
-type View = "home" | "control" | "admin" | "proxies";
+type View = "home" | "admin";
 
 interface NavigationProps {
   currentView: View;
@@ -14,8 +14,6 @@ interface NavigationProps {
 
 const navItems: { id: View; label: string; icon: typeof HomeIcon }[] = [
   { id: "home", label: "Servicios", icon: HomeIcon },
-  { id: "control", label: "Panel", icon: SettingsIcon },
-  { id: "proxies", label: "Proxies", icon: ShieldIcon },
   { id: "admin", label: "Admin", icon: ShieldIcon },
 ];
 
