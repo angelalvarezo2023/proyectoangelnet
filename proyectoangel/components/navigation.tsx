@@ -115,7 +115,7 @@ export function Navigation({
               )}
             </>
           ) : (
-            /* Status indicator */}
+            /* Status indicator */
             <div className="hidden lg:flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 border border-primary/20">
               <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary shadow-lg shadow-primary/50" />
               <span className="text-sm font-medium text-primary">Online</span>
