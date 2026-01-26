@@ -1,36 +1,15 @@
-// Contexto de Autenticación con Firebase
-// Ubicación: contexts/AuthContext.tsx
-
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
-  getAuth,
   User,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
   onAuthStateChanged,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  signOut as firebaseSignOut
 } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import { initializeApp, getApps, getApp } from 'firebase/app';
-
-// Configuración de Firebase (copia la misma que tienes en firebase.ts)
-const firebaseConfig = {
-  apiKey: "AIzaSyC9Ot5UY3gDdq2Jrj0CjqUqg9KLUPnUBbc",
-  authDomain: "proyectoangel-f745d.firebaseapp.com",
-  projectId: "proyectoangel-f745d",
-  storageBucket: "proyectoangel-f745d.firebasestorage.app",
-  messagingSenderId: "419050686069",
-  appId: "1:419050686069:web:bce71b37a32e17a0b4f76f",
-  measurementId: "G-FQ86YN58SR"
-};
-
-// Inicializar Firebase
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const auth = getAuth(app);
-const db = getFirestore(app);
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase'; // ← Usar las exportaciones de firebase.ts
 
 interface UserData {
   uid: string;
@@ -45,7 +24,6 @@ interface AuthContextType {
   user: User | null;
   userData: UserData | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   isAdmin: boolean;
 }
@@ -54,7 +32,6 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userData: null,
   loading: true,
-  signIn: async () => {},
   signOut: async () => {},
   isAdmin: false,
 });
@@ -85,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               email: firebaseUser.email || '',
               name: data.name || data.displayName || 'Usuario',
               role: data.role || 'user',
-              isAdmin: data.role === 'admin',
+              isAdmin: data.isAdmin === true || data.role === 'admin',
               createdAt: data.createdAt || new Date().toISOString(),
             });
           } else {
@@ -113,15 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signIn = async (email: string, password: string) => {
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (error: any) {
-      console.error('Error en login:', error);
-      throw new Error(getErrorMessage(error.code));
-    }
-  };
-
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
@@ -137,7 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     userData,
     loading,
-    signIn,
     signOut,
     isAdmin: userData?.isAdmin || false,
   };
@@ -155,24 +122,4 @@ export function useAuth() {
     throw new Error('useAuth debe usarse dentro de AuthProvider');
   }
   return context;
-}
-
-// Mensajes de error en español
-function getErrorMessage(code: string): string {
-  switch (code) {
-    case 'auth/invalid-email':
-      return 'Email inválido';
-    case 'auth/user-disabled':
-      return 'Usuario deshabilitado';
-    case 'auth/user-not-found':
-      return 'Usuario no encontrado';
-    case 'auth/wrong-password':
-      return 'Contraseña incorrecta';
-    case 'auth/too-many-requests':
-      return 'Demasiados intentos. Intenta más tarde';
-    case 'auth/network-request-failed':
-      return 'Error de red. Verifica tu conexión';
-    default:
-      return 'Error de autenticación';
-  }
 }
