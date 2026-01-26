@@ -13,9 +13,23 @@ interface ControlPanelProps {
   initialError?: string;
 }
 
+// 🆕 MODIFICADO: Detecta y muestra DEUDA
 function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "Sin renta";
-  if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Expirada";
+  
+  // 🆕 DETECTAR DEUDA
+  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
+  
+  if (isDebt) {
+    const absDays = Math.abs(rental.days);
+    const parts = [];
+    if (absDays > 0) parts.push(`${absDays}d`);
+    if (rental.hours > 0) parts.push(`${rental.hours}h`);
+    if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
+    return `⚠️ DEUDA: ${parts.join(" ")}`;
+  }
+  
+  if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Por expirar";
   const parts = [];
   if (rental.days > 0) parts.push(`${rental.days}d`);
   if (rental.hours > 0) parts.push(`${rental.hours}h`);
@@ -23,8 +37,27 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
+// 🆕 MODIFICADO: Nuevo status "debt"
+function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
+  if (!rental || rental.days === -1) return "neutral";
+  
+  // 🆕 PRIORIDAD: Detectar deuda
+  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
+  if (isDebt) return "debt";
+  
+  if (rental.days === 0 && rental.hours === 0) return "critical";
+  if (rental.days === 0) return "warning";
+  if (rental.days < 2) return "caution";
+  return "healthy";
+}
+
 function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "from-gray-500/10 to-gray-600/10";
+  
+  // 🆕 Gradiente especial para deuda
+  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
+  if (isDebt) return "from-red-600/30 via-red-500/20 to-red-600/30";
+  
   if (rental.days === 0 && rental.hours < 24) return "from-red-500/20 via-pink-500/20 to-red-600/20";
   if (rental.days <= 1) return "from-orange-500/20 via-amber-500/20 to-orange-600/20";
   if (rental.days <= 3) return "from-yellow-500/20 via-amber-400/20 to-yellow-600/20";
@@ -33,6 +66,11 @@ function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "shadow-gray-500/0";
+  
+  // 🆕 Borde especial para deuda
+  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
+  if (isDebt) return "shadow-red-600/70 shadow-xl border-red-600/50";
+  
   if (rental.days === 0 && rental.hours < 24) return "shadow-red-500/50 shadow-lg";
   if (rental.days <= 1) return "shadow-orange-500/30 shadow-md";
   if (rental.days <= 3) return "shadow-yellow-500/20 shadow-sm";
@@ -41,6 +79,11 @@ function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "text-gray-400";
+  
+  // 🆕 Color especial para deuda
+  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
+  if (isDebt) return "text-red-600 font-black animate-pulse";
+  
   if (rental.days === 0 && rental.hours < 24) return "text-red-400";
   if (rental.days <= 1) return "text-orange-400";
   if (rental.days <= 3) return "text-yellow-400";
@@ -130,6 +173,10 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
     browser.rentalRemaining.days === 0 && 
     browser.rentalRemaining.hours < 24;
 
+  // 🆕 Detectar DEUDA
+  const isDebt = browser.rentalRemaining && 
+    (browser.rentalRemaining.days < 0 || (browser.rentalRemaining as any).isDebt === true);
+
   const rentalGradient = getRentalGradient(browser.rentalRemaining);
   const rentalBorderGlow = getRentalBorderGlow(browser.rentalRemaining);
   const rentalTextColor = getRentalTextColor(browser.rentalRemaining);
@@ -193,7 +240,15 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
           </div>
         </div>
 
-        {showRentalAlert && (
+        {/* 🆕 Banner de DEUDA para lista */}
+        {isDebt && (
+          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-600/30 border-2 border-red-500 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm animate-pulse">
+            <span className="text-red-400 text-2xl sm:text-xl">💀</span>
+            <span className="text-base sm:text-sm font-bold text-red-300">PAGA YA</span>
+          </div>
+        )}
+
+        {showRentalAlert && !isDebt && (
           <div className="w-full sm:w-auto flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm">
             <AlertTriangleIcon className="h-6 w-6 sm:h-5 sm:w-5 text-red-400 animate-pulse" />
             <span className="text-base sm:text-sm font-bold text-red-400">¡Expira hoy!</span>
@@ -228,6 +283,37 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
       {/* Efecto de brillo animado */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
+      {/* 🆕 BANNER DE DEUDA - GRID */}
+      {isDebt && (
+        <div className="mb-4 rounded-2xl border-3 border-red-600 bg-gradient-to-br from-red-600/40 to-red-500/30 p-5 backdrop-blur-sm animate-pulse">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-14 h-14 rounded-full bg-red-600/40 flex items-center justify-center border-2 border-red-500">
+              <span className="text-3xl">💀</span>
+            </div>
+            <div className="flex-1">
+              <h4 className="font-black text-xl text-red-300 mb-1">CUENTA VENCIDA</h4>
+              <p className="text-sm text-red-200">
+                {(() => {
+                  const absDays = Math.abs(browser.rentalRemaining!.days);
+                  return `Deuda: ${absDays}d ${browser.rentalRemaining!.hours}h ${browser.rentalRemaining!.minutes}m`;
+                })()}
+              </p>
+            </div>
+          </div>
+          <a 
+            href={`https://wa.me/18293837695?text=${encodeURIComponent(
+              `🚨 RENOVAR ${browser.browserName} - Tengo deuda`
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="block w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3 rounded-xl font-bold text-center hover:scale-105 transition-all"
+          >
+            💀 PAGAR AHORA 💀
+          </a>
+        </div>
+      )}
+
       {/* Alerta de Error */}
       {hasError && (
         <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm relative overflow-hidden">
@@ -250,8 +336,8 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         </div>
       )}
 
-      {/* Banner de Alerta de Renta - MEJORADO PARA MÓVILES */}
-      {showRentalAlert && (
+      {/* Banner de Alerta de Renta (solo si NO es deuda) */}
+      {showRentalAlert && !isDebt && (
         <div className="mb-4 rounded-2xl border-2 border-red-500/50 bg-gradient-to-br from-red-500/20 to-pink-500/20 p-5 sm:p-4 backdrop-blur-sm animate-pulse">
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-3 mb-4 sm:mb-3">
             <div className="flex-shrink-0 w-16 h-16 sm:w-14 sm:h-14 rounded-2xl bg-red-500/30 flex items-center justify-center border border-red-500/50">
@@ -390,9 +476,10 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         <div className="relative">
           <div className="flex items-center gap-2 mb-2">
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", 
+              isDebt ? "bg-red-600/30" : 
               browser.rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
             )}>
-              <span className="text-lg">⏰</span>
+              <span className="text-lg">{isDebt ? "💀" : "⏰"}</span>
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-white/60">
               Tiempo de Renta
@@ -503,7 +590,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* 🆕 Panel de búsqueda mejorado para móviles */}
+        {/* Panel de búsqueda mejorado para móviles */}
         <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 min-h-[360px] sm:min-h-[320px] flex flex-col justify-center">
           <div className="mb-6 sm:mb-8 text-center">
             <div className="mx-auto mb-4 flex h-20 w-20 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
@@ -514,7 +601,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           </div>
 
           <div className="space-y-4">
-            {/* 🆕 Búsqueda responsive - stack en móvil, row en desktop */}
             <div className="flex flex-col sm:flex-row gap-3">
               <Input
                 type="text"
@@ -545,7 +631,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
 
         {browserList.length > 0 && (
           <div className="mt-8 space-y-6">
-            {/* Header con título y toggle responsive */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-center sm:text-left flex-1 w-full sm:w-auto">
                 <h3 className="text-2xl md:text-3xl font-bold text-foreground">
@@ -556,7 +641,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 </p>
               </div>
 
-              {/* 🆕 Toggle responsive - centrado en móvil */}
               <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1.5 border border-border w-full sm:w-auto justify-center">
                 <button
                   onClick={() => setViewMode('grid')}
@@ -585,7 +669,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
               </div>
             </div>
 
-            {/* Grid o Lista responsive */}
             <div className={cn(
               viewMode === 'grid' 
                 ? "grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2" 
