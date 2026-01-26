@@ -14,9 +14,21 @@ import {
   browserLocalPersistence
 } from 'firebase/auth';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
-import { app } from '@/lib/firebase';
+import { initializeApp, getApps, getApp } from 'firebase/app';
 
-// Inicializar auth y db aquí
+// Configuración de Firebase (copia la misma que tienes en firebase.ts)
+const firebaseConfig = {
+  apiKey: "AIzaSyC9Ot5UY3gDdq2Jrj0CjqUqg9KLUPnUBbc",
+  authDomain: "proyectoangel-f745d.firebaseapp.com",
+  projectId: "proyectoangel-f745d",
+  storageBucket: "proyectoangel-f745d.firebasestorage.app",
+  messagingSenderId: "419050686069",
+  appId: "1:419050686069:web:bce71b37a32e17a0b4f76f",
+  measurementId: "G-FQ86YN58SR"
+};
+
+// Inicializar Firebase
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
