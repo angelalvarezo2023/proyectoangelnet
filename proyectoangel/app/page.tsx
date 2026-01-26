@@ -15,28 +15,35 @@ import Loading from "./loading";
 type View = "home" | "admin";
 
 function HomeContent() {
-  const { user, userData, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [currentView, setCurrentView] = useState<View>("home");
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
 
-  // Mostrar loading mientras verifica autenticación
-  if (authLoading) {
-    return <Loading />;
-  }
+  const handleViewChange = (newView: View) => {
+    if (newView === "admin") {
+      // Si intenta ir a admin, verificar si está autenticado
+      if (!user) {
+        setShowAdminLogin(true);
+        return;
+      }
+    }
+    setCurrentView(newView);
+  };
 
-  // Si no hay usuario autenticado, mostrar login
-  if (!user) {
-    return <LoginForm />;
-  }
+  const handleLoginSuccess = () => {
+    setShowAdminLogin(false);
+    setCurrentView("admin");
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <Navigation 
         currentView={currentView} 
-        onViewChange={(view) => setCurrentView(view)}
+        onViewChange={handleViewChange}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
-        {/* Home View - Services */}
+        {/* Home View - PÚBLICO (sin login) */}
         {currentView === "home" && (
           <div className="space-y-12">
             {/* Hero Section */}
@@ -125,7 +132,7 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Admin View - Panel Unificado */}
+        {/* Admin View - PROTEGIDO (requiere login) */}
         {currentView === "admin" && (
           <ProtectedRoute requireAdmin={true}>
             <UnifiedAdmin 
@@ -147,6 +154,23 @@ function HomeContent() {
           </p>
         </div>
       </footer>
+
+      {/* Modal de Login (solo cuando intenta acceder a Admin sin estar autenticado) */}
+      {showAdminLogin && !user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative">
+            <button
+              onClick={() => setShowAdminLogin(false)}
+              className="absolute -top-4 -right-4 z-10 rounded-full bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+            <LoginForm />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
