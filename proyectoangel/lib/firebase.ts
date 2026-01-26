@@ -8,14 +8,28 @@ import {
   onValue,
   type Database,
 } from "firebase/database";
+import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   databaseURL: "https://megapersonals-4f24c-default-rtdb.firebaseio.com",
+  // 🔥 AGREGAR TU CONFIGURACIÓN COMPLETA DE FIREBASE AQUÍ
+  // Copia estos valores desde Firebase Console > Project Settings > Your apps
+  apiKey: "TU_API_KEY_AQUI",
+  authDomain: "megapersonals-4f24c.firebaseapp.com",
+  projectId: "megapersonals-4f24c",
+  storageBucket: "megapersonals-4f24c.firebasestorage.app",
+  messagingSenderId: "TU_MESSAGING_SENDER_ID",
+  appId: "TU_APP_ID"
 };
 
 // Initialize Firebase only if it hasn't been initialized already
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const database: Database = getDatabase(app);
+
+// 🔥 EXPORTAR AUTH Y FIRESTORE
+export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 export interface RentalRemaining {
   days: number;
