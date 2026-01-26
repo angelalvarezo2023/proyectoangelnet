@@ -12,15 +12,14 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  databaseURL: "https://megapersonals-4f24c-default-rtdb.firebaseio.com",
-  // 🔥 AGREGAR TU CONFIGURACIÓN COMPLETA DE FIREBASE AQUÍ
-  // Copia estos valores desde Firebase Console > Project Settings > Your apps
-  apiKey: "TU_API_KEY_AQUI",
+  apiKey: "AIzaSyABwJCZpBeCXu0-X16HpKnHoJXL4tVjTAY",
   authDomain: "megapersonals-4f24c.firebaseapp.com",
+  databaseURL: "https://megapersonals-4f24c-default-rtdb.firebaseio.com",
   projectId: "megapersonals-4f24c",
   storageBucket: "megapersonals-4f24c.firebasestorage.app",
-  messagingSenderId: "TU_MESSAGING_SENDER_ID",
-  appId: "TU_APP_ID"
+  messagingSenderId: "35208143914",
+  appId: "1:35208143914:web:06ffcc05069eaf88af0f53",
+  measurementId: "G-EMFS14MSGS"
 };
 
 // Initialize Firebase only if it hasn't been initialized already
