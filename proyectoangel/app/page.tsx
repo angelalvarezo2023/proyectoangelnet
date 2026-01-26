@@ -24,11 +24,18 @@ function HomeContent() {
     if (newView === "admin") {
       // Si intenta ir a admin, verificar si está autenticado
       if (!user) {
-        setShowAdminLogin(true);
+        setShowAdminLogin(true); // Mostrar modal de login
         return;
       }
     }
     setCurrentView(newView);
+    setShowAdminLogin(false); // Cerrar modal si está abierto
+  };
+
+  // Cuando el usuario inicia sesión exitosamente, cambiar a vista admin
+  const handleLoginSuccess = () => {
+    setShowAdminLogin(false);
+    setCurrentView("admin");
   };
 
   return (
@@ -172,19 +179,35 @@ function HomeContent() {
         </div>
       </footer>
 
-      {/* Modal de Login (solo cuando intenta acceder a Admin sin estar autenticado) */}
+      {/* Modal de Login - Aparece cuando haces click en Admin sin estar logueado */}
       {showAdminLogin && !user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative">
+          <div className="relative w-full max-w-md">
+            {/* Botón cerrar */}
             <button
               onClick={() => setShowAdminLogin(false)}
-              className="absolute -top-4 -right-4 z-10 rounded-full bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
+              className="absolute -top-4 -right-4 z-10 rounded-full bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors shadow-lg"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            <LoginForm />
+            
+            {/* Formulario de Login */}
+            <div className="bg-card rounded-2xl shadow-2xl border border-border p-8">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
+                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <h2 className="text-2xl font-bold text-foreground">Acceso Admin</h2>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Inicia sesión con tu correo y contraseña
+                </p>
+              </div>
+              <LoginForm onSuccess={handleLoginSuccess} />
+            </div>
           </div>
         </div>
       )}
