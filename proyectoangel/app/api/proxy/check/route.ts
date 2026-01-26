@@ -5,15 +5,16 @@ import { NextResponse } from 'next/server';
 
 async function checkProxy(host: string, port: string, user: string, pass: string) {
   try {
-    console.log('[Proxy Check]: Testing proxy:', host);
+    console.log('[Proxy Check]: Testing proxy:', `${host}:${port}`);
 
     const startTime = Date.now();
     
-    // Verificar usando proxy6.net API
+    // ✅ FORMATO CORRECTO: proxy=ip:port:user:pass
     const PROXY6_API_KEY = process.env.PROXY6_API_KEY || "2dce4fd266-08fab19842-a9b14437e5";
-    const apiUrl = `https://px6.link/api/${PROXY6_API_KEY}/check?proxy=${host}:${port}:${user}:${pass}`;
+    const proxyString = `${host}:${port}:${user}:${pass}`;
+    const apiUrl = `https://px6.link/api/${PROXY6_API_KEY}/check?proxy=${encodeURIComponent(proxyString)}`;
     
-    console.log('[Proxy Check]: Calling proxy6 check API');
+    console.log('[Proxy Check]: Checking proxy string:', `${host}:${port}:***:***`);
     
     const response = await fetch(apiUrl, {
       method: 'GET',
@@ -38,7 +39,7 @@ async function checkProxy(host: string, port: string, user: string, pass: string
     console.log('[Proxy Check]: API Response:', data);
 
     if (data.status === 'yes' && data.proxy_status === true) {
-      console.log('[Proxy Check]: ✅ Proxy is working');
+      console.log('[Proxy Check]: ✅ Proxy is ONLINE');
       
       return {
         success: true,
@@ -48,13 +49,13 @@ async function checkProxy(host: string, port: string, user: string, pass: string
         message: 'Proxy funcionando correctamente',
       };
     } else if (data.status === 'yes' && data.proxy_status === false) {
-      console.log('[Proxy Check]: ❌ Proxy not working');
+      console.log('[Proxy Check]: ❌ Proxy is OFFLINE');
       
       return {
         success: true,
         online: false,
         ping: 0,
-        message: 'Proxy no responde o está offline',
+        message: 'Proxy no responde o está en mantenimiento',
       };
     } else {
       console.log('[Proxy Check]: ❌ Error from API:', data.error);
@@ -73,7 +74,7 @@ async function checkProxy(host: string, port: string, user: string, pass: string
       success: true,
       online: false,
       ping: 0,
-      message: 'No se pudo conectar con el servicio de verificación',
+      message: 'Timeout o error de conexión',
       error: error instanceof Error ? error.message : 'Connection failed',
     };
   }
@@ -85,14 +86,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { host, port, user, pass } = body;
 
+    console.log('[Proxy Check POST]: Received data:', { host, port, user: user ? '***' : 'missing', pass: pass ? '***' : 'missing' });
+
     if (!host || !port) {
+      console.log('[Proxy Check POST]: Missing required fields');
       return NextResponse.json(
-        { success: false, error: 'Faltan datos del proxy' },
+        { success: false, error: 'Faltan datos del proxy (host y port son requeridos)' },
         { status: 400 }
       );
     }
 
-    const result = await checkProxy(host, port, user, pass);
+    if (!user || !pass) {
+      console.log('[Proxy Check POST]: Missing credentials');
+      return NextResponse.json(
+        { success: false, error: 'Faltan credenciales del proxy (user y pass son requeridos)' },
+        { status: 400 }
+      );
+    }
+
+    const result = await checkProxy(host, String(port), user, pass);
     return NextResponse.json(result);
     
   } catch (error) {
@@ -106,7 +118,7 @@ export async function POST(request: Request) {
   }
 }
 
-// Soportar GET (para testing)
+// Soportar GET (para testing directo)
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -115,14 +127,21 @@ export async function GET(request: Request) {
     const user = searchParams.get('user');
     const pass = searchParams.get('pass');
 
-    if (!host || !port) {
+    console.log('[Proxy Check GET]: Received params:', { host, port, user: user ? '***' : 'missing', pass: pass ? '***' : 'missing' });
+
+    if (!host || !port || !user || !pass) {
       return NextResponse.json(
-        { success: false, error: 'Faltan parámetros: host, port' },
+        { 
+          success: false, 
+          error: 'Faltan parámetros requeridos',
+          required: ['host', 'port', 'user', 'pass'],
+          received: { host: !!host, port: !!port, user: !!user, pass: !!pass }
+        },
         { status: 400 }
       );
     }
 
-    const result = await checkProxy(host, port, user || '', pass || '');
+    const result = await checkProxy(host, port, user, pass);
     return NextResponse.json(result);
     
   } catch (error) {
