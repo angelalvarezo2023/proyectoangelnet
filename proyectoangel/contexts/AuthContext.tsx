@@ -5,6 +5,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { 
+  getAuth,
   User,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
@@ -12,8 +13,12 @@ import {
   setPersistence,
   browserLocalPersistence
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
+import { app } from '@/lib/firebase';
+
+// Inicializar auth y db aquí
+const auth = getAuth(app);
+const db = getFirestore(app);
 
 interface UserData {
   uid: string;
