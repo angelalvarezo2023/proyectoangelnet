@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
+import { ControlPanel } from "@/components/control-panel";
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -12,10 +13,10 @@ import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "admin";
+type View = "home" | "anuncios" | "admin";
 
 function HomeContent() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, userData, signOut } = useAuth();
   const [currentView, setCurrentView] = useState<View>("home");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
 
@@ -30,16 +31,14 @@ function HomeContent() {
     setCurrentView(newView);
   };
 
-  const handleLoginSuccess = () => {
-    setShowAdminLogin(false);
-    setCurrentView("admin");
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <Navigation 
         currentView={currentView} 
         onViewChange={handleViewChange}
+        userName={userData?.name}
+        isAdmin={userData?.isAdmin}
+        onLogout={user ? signOut : undefined}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
@@ -129,6 +128,24 @@ function HomeContent() {
                 </a>
               </div>
             </section>
+          </div>
+        )}
+
+        {/* Anuncios View - PÚBLICO (búsqueda de anuncios) */}
+        {currentView === "anuncios" && (
+          <div className="space-y-6">
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent text-white text-4xl mb-6">
+                🔍
+              </div>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Buscar Anuncios</h2>
+              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                Busca tus anuncios por nombre de usuario o ID único
+              </p>
+            </div>
+
+            {/* Control Panel para búsqueda pública */}
+            <ControlPanel initialBrowserData={null} initialError="" />
           </div>
         )}
 
