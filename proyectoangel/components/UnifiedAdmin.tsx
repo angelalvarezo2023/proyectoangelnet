@@ -2,9 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { ControlPanel } from "@/components/control-panel";
 import { ProxyPanel } from "@/components/proxy-panel";
-import { AdminPanel as MegaBotPanel } from "@/components/admin-panel";
+import { AdminPanel } from "@/components/admin-panel";
 import { cn } from "@/lib/utils";
 
 type AdminSection = "anuncios" | "proxies" | "megabot";
@@ -95,21 +94,14 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
 
           {/* Content */}
           <div className="p-6">
-            {/* Anuncios Section */}
+            {/* Anuncios Section - MUESTRA LA TABLA COMPLETA DE ADMINISTRACIÓN */}
             {activeSection === "anuncios" && (
               <div className="space-y-6">
-                <div className="text-center py-8">
-                  <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500 text-white text-4xl mb-4">
-                    📢
-                  </div>
-                  <h3 className="text-2xl font-bold text-foreground mb-2">Gestión de Anuncios</h3>
-                  <p className="text-muted-foreground mb-6">
-                    Administra usuarios, anuncios y control de cuentas
-                  </p>
-                </div>
-
-                {/* Control Panel integrado */}
-                <ControlPanel initialBrowserData={null} initialError="" embedded={true} />
+                {/* 🆕 USAR EL ADMIN PANEL COMPLETO CON LA TABLA */}
+                <AdminPanel 
+                  isAuthenticated={true}
+                  onLogin={() => {}}
+                />
               </div>
             )}
 
@@ -200,12 +192,12 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
         onClose={() => setShowProxyPanel(false)} 
       />
 
-      <MegaBotPanel 
-        isOpen={showMegaBotPanel}
-        onClose={() => setShowMegaBotPanel(false)}
-        isAuthenticated={true}
-        onLogin={() => {}}
-      />
+      {showMegaBotPanel && (
+        <AdminPanel 
+          isAuthenticated={true}
+          onLogin={() => {}}
+        />
+      )}
     </>
   );
 }
