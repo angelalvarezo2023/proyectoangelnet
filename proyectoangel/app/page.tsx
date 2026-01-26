@@ -3,23 +3,26 @@
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { FirebaseAPI, SERVICES, CONTACT, type BrowserData } from "@/lib/firebase";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
+import { LoginForm } from "@/components/LoginForm";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
 import { AdminPanel } from "@/components/admin-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { Dashboard } from "@/components/dashboard";
-import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 NUEVO
+import { ProxyPanel } from "@/components/proxy-panel";
 import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "control" | "admin" | "proxies"; // 🆕 Agregar "proxies"
+type View = "home" | "control" | "admin" | "proxies";
 
 function HomeContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, userData, signOut, loading: authLoading } = useAuth();
   
-  // 🆕 Leer la vista desde la URL o usar "home" por defecto
   const [currentView, setCurrentView] = useState<View>(() => {
     const viewParam = searchParams.get("view");
     if (viewParam === "control" || viewParam === "admin" || viewParam === "proxies") {
@@ -30,20 +33,17 @@ function HomeContent() {
   
   const [browserData, setBrowserData] = useState<BrowserData | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [showProxyPanel, setShowProxyPanel] = useState(false); // 🆕 Estado para proxy panel
+  const [showProxyPanel, setShowProxyPanel] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // 🆕 Función para cambiar vista y actualizar URL
   const handleViewChange = (newView: View) => {
     setCurrentView(newView);
     
-    // 🆕 Si selecciona "proxies", abrir el panel
     if (newView === "proxies") {
       setShowProxyPanel(true);
     }
     
-    // Actualizar URL sin recargar la página
     const params = new URLSearchParams(searchParams.toString());
     params.set("view", newView);
     router.push(`?${params.toString()}`, { scroll: false });
@@ -77,13 +77,27 @@ function HomeContent() {
     loadData();
   }, [searchParams]);
 
-  if (loading) {
-    return null;
+  // Mostrar loading mientras verifica autenticación
+  if (authLoading || loading) {
+    return <Loading />;
+  }
+
+  // Si no hay usuario autenticado, mostrar login
+  if (!user) {
+    return <LoginForm />;
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation currentView={currentView} onViewChange={handleViewChange} />
+      {/* 🆕 Navigation con info de usuario */}
+      <Navigation 
+        currentView={currentView} 
+        onViewChange={handleViewChange}
+        // 🆕 Pasar props adicionales para mostrar usuario
+        userName={userData?.name}
+        userRole={userData?.role}
+        onLogout={signOut}
+      />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
         {/* Home View - Services */}
@@ -91,7 +105,6 @@ function HomeContent() {
           <div className="space-y-12">
             {/* Hero Section */}
             <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-secondary/50 p-8 md:p-12">
-              {/* Background Pattern */}
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(var(--primary)/.1)_0%,transparent_50%)]" />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(var(--accent)/.1)_0%,transparent_50%)]" />
 
@@ -147,7 +160,7 @@ function HomeContent() {
                   <ServiceCard 
                     key={service.id} 
                     service={service}
-                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined} // 🆕 Callback para proxies
+                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined}
                   />
                 ))}
               </div>
@@ -180,28 +193,32 @@ function HomeContent() {
         {/* Control Panel View */}
         {currentView === "control" && <ControlPanel initialBrowserData={browserData} initialError={error} />}
 
-        {/* Admin View */}
+        {/* 🔒 Admin View - PROTEGIDO */}
         {currentView === "admin" && (
-          <AdminPanel isAuthenticated={isAdminAuthenticated} onLogin={() => setIsAdminAuthenticated(true)} />
+          <ProtectedRoute requireAdmin={true}>
+            <AdminPanel isAuthenticated={isAdminAuthenticated} onLogin={() => setIsAdminAuthenticated(true)} />
+          </ProtectedRoute>
         )}
 
-        {/* Proxies View - 🆕 NUEVO */}
+        {/* 🔒 Proxies View - PROTEGIDO */}
         {currentView === "proxies" && (
-          <div className="text-center py-12">
-            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 text-white text-4xl mb-6">
-              🌐
+          <ProtectedRoute>
+            <div className="text-center py-12">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 text-white text-4xl mb-6">
+                🌐
+              </div>
+              <h2 className="text-3xl font-bold text-foreground mb-4">Gestión de Proxies</h2>
+              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                Verifica el estado de tu proxy, consulta información de conexión y gestiona tu servicio.
+              </p>
+              <button
+                onClick={() => setShowProxyPanel(true)}
+                className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white font-semibold text-lg shadow-lg transition-all"
+              >
+                🔍 Verificar Mi Proxy
+              </button>
             </div>
-            <h2 className="text-3xl font-bold text-foreground mb-4">Gestión de Proxies</h2>
-            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-              Verifica el estado de tu proxy, consulta información de conexión y gestiona tu servicio.
-            </p>
-            <button
-              onClick={() => setShowProxyPanel(true)}
-              className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white font-semibold text-lg shadow-lg transition-all"
-            >
-              🔍 Verificar Mi Proxy
-            </button>
-          </div>
+          </ProtectedRoute>
         )}
       </main>
 
@@ -213,17 +230,18 @@ function HomeContent() {
         <Dashboard browserData={browserData} onClose={() => setBrowserData(null)} />
       )}
 
-      {/* 🆕 Proxy Panel Modal */}
-      <ProxyPanel 
-        isOpen={showProxyPanel} 
-        onClose={() => {
-          setShowProxyPanel(false);
-          // Si estábamos en la vista de proxies, volver a home
-          if (currentView === "proxies") {
-            handleViewChange("home");
-          }
-        }} 
-      />
+      {/* 🔒 Proxy Panel Modal - PROTEGIDO */}
+      <ProtectedRoute>
+        <ProxyPanel 
+          isOpen={showProxyPanel} 
+          onClose={() => {
+            setShowProxyPanel(false);
+            if (currentView === "proxies") {
+              handleViewChange("home");
+            }
+          }} 
+        />
+      </ProtectedRoute>
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 py-8">
@@ -237,10 +255,13 @@ function HomeContent() {
   );
 }
 
+// 🔒 Wrapper principal con AuthProvider
 export default function Page() {
   return (
-    <Suspense fallback={<Loading />}>
-      <HomeContent />
-    </Suspense>
+    <AuthProvider>
+      <Suspense fallback={<Loading />}>
+        <HomeContent />
+      </Suspense>
+    </AuthProvider>
   );
 }
