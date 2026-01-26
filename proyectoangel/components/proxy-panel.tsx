@@ -16,6 +16,7 @@ interface ProxyPanelProps {
 export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
   const [view, setView] = useState<PanelView>("search");
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(false); // 🆕 Estado para check
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   
@@ -28,6 +29,8 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
   const [proxyStatus, setProxyStatus] = useState<{
     online: boolean;
     ping: number;
+    checked: boolean; // 🆕 Para saber si ya fue verificado
+    proxy_ip?: string; // 🆕 IP real del proxy
   } | null>(null);
   
   // Reset on close
@@ -83,14 +86,12 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
         const time = Proxy6API.calculateTimeRemaining(result.proxy);
         setTimeRemaining(time);
         
-        // Test de conexión
-        const testResult = await Proxy6API.testProxy(result.proxy);
-        if (testResult.success) {
-          setProxyStatus({
-            online: testResult.online,
-            ping: testResult.ping || 0,
-          });
-        }
+        // Estado inicial (no verificado aún)
+        setProxyStatus({
+          online: !time.expired, // Asumir online si no está expirado
+          ping: 0,
+          checked: false, // 🆕 Aún no verificado
+        });
         
         // Guardar IP en localStorage
         localStorage.setItem("proxy_last_ip", ip);
@@ -103,6 +104,53 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
       setError("Error de conexión. Intenta de nuevo.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 🆕 Verificar conexión REAL del proxy
+  const handleCheckConnection = async () => {
+    if (!proxyData) return;
+
+    setChecking(true);
+    setError("");
+
+    try {
+      const response = await fetch('/api/proxy/check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          host: proxyData.host,
+          port: proxyData.port,
+          user: proxyData.user,
+          pass: proxyData.pass,
+          type: proxyData.type,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setProxyStatus({
+          online: data.online,
+          ping: data.ping || 0,
+          checked: true, // 🆕 Ya verificado
+          proxy_ip: data.proxy_ip,
+        });
+
+        if (data.online) {
+          setSuccess(`✅ Proxy funcionando! Latencia: ${data.ping}ms`);
+        } else {
+          setError(`❌ ${data.message || 'Proxy no responde'}`);
+        }
+      } else {
+        setError('Error verificando conexión');
+      }
+    } catch (err) {
+      setError('Error verificando conexión');
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -231,7 +279,7 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
 
             <div className="text-center mb-8">
               <h2 className="text-2xl font-bold text-foreground">Detalles del Proxy</h2>
-              <p className="text-muted-foreground mt-2">{proxyData.ip}</p>
+              <p className="text-muted-foreground mt-2">{proxyData.host}</p>
             </div>
 
             {/* Status Card */}
@@ -239,24 +287,61 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
               "rounded-2xl border p-6 mb-6",
               timeRemaining.expired 
                 ? "border-red-500/30 bg-red-500/10"
+                : proxyStatus?.checked && !proxyStatus?.online
+                ? "border-red-500/30 bg-red-500/10"
                 : "border-green-500/30 bg-green-500/10"
             )}>
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Estado
                 </span>
-                <span className={cn(
-                  "inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold",
-                  proxyStatus?.online && !timeRemaining.expired
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-red-500/20 text-red-400"
-                )}>
+                <div className="flex items-center gap-2">
                   <span className={cn(
-                    "h-2 w-2 rounded-full",
-                    proxyStatus?.online && !timeRemaining.expired ? "bg-green-400 animate-pulse" : "bg-red-400"
-                  )} />
-                  {proxyStatus?.online && !timeRemaining.expired ? "Online" : "Offline"}
-                </span>
+                    "inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-semibold",
+                    proxyStatus?.checked
+                      ? proxyStatus.online && !timeRemaining.expired
+                        ? "bg-green-500/20 text-green-400 border border-green-500/20"
+                        : "bg-red-500/20 text-red-400 border border-red-500/20"
+                      : "bg-yellow-500/20 text-yellow-400 border border-yellow-500/20"
+                  )}>
+                    <span className={cn(
+                      "h-2 w-2 rounded-full",
+                      proxyStatus?.checked
+                        ? proxyStatus.online && !timeRemaining.expired 
+                          ? "bg-green-400 animate-pulse" 
+                          : "bg-red-400"
+                        : "bg-yellow-400 animate-pulse"
+                    )} />
+                    {proxyStatus?.checked 
+                      ? (proxyStatus.online && !timeRemaining.expired ? "Online" : "Offline")
+                      : "No verificado"
+                    }
+                  </span>
+                  
+                  {/* 🆕 Botón para verificar conexión */}
+                  <button
+                    onClick={handleCheckConnection}
+                    disabled={checking}
+                    className={cn(
+                      "px-3 py-1 rounded-full text-xs font-semibold transition-all",
+                      checking 
+                        ? "bg-secondary text-muted-foreground cursor-not-allowed"
+                        : "bg-primary/10 text-primary hover:bg-primary/20"
+                    )}
+                  >
+                    {checking ? (
+                      <span className="flex items-center gap-1">
+                        <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Verificando...
+                      </span>
+                    ) : (
+                      "🔄 Probar Conexión"
+                    )}
+                  </button>
+                </div>
               </div>
 
               <div className="text-center">
@@ -291,9 +376,9 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
                 <div className="flex items-center justify-between py-2 border-b border-border/50">
                   <span className="text-sm text-muted-foreground">IP:</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-semibold text-foreground">{proxyData.ip}</span>
+                    <span className="font-mono font-semibold text-foreground">{proxyData.host}</span>
                     <button
-                      onClick={() => copyToClipboard(proxyData.ip, "IP")}
+                      onClick={() => copyToClipboard(proxyData.host, "IP")}
                       className="p-1 hover:bg-secondary rounded transition-colors"
                     >
                       <svg className="h-4 w-4 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -355,14 +440,14 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
 
                 <div className="flex items-center justify-between py-2">
                   <span className="text-sm text-muted-foreground">Ubicación:</span>
-                  <span className="font-semibold text-foreground">{proxyData.city}, {proxyData.country}</span>
+                  <span className="font-semibold text-foreground">{proxyData.city || 'Unknown'}, {proxyData.country}</span>
                 </div>
               </div>
 
               {/* Copy All Button */}
               <Button
                 onClick={() => {
-                  const config = `${proxyData.ip}:${proxyData.port}:${proxyData.user}:${proxyData.pass}`;
+                  const config = `${proxyData.host}:${proxyData.port}:${proxyData.user}:${proxyData.pass}`;
                   copyToClipboard(config, "Configuración completa");
                 }}
                 variant="outline"
@@ -373,21 +458,39 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
             </div>
 
             {/* Performance */}
-            {proxyStatus && (
+            {proxyStatus?.checked && (
               <div className="rounded-2xl border border-border bg-secondary/30 p-6 mb-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-4">
                   Rendimiento
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 rounded-xl bg-background/50">
-                    <p className="text-2xl font-bold text-primary">{proxyStatus.ping}ms</p>
+                    <p className={cn(
+                      "text-2xl font-bold",
+                      proxyStatus.online ? "text-primary" : "text-red-400"
+                    )}>
+                      {proxyStatus.online ? `${proxyStatus.ping}ms` : '---'}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">Latencia</p>
                   </div>
                   <div className="text-center p-4 rounded-xl bg-background/50">
-                    <p className="text-2xl font-bold text-green-400">99.9%</p>
+                    <p className={cn(
+                      "text-2xl font-bold",
+                      proxyStatus.online ? "text-green-400" : "text-red-400"
+                    )}>
+                      {proxyStatus.online ? "99.9%" : "0%"}
+                    </p>
                     <p className="text-xs text-muted-foreground mt-1">Uptime</p>
                   </div>
                 </div>
+                
+                {/* 🆕 Mostrar IP real del proxy si está disponible */}
+                {proxyStatus.proxy_ip && (
+                  <div className="mt-4 p-3 rounded-xl bg-background/50 text-center">
+                    <p className="text-xs text-muted-foreground mb-1">IP Real del Proxy:</p>
+                    <p className="font-mono font-semibold text-primary">{proxyStatus.proxy_ip}</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -400,10 +503,23 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
                     Contacta para renovar tu proxy
                   </p>
                   <Button
-                    onClick={() => window.open(`https://wa.me/18293837695?text=Hola, quiero renovar mi proxy ${proxyData.ip}`, "_blank")}
+                    onClick={() => window.open(`https://wa.me/18293837695?text=Hola, quiero renovar mi proxy ${proxyData.host}`, "_blank")}
                     className="w-full bg-green-500 hover:bg-green-600"
                   >
                     💬 Contactar por WhatsApp
+                  </Button>
+                </div>
+              ) : proxyStatus?.checked && !proxyStatus.online ? (
+                <div className="rounded-xl bg-red-500/10 border border-red-500/30 p-4 text-center">
+                  <p className="text-red-400 font-semibold mb-2">❌ Proxy Sin Conexión</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    El proxy no responde. Puede estar en mantenimiento o tener problemas de conexión.
+                  </p>
+                  <Button
+                    onClick={() => window.open(`https://wa.me/18293837695?text=Hola, mi proxy ${proxyData.host} no tiene conexión`, "_blank")}
+                    className="w-full bg-red-500 hover:bg-red-600"
+                  >
+                    💬 Reportar Problema
                   </Button>
                 </div>
               ) : timeRemaining.days < 3 ? (
@@ -413,7 +529,7 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
                     Renueva ahora para no perder servicio
                   </p>
                   <Button
-                    onClick={() => window.open(`https://wa.me/18293837695?text=Hola, quiero renovar mi proxy ${proxyData.ip}`, "_blank")}
+                    onClick={() => window.open(`https://wa.me/18293837695?text=Hola, quiero renovar mi proxy ${proxyData.host}`, "_blank")}
                     className="w-full bg-orange-500 hover:bg-orange-600"
                   >
                     🔄 Renovar Ahora
@@ -421,7 +537,7 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
                 </div>
               ) : (
                 <Button
-                  onClick={() => window.open(`https://wa.me/18293837695?text=Hola, tengo una consulta sobre mi proxy ${proxyData.ip}`, "_blank")}
+                  onClick={() => window.open(`https://wa.me/18293837695?text=Hola, tengo una consulta sobre mi proxy ${proxyData.host}`, "_blank")}
                   variant="outline"
                   className="w-full"
                 >
@@ -433,6 +549,12 @@ export function ProxyPanel({ isOpen, onClose }: ProxyPanelProps) {
             {success && (
               <div className="mt-4 rounded-xl bg-green-500/10 border border-green-500/30 p-3">
                 <p className="text-green-400 text-sm text-center">{success}</p>
+              </div>
+            )}
+
+            {error && !success && (
+              <div className="mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3">
+                <p className="text-red-400 text-sm text-center">{error}</p>
               </div>
             )}
           </div>
