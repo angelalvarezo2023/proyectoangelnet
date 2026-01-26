@@ -8,11 +8,12 @@ import { ServiceCard } from "@/components/service-card";
 import { AdminPanel } from "@/components/admin-panel";
 import { ControlPanel } from "@/components/control-panel";
 import { Dashboard } from "@/components/dashboard";
+import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 NUEVO
 import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "control" | "admin";
+type View = "home" | "control" | "admin" | "proxies"; // 🆕 Agregar "proxies"
 
 function HomeContent() {
   const searchParams = useSearchParams();
@@ -21,7 +22,7 @@ function HomeContent() {
   // 🆕 Leer la vista desde la URL o usar "home" por defecto
   const [currentView, setCurrentView] = useState<View>(() => {
     const viewParam = searchParams.get("view");
-    if (viewParam === "control" || viewParam === "admin") {
+    if (viewParam === "control" || viewParam === "admin" || viewParam === "proxies") {
       return viewParam;
     }
     return "home";
@@ -29,12 +30,18 @@ function HomeContent() {
   
   const [browserData, setBrowserData] = useState<BrowserData | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [showProxyPanel, setShowProxyPanel] = useState(false); // 🆕 Estado para proxy panel
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   // 🆕 Función para cambiar vista y actualizar URL
   const handleViewChange = (newView: View) => {
     setCurrentView(newView);
+    
+    // 🆕 Si selecciona "proxies", abrir el panel
+    if (newView === "proxies") {
+      setShowProxyPanel(true);
+    }
     
     // Actualizar URL sin recargar la página
     const params = new URLSearchParams(searchParams.toString());
@@ -137,7 +144,11 @@ function HomeContent() {
 
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {SERVICES.map((service) => (
-                  <ServiceCard key={service.id} service={service} />
+                  <ServiceCard 
+                    key={service.id} 
+                    service={service}
+                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined} // 🆕 Callback para proxies
+                  />
                 ))}
               </div>
             </section>
@@ -173,6 +184,25 @@ function HomeContent() {
         {currentView === "admin" && (
           <AdminPanel isAuthenticated={isAdminAuthenticated} onLogin={() => setIsAdminAuthenticated(true)} />
         )}
+
+        {/* Proxies View - 🆕 NUEVO */}
+        {currentView === "proxies" && (
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 text-white text-4xl mb-6">
+              🌐
+            </div>
+            <h2 className="text-3xl font-bold text-foreground mb-4">Gestión de Proxies</h2>
+            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+              Verifica el estado de tu proxy, consulta información de conexión y gestiona tu servicio.
+            </p>
+            <button
+              onClick={() => setShowProxyPanel(true)}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white font-semibold text-lg shadow-lg transition-all"
+            >
+              🔍 Verificar Mi Proxy
+            </button>
+          </div>
+        )}
       </main>
 
       {/* Chatbot */}
@@ -182,6 +212,18 @@ function HomeContent() {
       {browserData && currentView === "control" && !error && (
         <Dashboard browserData={browserData} onClose={() => setBrowserData(null)} />
       )}
+
+      {/* 🆕 Proxy Panel Modal */}
+      <ProxyPanel 
+        isOpen={showProxyPanel} 
+        onClose={() => {
+          setShowProxyPanel(false);
+          // Si estábamos en la vista de proxies, volver a home
+          if (currentView === "proxies") {
+            handleViewChange("home");
+          }
+        }} 
+      />
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 py-8">
