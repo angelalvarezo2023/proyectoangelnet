@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { HomeIcon, SettingsIcon, ShieldIcon } from "@/components/icons";
 import Image from "next/image";
 
-type View = "home" | "control" | "admin";
+type View = "home" | "control" | "admin" | "proxies"; // 🆕 Agregar "proxies"
 
 interface NavigationProps {
   currentView: View;
@@ -14,6 +14,7 @@ interface NavigationProps {
 const navItems: { id: View; label: string; icon: typeof HomeIcon }[] = [
   { id: "home", label: "Servicios", icon: HomeIcon },
   { id: "control", label: "Panel", icon: SettingsIcon },
+  { id: "proxies", label: "Proxies", icon: ShieldIcon }, // 🆕 NUEVO ITEM
   { id: "admin", label: "Admin", icon: ShieldIcon },
 ];
 
