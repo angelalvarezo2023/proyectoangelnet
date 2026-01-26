@@ -1,10 +1,10 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { HomeIcon, ShieldIcon } from "@/components/icons";
+import { HomeIcon, ShieldIcon, SearchIcon } from "@/components/icons";
 import Image from "next/image";
 
-type View = "home" | "admin";
+type View = "home" | "anuncios" | "admin";
 
 interface NavigationProps {
   currentView: View;
@@ -15,10 +15,16 @@ interface NavigationProps {
   onLogout?: () => void;
 }
 
-const navItems: { id: View; label: string; icon: typeof HomeIcon }[] = [
+const publicNavItems: { id: View; label: string; icon: typeof HomeIcon }[] = [
   { id: "home", label: "Servicios", icon: HomeIcon },
-  { id: "admin", label: "Admin", icon: ShieldIcon },
+  { id: "anuncios", label: "Anuncios", icon: SearchIcon },
 ];
+
+const adminNavItem: { id: View; label: string; icon: typeof ShieldIcon } = {
+  id: "admin", 
+  label: "Admin", 
+  icon: ShieldIcon 
+};
 
 export function Navigation({ 
   currentView, 
@@ -27,6 +33,11 @@ export function Navigation({
   isAdmin = false,
   onLogout 
 }: NavigationProps) {
+  // Combinar items: públicos + admin solo si es admin
+  const navItems = isAdmin 
+    ? [...publicNavItems, adminNavItem] 
+    : publicNavItems;
+
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/90 backdrop-blur-xl">
       <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 gap-4">
@@ -55,8 +66,6 @@ export function Navigation({
             const Icon = item.icon;
             const isActive = currentView === item.id;
             
-            // Mostrar Admin siempre, pero el login se maneja en page.tsx
-            
             return (
               <button
                 key={item.id}
@@ -75,7 +84,7 @@ export function Navigation({
           })}
         </nav>
 
-        {/* User info & Status - Solo si hay usuario logueado */}
+        {/* User info & Status */}
         <div className="flex items-center gap-3">
           {userName ? (
             <>
@@ -106,7 +115,7 @@ export function Navigation({
               )}
             </>
           ) : (
-            /* Status indicator - cuando no hay usuario */
+            /* Status indicator */}
             <div className="hidden lg:flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 border border-primary/20">
               <div className="h-2.5 w-2.5 animate-pulse rounded-full bg-primary shadow-lg shadow-primary/50" />
               <span className="text-sm font-medium text-primary">Online</span>
