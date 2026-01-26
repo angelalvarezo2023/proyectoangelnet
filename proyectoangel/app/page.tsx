@@ -1,84 +1,25 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
-import { FirebaseAPI, SERVICES, CONTACT, type BrowserData } from "@/lib/firebase";
+import { Suspense, useState } from "react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
+import { UnifiedAdmin } from "@/components/UnifiedAdmin";
+import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
-import { AdminPanel } from "@/components/admin-panel";
-import { ControlPanel } from "@/components/control-panel";
-import { Dashboard } from "@/components/dashboard";
-import { ProxyPanel } from "@/components/proxy-panel";
 import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "control" | "admin" | "proxies";
+type View = "home" | "admin";
 
 function HomeContent() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const { user, userData, signOut, loading: authLoading } = useAuth();
-  
-  const [currentView, setCurrentView] = useState<View>(() => {
-    const viewParam = searchParams.get("view");
-    if (viewParam === "control" || viewParam === "admin" || viewParam === "proxies") {
-      return viewParam;
-    }
-    return "home";
-  });
-  
-  const [browserData, setBrowserData] = useState<BrowserData | null>(null);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
-  const [showProxyPanel, setShowProxyPanel] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  const handleViewChange = (newView: View) => {
-    setCurrentView(newView);
-    
-    if (newView === "proxies") {
-      setShowProxyPanel(true);
-    }
-    
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("view", newView);
-    router.push(`?${params.toString()}`, { scroll: false });
-  };
-
-  useEffect(() => {
-    const userId = searchParams.get("id");
-    const userName = searchParams.get("user");
-
-    const loadData = async () => {
-      if (userId) {
-        setCurrentView("control");
-        const data = await FirebaseAPI.findBrowserByUniqueId(userId);
-        if (data) {
-          setBrowserData(data);
-        } else {
-          setError("Usuario no encontrado");
-        }
-      } else if (userName) {
-        setCurrentView("control");
-        const data = await FirebaseAPI.findBrowserByName(userName);
-        if (data) {
-          setBrowserData(data);
-        } else {
-          setError(`Usuario "${userName}" no encontrado`);
-        }
-      }
-      setLoading(false);
-    };
-
-    loadData();
-  }, [searchParams]);
+  const { user, userData, loading: authLoading } = useAuth();
+  const [currentView, setCurrentView] = useState<View>("home");
 
   // Mostrar loading mientras verifica autenticación
-  if (authLoading || loading) {
+  if (authLoading) {
     return <Loading />;
   }
 
@@ -89,14 +30,9 @@ function HomeContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* 🆕 Navigation con info de usuario */}
       <Navigation 
         currentView={currentView} 
-        onViewChange={handleViewChange}
-        // 🆕 Pasar props adicionales para mostrar usuario
-        userName={userData?.name}
-        userRole={userData?.role}
-        onLogout={signOut}
+        onViewChange={(view) => setCurrentView(view)}
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
@@ -160,7 +96,6 @@ function HomeContent() {
                   <ServiceCard 
                     key={service.id} 
                     service={service}
-                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined}
                   />
                 ))}
               </div>
@@ -190,58 +125,19 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Control Panel View */}
-        {currentView === "control" && <ControlPanel initialBrowserData={browserData} initialError={error} />}
-
-        {/* 🔒 Admin View - PROTEGIDO */}
+        {/* Admin View - Panel Unificado */}
         {currentView === "admin" && (
           <ProtectedRoute requireAdmin={true}>
-            <AdminPanel isAuthenticated={isAdminAuthenticated} onLogin={() => setIsAdminAuthenticated(true)} />
-          </ProtectedRoute>
-        )}
-
-        {/* 🔒 Proxies View - PROTEGIDO */}
-        {currentView === "proxies" && (
-          <ProtectedRoute>
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500 to-teal-500 text-white text-4xl mb-6">
-                🌐
-              </div>
-              <h2 className="text-3xl font-bold text-foreground mb-4">Gestión de Proxies</h2>
-              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                Verifica el estado de tu proxy, consulta información de conexión y gestiona tu servicio.
-              </p>
-              <button
-                onClick={() => setShowProxyPanel(true)}
-                className="px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-teal-500 hover:from-cyan-600 hover:to-teal-600 text-white font-semibold text-lg shadow-lg transition-all"
-              >
-                🔍 Verificar Mi Proxy
-              </button>
-            </div>
+            <UnifiedAdmin 
+              isOpen={true}
+              onClose={() => setCurrentView("home")}
+            />
           </ProtectedRoute>
         )}
       </main>
 
       {/* Chatbot */}
       <Chatbot />
-
-      {/* Dashboard Modal for direct links */}
-      {browserData && currentView === "control" && !error && (
-        <Dashboard browserData={browserData} onClose={() => setBrowserData(null)} />
-      )}
-
-      {/* 🔒 Proxy Panel Modal - PROTEGIDO */}
-      <ProtectedRoute>
-        <ProxyPanel 
-          isOpen={showProxyPanel} 
-          onClose={() => {
-            setShowProxyPanel(false);
-            if (currentView === "proxies") {
-              handleViewChange("home");
-            }
-          }} 
-        />
-      </ProtectedRoute>
 
       {/* Footer */}
       <footer className="border-t border-border bg-card/50 py-8">
@@ -255,7 +151,6 @@ function HomeContent() {
   );
 }
 
-// 🔒 Wrapper principal con AuthProvider
 export default function Page() {
   return (
     <AuthProvider>
