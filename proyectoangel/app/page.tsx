@@ -6,7 +6,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
-import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 Import ProxyPanel
+import { ProxyPanel } from "@/components/proxy-panel";
+import { ChatGrupal } from "@/components/ui/chat-grupal"; // 🆕 IMPORT DEL CHAT
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -14,13 +15,13 @@ import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "anuncios" | "admin";
+type View = "home" | "anuncios" | "admin" | "chat"; // 🆕 Agregamos "chat"
 
 function HomeContent() {
   const { user, userData, signOut } = useAuth();
   const [currentView, setCurrentView] = useState<View>("home");
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [showProxyPanel, setShowProxyPanel] = useState(false); // 🆕 Estado para panel de proxies
+  const [showProxyPanel, setShowProxyPanel] = useState(false);
 
   const handleViewChange = (newView: View) => {
     if (newView === "admin") {
@@ -111,7 +112,7 @@ function HomeContent() {
                   <ServiceCard 
                     key={service.id} 
                     service={service}
-                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined} // 🆕 Handler para proxies
+                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined}
                   />
                 ))}
               </div>
@@ -156,6 +157,13 @@ function HomeContent() {
 
             {/* Control Panel para búsqueda pública */}
             <ControlPanel initialBrowserData={null} initialError="" />
+          </div>
+        )}
+
+        {/* 🆕🆕🆕 Chat View - PÚBLICO (sin login) 🆕🆕🆕 */}
+        {currentView === "chat" && (
+          <div className="w-full">
+            <ChatGrupal />
           </div>
         )}
 
