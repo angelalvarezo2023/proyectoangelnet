@@ -7,17 +7,17 @@ import { Input } from "@/components/ui/input";
 import { XIcon } from "@/components/icons";
 
 interface Message {
-  id: number;
+  id: string;
   text: string;
   sender: string;
-  timestamp: string;
+  timestamp: number;
   isSystem: boolean;
 }
 
 interface Participant {
-  id: number;
+  id: string;
   name: string;
-  joinedAt: string;
+  joinedAt: number;
   isAdmin: boolean;
 }
 
@@ -26,11 +26,19 @@ interface ChatSettings {
   rules: string[];
 }
 
-const STORAGE_KEY = "escort-chat-data";
+interface RoomData {
+  messages: Record<string, Message>;
+  participants: Record<string, Participant>;
+  settings: ChatSettings;
+  createdAt: number;
+}
+
+const FIREBASE_URL = "https://megapersonals-4f24c-default-rtdb.firebaseio.com";
 
 export function ChatGrupal() {
+  const [step, setStep] = useState<"room-select" | "join" | "chat">("room-select");
+  const [roomCode, setRoomCode] = useState("");
   const [userName, setUserName] = useState("");
-  const [isJoined, setIsJoined] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
@@ -44,7 +52,9 @@ export function ChatGrupal() {
   });
   const [newRule, setNewRule] = useState("");
   const [participants, setParticipants] = useState<Participant[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Scroll al final
   const scrollToBottom = () => {
@@ -55,96 +65,162 @@ export function ChatGrupal() {
     scrollToBottom();
   }, [messages]);
 
-  // Cargar datos
+  // Sincronización con Firebase
   useEffect(() => {
-    if (!isJoined) return;
+    if (step !== "chat" || !roomCode) return;
 
-    const loadChat = () => {
+    const syncChat = async () => {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const data = JSON.parse(stored);
-          setMessages(data.messages || []);
-          setParticipants(data.participants || []);
-          setChatSettings(data.settings || chatSettings);
+        const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
+        const data: RoomData | null = await response.json();
+
+        if (data) {
+          // Actualizar mensajes
+          const messagesArray = data.messages 
+            ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
+            : [];
+          setMessages(messagesArray);
+
+          // Actualizar participantes
+          const participantsArray = data.participants 
+            ? Object.values(data.participants)
+            : [];
+          setParticipants(participantsArray);
+
+          // Actualizar configuración
+          if (data.settings) {
+            setChatSettings(data.settings);
+          }
         }
-      } catch (e) {
-        console.error("Error loading chat:", e);
+      } catch (error) {
+        console.error("Error syncing chat:", error);
       }
     };
 
-    loadChat();
-    const interval = setInterval(loadChat, 2000);
-    return () => clearInterval(interval);
-  }, [isJoined]);
+    // Sincronizar inmediatamente
+    syncChat();
 
-  // Guardar datos
-  const saveToStorage = (data: any) => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      const current = stored ? JSON.parse(stored) : {};
-      const updated = { ...current, ...data, timestamp: Date.now() };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.error("Error saving chat:", e);
+    // Sincronizar cada 2 segundos
+    syncIntervalRef.current = setInterval(syncChat, 2000);
+
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+      }
+    };
+  }, [step, roomCode]);
+
+  // Generar código de sala aleatorio
+  const generateRoomCode = () => {
+    return Math.random().toString(36).substring(2, 8).toUpperCase();
+  };
+
+  // Crear sala nueva
+  const handleCreateRoom = () => {
+    const newRoomCode = generateRoomCode();
+    setRoomCode(newRoomCode);
+    setStep("join");
+  };
+
+  // Unirse a sala existente
+  const handleJoinExistingRoom = () => {
+    if (!roomCode.trim()) {
+      alert("Por favor ingresa el código de la sala");
+      return;
     }
+    setStep("join");
   };
 
   // Unirse al chat
-  const handleJoin = (asAdmin: boolean) => {
+  const handleJoin = async (asAdmin: boolean) => {
     if (!userName.trim()) {
       alert("Por favor ingresa tu nombre");
       return;
     }
 
+    const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setCurrentUserId(userId);
+
     const newParticipant: Participant = {
-      id: Date.now(),
+      id: userId,
       name: userName.trim(),
-      joinedAt: new Date().toISOString(),
+      joinedAt: Date.now(),
       isAdmin: asAdmin,
     };
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const current = stored ? JSON.parse(stored) : { participants: [], messages: [] };
-
-    current.participants = [...(current.participants || []), newParticipant];
-
     const welcomeMsg: Message = {
-      id: Date.now() + 1,
+      id: `msg_${Date.now()}`,
       text: `${userName.trim()} se ha unido al chat ${asAdmin ? "(Administrador)" : ""}`,
       sender: "Sistema",
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       isSystem: true,
     };
 
-    current.messages = [...(current.messages || []), welcomeMsg];
-    saveToStorage(current);
+    try {
+      // Verificar si la sala existe
+      const checkResponse = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
+      const existingRoom = await checkResponse.json();
 
-    setParticipants(current.participants);
-    setMessages(current.messages);
-    setIsJoined(true);
-    setIsAdmin(asAdmin);
+      if (!existingRoom) {
+        // Crear sala nueva
+        const initialData: RoomData = {
+          messages: { [welcomeMsg.id]: welcomeMsg },
+          participants: { [userId]: newParticipant },
+          settings: chatSettings,
+          createdAt: Date.now(),
+        };
+
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initialData),
+        });
+      } else {
+        // Agregar a sala existente
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${userId}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newParticipant),
+        });
+
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${welcomeMsg.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(welcomeMsg),
+        });
+      }
+
+      setIsAdmin(asAdmin);
+      setStep("chat");
+    } catch (error) {
+      console.error("Error joining room:", error);
+      alert("Error al unirse a la sala");
+    }
   };
 
   // Enviar mensaje
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (!newMessage.trim()) return;
 
     const message: Message = {
-      id: Date.now(),
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text: newMessage.trim(),
       sender: userName,
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       isSystem: false,
     };
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const current = stored ? JSON.parse(stored) : {};
-    current.messages = [...(current.messages || []), message];
-    saveToStorage(current);
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
 
-    setMessages(current.messages);
-    setNewMessage("");
+      setNewMessage("");
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
   };
 
   // Obtener nombre para mostrar
@@ -156,33 +232,41 @@ export function ChatGrupal() {
   };
 
   // Toggle ocultar nombres
-  const toggleHideNames = () => {
+  const toggleHideNames = async () => {
     const newSettings = { ...chatSettings, hideNames: !chatSettings.hideNames };
     setChatSettings(newSettings);
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const current = stored ? JSON.parse(stored) : {};
-    current.settings = newSettings;
-
     const msg: Message = {
-      id: Date.now(),
+      id: `msg_${Date.now()}`,
       text: `Nombres ${newSettings.hideNames ? "ocultados" : "visibles"}. ${
         newSettings.hideNames
           ? 'Los participantes ahora aparecen como "Telefonista #"'
           : "Los nombres reales ahora son visibles"
       }`,
       sender: "Sistema",
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       isSystem: true,
     };
 
-    current.messages = [...(current.messages || []), msg];
-    saveToStorage(current);
-    setMessages(current.messages);
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${msg.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msg),
+      });
+    } catch (error) {
+      console.error("Error updating settings:", error);
+    }
   };
 
   // Agregar regla
-  const addRule = () => {
+  const addRule = async () => {
     if (!newRule.trim()) return;
 
     const newSettings = {
@@ -191,26 +275,35 @@ export function ChatGrupal() {
     };
     setChatSettings(newSettings);
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const current = stored ? JSON.parse(stored) : {};
-    current.settings = newSettings;
-
     const msg: Message = {
-      id: Date.now(),
+      id: `msg_${Date.now()}`,
       text: `Nueva regla agregada: "${newRule.trim()}"`,
       sender: "Sistema",
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       isSystem: true,
     };
 
-    current.messages = [...(current.messages || []), msg];
-    saveToStorage(current);
-    setMessages(current.messages);
-    setNewRule("");
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${msg.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msg),
+      });
+
+      setNewRule("");
+    } catch (error) {
+      console.error("Error adding rule:", error);
+    }
   };
 
   // Eliminar regla
-  const removeRule = (index: number) => {
+  const removeRule = async (index: number) => {
     const rule = chatSettings.rules[index];
     const newSettings = {
       ...chatSettings,
@@ -218,37 +311,136 @@ export function ChatGrupal() {
     };
     setChatSettings(newSettings);
 
-    const stored = localStorage.getItem(STORAGE_KEY);
-    const current = stored ? JSON.parse(stored) : {};
-    current.settings = newSettings;
-
     const msg: Message = {
-      id: Date.now(),
+      id: `msg_${Date.now()}`,
       text: `Regla eliminada: "${rule}"`,
       sender: "Sistema",
-      timestamp: new Date().toISOString(),
+      timestamp: Date.now(),
       isSystem: true,
     };
 
-    current.messages = [...(current.messages || []), msg];
-    saveToStorage(current);
-    setMessages(current.messages);
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${msg.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(msg),
+      });
+    } catch (error) {
+      console.error("Error removing rule:", error);
+    }
   };
 
-  // Pantalla de ingreso
-  if (!isJoined) {
+  // Salir del chat
+  const handleLeaveChat = () => {
+    setStep("room-select");
+    setRoomCode("");
+    setUserName("");
+    setIsAdmin(false);
+    setMessages([]);
+    setParticipants([]);
+  };
+
+  // Pantalla de selección de sala
+  if (step === "room-select") {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10 overflow-hidden">
+        <div className="w-full max-w-md rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10 overflow-hidden relative">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-pink-400 to-accent" />
 
           <div className="p-8">
             <div className="text-center mb-8">
               <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg shadow-primary/10 mb-4">
+                <span className="text-4xl">🚪</span>
+              </div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Salas de Chat</h1>
+              <p className="text-muted-foreground">Crea una sala o únete a una existente</p>
+            </div>
+
+            <div className="space-y-4">
+              <Button
+                onClick={handleCreateRoom}
+                className="w-full h-14 bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-lg"
+              >
+                ➕ Crear Sala Nueva
+              </Button>
+
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border"></div>
+                </div>
+                <div className="relative flex justify-center text-sm">
+                  <span className="px-2 bg-card text-muted-foreground">o</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-foreground">
+                  Código de sala
+                </label>
+                <Input
+                  type="text"
+                  value={roomCode}
+                  onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                  onKeyPress={(e) => e.key === "Enter" && handleJoinExistingRoom()}
+                  placeholder="Ej: ABC123"
+                  className="h-12 bg-input text-foreground text-center text-lg tracking-wider uppercase"
+                  maxLength={6}
+                />
+              </div>
+
+              <Button
+                onClick={handleJoinExistingRoom}
+                disabled={!roomCode.trim()}
+                className="w-full h-12 bg-gradient-to-r from-chart-4 to-chart-5 hover:from-chart-4/90 hover:to-chart-5/90"
+              >
+                🔑 Unirse a Sala
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Pantalla de ingreso
+  if (step === "join") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10 overflow-hidden relative">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-pink-400 to-accent" />
+
+          <div className="p-8">
+            <button
+              onClick={() => setStep("room-select")}
+              className="mb-4 flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ← Volver
+            </button>
+
+            <div className="text-center mb-8">
+              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 shadow-lg shadow-primary/10 mb-4">
                 <span className="text-4xl">💬</span>
               </div>
-              <h1 className="text-3xl font-bold text-foreground mb-2">Chat Grupal</h1>
-              <p className="text-muted-foreground">Coordinación de servicios</p>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Sala: {roomCode}</h1>
+              <p className="text-muted-foreground mb-4">Comparte este código con otros usuarios</p>
+              
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(roomCode);
+                  alert("¡Código copiado!");
+                }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary/10 border border-primary/30 hover:bg-primary/20 transition-colors"
+              >
+                <span className="text-sm text-muted-foreground">Copiar código</span>
+                <span className="text-lg font-bold font-mono text-primary">{roomCode}</span>
+                <span>📋</span>
+              </button>
             </div>
 
             <div className="space-y-4">
@@ -300,10 +492,10 @@ export function ChatGrupal() {
     );
   }
 
-  // Chat principal
+  // Chat principal  
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl h-[700px] rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10 overflow-hidden flex flex-col">
+      <div className="w-full max-w-5xl h-[700px] rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10 overflow-hidden flex flex-col relative">
         <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-pink-400 to-accent" />
 
         {/* Header */}
@@ -314,10 +506,9 @@ export function ChatGrupal() {
               <span className="relative text-2xl">💬</span>
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground">Chat Grupal</h2>
+              <h2 className="text-xl font-bold text-foreground">Sala: {roomCode}</h2>
               <p className="text-sm text-muted-foreground">
-                {participants.length} participante{participants.length !== 1 ? "s" : ""} conectado
-                {participants.length !== 1 ? "s" : ""}
+                {participants.length} participante{participants.length !== 1 ? "s" : ""}
               </p>
             </div>
           </div>
@@ -337,6 +528,15 @@ export function ChatGrupal() {
               <p className="font-medium text-foreground">{getDisplayName(userName)}</p>
               {isAdmin && <p className="text-xs text-primary">Admin</p>}
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleLeaveChat}
+              className="rounded-xl h-10 w-10"
+              title="Salir"
+            >
+              🚪
+            </Button>
           </div>
         </div>
 
