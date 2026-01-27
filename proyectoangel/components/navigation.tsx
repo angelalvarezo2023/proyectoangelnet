@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { HomeIcon, ShieldIcon, SearchIcon } from "@/components/icons";
 import Image from "next/image";
 
-type View = "home" | "anuncios" | "admin";
+type View = "home" | "anuncios" | "admin" | "chat"; // 🆕 Agregamos "chat"
 
 interface NavigationProps {
   currentView: View;
@@ -15,9 +15,26 @@ interface NavigationProps {
   onLogout?: () => void;
 }
 
-const publicNavItems: { id: View; label: string; icon: typeof HomeIcon }[] = [
+// Ícono de chat inline (puedes moverlo a icons.tsx después)
+const ChatIcon = ({ className }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+
+const publicNavItems: { id: View; label: string; icon: any }[] = [
   { id: "home", label: "Servicios", icon: HomeIcon },
   { id: "anuncios", label: "Anuncios", icon: SearchIcon },
+  { id: "chat", label: "Chat", icon: ChatIcon }, // 🆕 NUEVO
 ];
 
 const adminNavItem: { id: View; label: string; icon: typeof ShieldIcon } = {
@@ -33,7 +50,7 @@ export function Navigation({
   isAdmin = false,
   onLogout 
 }: NavigationProps) {
-  // 🔥 ADMIN SIEMPRE VISIBLE - Los 3 botones aparecen siempre
+  // 🔥 ADMIN SIEMPRE VISIBLE - Los 4 botones aparecen siempre
   const navItems = [...publicNavItems, adminNavItem];
 
   return (
@@ -58,7 +75,7 @@ export function Navigation({
           </div>
         </div>
 
-        {/* Navigation - SERVICIOS | ANUNCIOS | ADMIN */}
+        {/* Navigation - SERVICIOS | ANUNCIOS | CHAT | ADMIN */}
         <nav className="flex items-center gap-1 rounded-xl bg-secondary/50 p-1">
           {navItems.map((item) => {
             const Icon = item.icon;
