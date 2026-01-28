@@ -7,7 +7,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
 import { ProxyPanel } from "@/components/proxy-panel";
-import { ChatGrupal } from "@/components/ui/chat-grupal"; // 🆕 IMPORT DEL CHAT
+import { ChatGrupal } from "@/components/ui/chat-grupal";
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -15,30 +15,41 @@ import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "anuncios" | "admin" | "chat"; // 🆕 Agregamos "chat"
+type View = "home" | "anuncios" | "admin" | "chat";
 
 function HomeContent() {
   const { user, userData, signOut } = useAuth();
-  const [currentView, setCurrentView] = useState<View>("home");
+  
+  // ✅ CAMBIO 1: Leer vista guardada al cargar
+  const [currentView, setCurrentView] = useState<View>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("currentView");
+      return (saved as View) || "home";
+    }
+    return "home";
+  });
+  
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showProxyPanel, setShowProxyPanel] = useState(false);
 
   const handleViewChange = (newView: View) => {
     if (newView === "admin") {
-      // Si intenta ir a admin, verificar si está autenticado
       if (!user) {
-        setShowAdminLogin(true); // Mostrar modal de login
+        setShowAdminLogin(true);
         return;
       }
     }
     setCurrentView(newView);
-    setShowAdminLogin(false); // Cerrar modal si está abierto
+    // ✅ CAMBIO 2: Guardar vista cuando cambia
+    localStorage.setItem("currentView", newView);
+    setShowAdminLogin(false);
   };
 
-  // Cuando el usuario inicia sesión exitosamente, cambiar a vista admin
   const handleLoginSuccess = () => {
     setShowAdminLogin(false);
     setCurrentView("admin");
+    // ✅ CAMBIO 3: Guardar vista admin
+    localStorage.setItem("currentView", "admin");
   };
 
   return (
@@ -160,7 +171,7 @@ function HomeContent() {
           </div>
         )}
 
-        {/* 🆕🆕🆕 Chat View - PÚBLICO (sin login) 🆕🆕🆕 */}
+        {/* Chat View - PÚBLICO (sin login) */}
         {currentView === "chat" && (
           <div className="w-full">
             <ChatGrupal />
