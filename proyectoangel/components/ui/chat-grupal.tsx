@@ -79,6 +79,20 @@ interface PeriodSettings {
   clientsAttended: number;
 }
 
+interface ClientRecord {
+  id: string;
+  code: string;
+  status: "paid" | "left";
+  timestamp: number;
+  handledBy: string; // Nombre de la escort
+  handlerId: string; // ID de la escort
+  // Para clientes que pagaron
+  amount?: number;
+  // Para clientes que se fueron
+  reason?: string;
+  customReason?: string;
+}
+
 interface RoomSettings {
   maxEscorts: number;
   maxTelefonistas: number;
@@ -88,6 +102,7 @@ interface RoomSettings {
   notificationsEnabled: boolean;
   theme: ThemeName;
   period?: PeriodSettings;
+  clientHistory?: Record<string, ClientRecord>; // 🆕 Historial de clientes
 }
 
 interface RoomData {
@@ -167,6 +182,11 @@ export function ChatGrupal() {
   const [selectedTelefonistaToRate, setSelectedTelefonistaToRate] = useState<string | null>(null);
   const [rating, setRating] = useState(5);
   const [selectedClientForPrice, setSelectedClientForPrice] = useState<string | null>(null);
+  const [clientAttentionStep, setClientAttentionStep] = useState<"status" | "paid" | "left">("status");
+  const [customAmount, setCustomAmount] = useState("");
+  const [leftReason, setLeftReason] = useState("");
+  const [customLeftReason, setCustomLeftReason] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const [myViolations, setMyViolations] = useState(0);
   const [myClientsSent, setMyClientsSent] = useState(0);
   const [myBadges, setMyBadges] = useState<string[]>([]);
@@ -929,6 +949,24 @@ export function ChatGrupal() {
       });
       setPeriodSettings(newPeriod);
       
+      // 🆕 Guardar en historial
+      const recordId = `record_${Date.now()}`;
+      const clientRecord: ClientRecord = {
+        id: recordId,
+        code: code,
+        status: "paid",
+        timestamp: Date.now(),
+        handledBy: userName,
+        handlerId: currentUserId,
+        amount: price,
+      };
+      
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/clientHistory/${recordId}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clientRecord),
+      });
+      
       const message: Message = {
         id: `msg_${Date.now()}`,
         text: `✅ Cliente ${code} atendido por ${userName} - PAGÓ $${price}`,
@@ -943,8 +981,68 @@ export function ChatGrupal() {
         body: JSON.stringify(message),
       });
       setSelectedClientForPrice(null);
+      setClientAttentionStep("status");
+      setCustomAmount("");
     } catch (error) {
       console.error("Error marking client:", error);
+    } finally {
+      setTimeout(() => setProcessingClient(null), 2000);
+    }
+  };
+
+  const markClientLeft = async (code: string, reason: string, customReason?: string) => {
+    if (processingClient === code) return;
+    setProcessingClient(code);
+    try {
+      const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
+      const currentWaiting = await response.json() || [];
+      const updatedWaiting = currentWaiting.filter((c: string) => c !== code);
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedWaiting),
+      });
+      
+      // 🆕 Guardar en historial
+      const recordId = `record_${Date.now()}`;
+      const clientRecord: ClientRecord = {
+        id: recordId,
+        code: code,
+        status: "left",
+        timestamp: Date.now(),
+        handledBy: userName,
+        handlerId: currentUserId,
+        reason: reason,
+        customReason: customReason,
+      };
+      
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/clientHistory/${recordId}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(clientRecord),
+      });
+      
+      const displayReason = reason === "other" && customReason ? customReason : reason;
+      const message: Message = {
+        id: `msg_${Date.now()}`,
+        text: `❌ Cliente ${code} SE FUE - Razón: ${displayReason} (Atendido por ${userName})`,
+        sender: "Sistema",
+        senderId: "system",
+        timestamp: Date.now(),
+        isSystem: true,
+      };
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      
+      setSelectedClientForPrice(null);
+      setClientAttentionStep("status");
+      setLeftReason("");
+      setCustomLeftReason("");
+    } catch (error) {
+      console.error("Error marking client left:", error);
     } finally {
       setTimeout(() => setProcessingClient(null), 2000);
     }
@@ -1241,6 +1339,12 @@ export function ChatGrupal() {
             {userRole === "admin" && (
               <>
                 <Button
+                  onClick={() => setShowHistory(true)}
+                  className="bg-green-500/90 hover:bg-green-600 text-white font-bold text-xs px-2 py-1 rounded-lg h-7"
+                >
+                  📋
+                </Button>
+                <Button
                   onClick={() => setShowStatsModal(true)}
                   className="bg-blue-500/90 hover:bg-blue-600 text-white font-bold text-xs px-2 py-1 rounded-lg h-7"
                 >
@@ -1367,7 +1471,13 @@ export function ChatGrupal() {
                   <span className="font-mono font-bold text-2xl text-yellow-300">{code}</span>
                   {userRole === "escort" && (
                     <button
-                      onClick={() => setSelectedClientForPrice(code)}
+                      onClick={() => {
+                        setSelectedClientForPrice(code);
+                        setClientAttentionStep("status");
+                        setCustomAmount("");
+                        setLeftReason("");
+                        setCustomLeftReason("");
+                      }}
                       disabled={processingClient === code}
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all",
@@ -1909,39 +2019,350 @@ export function ChatGrupal() {
         </div>
       )}
 
-      {/* MODAL SELECCIONAR PRECIO */}
+      {/* MODAL ATENCIÓN DE CLIENTE - MULTI-PASO */}
       {selectedClientForPrice && userRole === "escort" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
           <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-green-500 p-6`}>
+            
+            {/* PASO 1: Seleccionar PAGÓ o SE FUE */}
+            {clientAttentionStep === "status" && (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold text-green-400">👤 Cliente {selectedClientForPrice}</h3>
+                  <button
+                    onClick={() => {
+                      setSelectedClientForPrice(null);
+                      setClientAttentionStep("status");
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p className="text-white mb-6 text-center text-lg">¿Qué pasó con el cliente?</p>
+
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setClientAttentionStep("paid")}
+                    className="w-full h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3"
+                  >
+                    <span>💵</span>
+                    <span>PAGÓ</span>
+                  </button>
+
+                  <button
+                    onClick={() => setClientAttentionStep("left")}
+                    className="w-full h-20 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center justify-center gap-3"
+                  >
+                    <span>🚪</span>
+                    <span>SE FUE</span>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* PASO 2A: Cliente PAGÓ - Seleccionar precio */}
+            {clientAttentionStep === "paid" && (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <button
+                    onClick={() => setClientAttentionStep("status")}
+                    className="text-white hover:opacity-80"
+                  >
+                    ← Volver
+                  </button>
+                  <h3 className="text-xl font-bold text-green-400">💵 Cliente {selectedClientForPrice}</h3>
+                  <button
+                    onClick={() => {
+                      setSelectedClientForPrice(null);
+                      setClientAttentionStep("status");
+                      setCustomAmount("");
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p className="text-white mb-4 text-center">¿Cuánto pagó?</p>
+
+                {/* Precios predefinidos */}
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  {roomSettings.prices.map((price) => (
+                    <button
+                      key={price}
+                      onClick={() => markClientAttended(selectedClientForPrice, price)}
+                      className="h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105"
+                    >
+                      ${price}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Precio personalizado */}
+                <div className="border-t-2 border-gray-600 pt-4">
+                  <label className="block text-sm font-bold text-green-400 mb-2 text-center">
+                    💰 O escribe la cantidad exacta:
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="number"
+                      value={customAmount}
+                      onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder="Ejemplo: 175"
+                      className="flex-1 h-12 text-center text-lg font-bold bg-black/50 border-2 border-green-500 text-green-300"
+                    />
+                    <button
+                      onClick={() => {
+                        const amount = parseInt(customAmount);
+                        if (!isNaN(amount) && amount > 0) {
+                          markClientAttended(selectedClientForPrice, amount);
+                        } else {
+                          alert("Ingresa una cantidad válida");
+                        }
+                      }}
+                      disabled={!customAmount || parseInt(customAmount) <= 0}
+                      className="h-12 px-6 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ✓
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* PASO 2B: Cliente SE FUE - Seleccionar razón */}
+            {clientAttentionStep === "left" && (
+              <>
+                <div className="flex items-center justify-between mb-6">
+                  <button
+                    onClick={() => setClientAttentionStep("status")}
+                    className="text-white hover:opacity-80"
+                  >
+                    ← Volver
+                  </button>
+                  <h3 className="text-xl font-bold text-red-400">🚪 Cliente {selectedClientForPrice}</h3>
+                  <button
+                    onClick={() => {
+                      setSelectedClientForPrice(null);
+                      setClientAttentionStep("status");
+                      setLeftReason("");
+                      setCustomLeftReason("");
+                    }}
+                    className="text-gray-400 hover:text-white text-2xl"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <p className="text-white mb-4 text-center">¿Por qué se fue?</p>
+
+                {/* Razones predefinidas */}
+                <div className="space-y-2 mb-4">
+                  <button
+                    onClick={() => markClientLeft(selectedClientForPrice, "No era la de la foto")}
+                    className="w-full p-4 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-transform hover:scale-105 text-left"
+                  >
+                    📸 No era la de la foto
+                  </button>
+
+                  <button
+                    onClick={() => markClientLeft(selectedClientForPrice, "No tenía dinero")}
+                    className="w-full p-4 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-transform hover:scale-105 text-left"
+                  >
+                    💸 No tenía dinero
+                  </button>
+
+                  <button
+                    onClick={() => markClientLeft(selectedClientForPrice, "Se arrepintió")}
+                    className="w-full p-4 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-xl transition-transform hover:scale-105 text-left"
+                  >
+                    🤔 Se arrepintió
+                  </button>
+                </div>
+
+                {/* Razón personalizada */}
+                <div className="border-t-2 border-gray-600 pt-4">
+                  <label className="block text-sm font-bold text-red-400 mb-2 text-center">
+                    ✍️ O escribe otra razón:
+                  </label>
+                  <div className="flex flex-col gap-2">
+                    <textarea
+                      value={customLeftReason}
+                      onChange={(e) => setCustomLeftReason(e.target.value)}
+                      placeholder="Ejemplo: Era menor de edad"
+                      className="w-full h-20 p-3 text-sm bg-black/50 border-2 border-red-500 text-red-300 rounded-lg resize-none"
+                    />
+                    <button
+                      onClick={() => {
+                        if (customLeftReason.trim()) {
+                          markClientLeft(selectedClientForPrice, "other", customLeftReason.trim());
+                        } else {
+                          alert("Escribe una razón");
+                        }
+                      }}
+                      disabled={!customLeftReason.trim()}
+                      className="h-12 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white font-bold rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      ✓ Confirmar
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL HISTORIAL DE CLIENTES - SOLO ADMIN */}
+      {showHistory && userRole === "admin" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-4xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-green-500 p-6 max-h-[90vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-green-400">💵 Cliente {selectedClientForPrice}</h3>
+              <h3 className="text-2xl font-bold text-green-400">📋 Historial de Clientes</h3>
               <button
-                onClick={() => setSelectedClientForPrice(null)}
+                onClick={() => setShowHistory(false)}
                 className="text-gray-400 hover:text-white text-2xl"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-white mb-4 text-center">Selecciona el precio que pagó:</p>
+            {(() => {
+              const history = roomSettings.clientHistory ? Object.values(roomSettings.clientHistory) : [];
+              const paidClients = history.filter(r => r.status === "paid");
+              const leftClients = history.filter(r => r.status === "left");
+              const totalEarnings = paidClients.reduce((sum, r) => sum + (r.amount || 0), 0);
 
-            <div className="grid grid-cols-2 gap-3">
-              {roomSettings.prices.map((price) => (
-                <button
-                  key={price}
-                  onClick={() => markClientAttended(selectedClientForPrice, price)}
-                  className="h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105"
-                >
-                  ${price}
-                </button>
-              ))}
-            </div>
+              return (
+                <>
+                  {/* Estadísticas Resumidas */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div className="bg-green-900/30 p-4 rounded-lg border border-green-600">
+                      <p className="text-xs text-green-300 mb-1">✅ Clientes que Pagaron</p>
+                      <p className="text-3xl font-bold text-white">{paidClients.length}</p>
+                    </div>
+                    <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-600">
+                      <p className="text-xs text-blue-300 mb-1">💰 Total Ganado</p>
+                      <p className="text-3xl font-bold text-white">${totalEarnings}</p>
+                    </div>
+                    <div className="bg-red-900/30 p-4 rounded-lg border border-red-600">
+                      <p className="text-xs text-red-300 mb-1">🚪 Clientes que se Fueron</p>
+                      <p className="text-3xl font-bold text-white">{leftClients.length}</p>
+                    </div>
+                  </div>
+
+                  {/* Tasa de Conversión */}
+                  {history.length > 0 && (
+                    <div className="bg-purple-900/30 p-4 rounded-lg border border-purple-600 mb-6">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-purple-300 mb-1">📊 Tasa de Conversión</p>
+                          <p className="text-2xl font-bold text-white">
+                            {((paidClients.length / history.length) * 100).toFixed(1)}%
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-gray-400">Total de Clientes</p>
+                          <p className="text-xl font-bold text-white">{history.length}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Lista de Clientes */}
+                  {history.length > 0 ? (
+                    <div className="space-y-3">
+                      <h4 className="text-lg font-bold text-amber-400 mb-3 flex items-center gap-2">
+                        📜 Registro Completo
+                        <span className="text-sm text-gray-400">({history.length} registros)</span>
+                      </h4>
+                      
+                      {history
+                        .sort((a, b) => b.timestamp - a.timestamp)
+                        .map((record) => (
+                          <div
+                            key={record.id}
+                            className={cn(
+                              "p-4 rounded-xl border-2",
+                              record.status === "paid"
+                                ? "bg-green-900/20 border-green-600"
+                                : "bg-red-900/20 border-red-600"
+                            )}
+                          >
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "w-12 h-12 rounded-full flex items-center justify-center text-2xl",
+                                    record.status === "paid"
+                                      ? "bg-green-600/30"
+                                      : "bg-red-600/30"
+                                  )}
+                                >
+                                  {record.status === "paid" ? "💵" : "🚪"}
+                                </div>
+                                <div>
+                                  <p className="font-bold text-white text-lg">
+                                    Cliente {record.code}
+                                  </p>
+                                  <p className="text-xs text-gray-400">
+                                    {new Date(record.timestamp).toLocaleString("es", {
+                                      day: "2-digit",
+                                      month: "short",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    })}
+                                  </p>
+                                  <p className="text-sm text-gray-300">
+                                    Atendido por: <span className="text-white font-medium">{record.handledBy}</span>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="text-right">
+                                {record.status === "paid" ? (
+                                  <div className="bg-green-600/20 px-4 py-2 rounded-lg border border-green-600">
+                                    <p className="text-xs text-green-300">PAGÓ</p>
+                                    <p className="text-2xl font-bold text-green-400">
+                                      ${record.amount}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="bg-red-600/20 px-4 py-2 rounded-lg border border-red-600">
+                                    <p className="text-xs text-red-300 mb-1">SE FUE</p>
+                                    <p className="text-sm text-red-400 font-medium">
+                                      {record.reason === "other" && record.customReason
+                                        ? record.customReason
+                                        : record.reason}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <div className="text-6xl mb-4">📋</div>
+                      <p className="text-xl text-gray-400">
+                        No hay registros todavía
+                      </p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        Los clientes atendidos aparecerán aquí
+                      </p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
-    
       
-      {/* Modal Config Período */}
+      {/* MODAL CONFIG Período */}
       {showPeriodConfig && userRole === "admin" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-gray-900 rounded-2xl border-2 border-amber-500 p-6 max-w-md w-full">
