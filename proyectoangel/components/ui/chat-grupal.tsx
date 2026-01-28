@@ -302,6 +302,19 @@ export function ChatGrupal() {
       try {
         const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
         const data: RoomData | null = await response.json();
+        
+        // ✅ SI LA SALA NO EXISTE (fue cerrada por el admin)
+        if (!data) {
+          alert("🚪 La sala ha sido cerrada por el administrador.");
+          localStorage.removeItem("chatSession");
+          setStep("room-select");
+          setRoomCode("");
+          setUserName("");
+          setMessages([]);
+          setParticipants([]);
+          return;
+        }
+        
         if (data) {
           const messagesArray = data.messages 
             ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
@@ -811,26 +824,59 @@ export function ChatGrupal() {
   const handleLeaveChat = async () => {
     const confirmLeave = confirm("¿Seguro que quieres salir?");
     if (!confirmLeave) return;
+    
     try {
-      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}.json`, {
-        method: "DELETE",
-      });
-      const leaveMsg: Message = {
-        id: `msg_${Date.now()}`,
-        text: `${userName} ha salido del chat`,
-        sender: "Sistema",
-        senderId: "system",
-        timestamp: Date.now(),
-        isSystem: true,
-      };
-      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${leaveMsg.id}.json`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(leaveMsg),
-      });
+      // ✅ SI ES ADMIN: CERRAR TODA LA SALA
+      if (userRole === "admin") {
+        const closeMsg: Message = {
+          id: `msg_${Date.now()}`,
+          text: `🚪 El administrador ha cerrado la sala. Todos han sido expulsados.`,
+          sender: "Sistema",
+          senderId: "system",
+          timestamp: Date.now(),
+          isSystem: true,
+          isWarning: true,
+        };
+        
+        // Enviar mensaje de cierre
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${closeMsg.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(closeMsg),
+        });
+        
+        // Esperar 1 segundo para que todos vean el mensaje
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // ELIMINAR TODA LA SALA
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
+          method: "DELETE",
+        });
+        
+        alert("Sala cerrada. Todos los usuarios han sido expulsados.");
+      } else {
+        // Si NO es admin, solo sale él
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}.json`, {
+          method: "DELETE",
+        });
+        const leaveMsg: Message = {
+          id: `msg_${Date.now()}`,
+          text: `${userName} ha salido del chat`,
+          sender: "Sistema",
+          senderId: "system",
+          timestamp: Date.now(),
+          isSystem: true,
+        };
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${leaveMsg.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(leaveMsg),
+        });
+      }
     } catch (error) {
       console.error("Error leaving chat:", error);
     }
+    
     localStorage.removeItem("chatSession");
     setStep("room-select");
     setRoomCode("");
