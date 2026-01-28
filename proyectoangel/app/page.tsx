@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
@@ -14,20 +15,17 @@ import { ServiceCard } from "@/components/service-card";
 import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
+import { useState } from "react";
 
 type View = "home" | "anuncios" | "admin" | "chat";
 
 function HomeContent() {
   const { user, userData, signOut } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   
-  // ✅ CAMBIO 1: Leer vista guardada al cargar
-  const [currentView, setCurrentView] = useState<View>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("currentView");
-      return (saved as View) || "home";
-    }
-    return "home";
-  });
+  // ✅ Leer vista de la URL
+  const currentView = (searchParams.get("view") as View) || "home";
   
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showProxyPanel, setShowProxyPanel] = useState(false);
@@ -39,17 +37,20 @@ function HomeContent() {
         return;
       }
     }
-    setCurrentView(newView);
-    // ✅ CAMBIO 2: Guardar vista cuando cambia
-    localStorage.setItem("currentView", newView);
+    
+    // ✅ Cambiar URL (sin recargar página)
+    if (newView === "home") {
+      router.push("/");
+    } else {
+      router.push(`/?view=${newView}`);
+    }
+    
     setShowAdminLogin(false);
   };
 
   const handleLoginSuccess = () => {
     setShowAdminLogin(false);
-    setCurrentView("admin");
-    // ✅ CAMBIO 3: Guardar vista admin
-    localStorage.setItem("currentView", "admin");
+    router.push("/?view=admin");
   };
 
   return (
@@ -183,7 +184,7 @@ function HomeContent() {
           <ProtectedRoute requireAdmin={true}>
             <UnifiedAdmin 
               isOpen={true}
-              onClose={() => setCurrentView("home")}
+              onClose={() => router.push("/")}
             />
           </ProtectedRoute>
         )}
