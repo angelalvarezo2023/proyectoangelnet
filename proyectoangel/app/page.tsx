@@ -6,8 +6,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
-import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 Import ProxyPanel
-// import { ChatGrupal } from "@/components/chat-grupal"; // 🆕 Import Chat - COMENTADO TEMPORALMENTE
+import { ProxyPanel } from "@/components/proxy-panel";
+import { ChatGrupal } from "@/components/chat-grupal";
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -175,26 +175,8 @@ function HomeContent() {
 
         {/* Chat View - PÚBLICO */}
         {currentView === "chat" && (
-          <div className="space-y-6">
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent text-white text-4xl mb-6">
-                💬
-              </div>
-              <h2 className="text-3xl font-bold text-foreground mb-4">Chat Grupal</h2>
-              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                Sistema de chat para escorts y telefonistas
-              </p>
-              {/* <ChatGrupal /> - COMENTADO TEMPORALMENTE */}
-              <div className="max-w-md mx-auto p-6 bg-card border border-border rounded-xl">
-                <p className="text-muted-foreground text-sm">
-                  📌 <strong>Para activar el chat:</strong><br/>
-                  1. Descarga: <code className="bg-secondary px-2 py-1 rounded">chat-FINAL-CON-BADGES-ROL.tsx</code><br/>
-                  2. Renómbralo a: <code className="bg-secondary px-2 py-1 rounded">chat-grupal.tsx</code><br/>
-                  3. Colócalo en: <code className="bg-secondary px-2 py-1 rounded">src/components/chat-grupal.tsx</code><br/>
-                  4. Descomenta las líneas en page.tsx
-                </p>
-              </div>
-            </div>
+          <div className="h-full">
+            <ChatGrupal />
           </div>
         )}
 
