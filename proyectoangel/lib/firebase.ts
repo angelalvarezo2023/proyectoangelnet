@@ -10,6 +10,7 @@ import {
 } from "firebase/database";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage"; // ← 📌 LÍNEA 1 NUEVA
 
 const firebaseConfig = {
   apiKey: "AIzaSyABwJCZpBeCXu0-X16HpKnHoJXL4tVjTAY",
@@ -26,9 +27,10 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const database: Database = getDatabase(app);
 
-// 🔥 EXPORTAR AUTH Y FIRESTORE
+// 🔥 EXPORTAR AUTH, FIRESTORE Y STORAGE
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 export interface RentalRemaining {
   days: number;
