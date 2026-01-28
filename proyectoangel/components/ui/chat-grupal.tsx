@@ -5,12 +5,44 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-// ══════════════════════════════════════════════════════════════════════════
-// TIPOS Y CONFIGURACIÓN
-// ══════════════════════════════════════════════════════════════════════════
-
 type UserRole = "escort" | "telefonista" | "admin";
 type EscortStatus = "disponible" | "ocupada";
+type ThemeName = "scarface" | "elpatron";
+
+interface ChatTheme {
+  name: string;
+  icon: string;
+  bgImage: string;
+  primary: string;
+  secondary: string;
+  text: string;
+  accent: string;
+  cardBg: string;
+}
+
+// 🎬 TEMAS CON IMÁGENES LOCALES
+const THEMES: Record<ThemeName, ChatTheme> = {
+  scarface: {
+    name: "SCARFACE",
+    icon: "🎬",
+    bgImage: "/temas/scarface.png",
+    primary: "from-amber-600 to-yellow-700",
+    secondary: "from-gray-900 to-black",
+    text: "text-amber-400",
+    accent: "bg-amber-500",
+    cardBg: "bg-black/85",
+  },
+  elpatron: {
+    name: "EL PATRÓN",
+    icon: "💎",
+    bgImage: "/temas/elpatron.png",
+    primary: "from-yellow-500 to-amber-600",
+    secondary: "from-orange-600 to-red-700",
+    text: "text-yellow-400",
+    accent: "bg-yellow-500",
+    cardBg: "bg-black/90",
+  },
+};
 
 interface Message {
   id: string;
@@ -47,6 +79,7 @@ interface RoomSettings {
   turnsEnabled: boolean;
   soundEnabled: boolean;
   notificationsEnabled: boolean;
+  theme: ThemeName;
 }
 
 interface RoomData {
@@ -72,44 +105,19 @@ const BADGES = {
   bronze: { name: "Bronce", icon: "🥉", requirement: 25 },
 };
 
-// ══════════════════════════════════════════════════════════════════════════
-// DETECCIÓN DE CONTENIDO PROHIBIDO
-// ══════════════════════════════════════════════════════════════════════════
-
 const detectProhibitedContent = (text: string): { isProhibited: boolean; reason: string } => {
   const lowerText = text.toLowerCase();
   const cleanText = text.replace(/[\s\-_.()]/g, "");
-  
-  const phonePatterns = [
-    /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
-    /\b\d{10,11}\b/g,
-    /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g,
-    /\+\d{1,3}[\s-]?\d{3}[\s-]?\d{3}[\s-]?\d{4}/g,
-  ];
-  
-  for (const pattern of phonePatterns) {
-    if (pattern.test(text)) return { isProhibited: true, reason: "números de teléfono" };
-  }
-  
+  const phonePatterns = [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, /\b\d{10,11}\b/g, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, /\+\d{1,3}[\s-]?\d{3}[\s-]?\d{3}[-.\s]?\d{4}/g];
+  for (const pattern of phonePatterns) { if (pattern.test(text)) return { isProhibited: true, reason: "números de teléfono" }; }
   const urlPatterns = [/https?:\/\//gi, /www\./gi, /\b\w+\.(com|net|org|edu|gov|io|co|me|info)\b/gi];
-  for (const pattern of urlPatterns) {
-    if (pattern.test(text)) return { isProhibited: true, reason: "links o URLs" };
-  }
-  
+  for (const pattern of urlPatterns) { if (pattern.test(text)) return { isProhibited: true, reason: "links o URLs" }; }
   const socialPatterns = [/\bwhatsapp\b|\bwpp\b/gi, /\binstagram\b|\binsta\b/gi, /\bfacebook\b|\bface\b/gi, /\btelegram\b/gi];
-  for (const pattern of socialPatterns) {
-    if (pattern.test(lowerText)) return { isProhibited: true, reason: "redes sociales" };
-  }
-  
+  for (const pattern of socialPatterns) { if (pattern.test(lowerText)) return { isProhibited: true, reason: "redes sociales" }; }
   const longNumbers = cleanText.match(/\d{7,}/g);
   if (longNumbers) return { isProhibited: true, reason: "números de teléfono" };
-  
   return { isProhibited: false, reason: "" };
 };
-
-// ══════════════════════════════════════════════════════════════════════════
-// COMPONENTE PRINCIPAL
-// ══════════════════════════════════════════════════════════════════════════
 
 export function ChatGrupal() {
   const [step, setStep] = useState<"room-select" | "join" | "chat">("room-select");
@@ -126,6 +134,7 @@ export function ChatGrupal() {
   const [currentUserId, setCurrentUserId] = useState("");
   const [isJoining, setIsJoining] = useState(false);
   const [processingClient, setProcessingClient] = useState<string | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeName>("scarface");
   const [roomSettings, setRoomSettings] = useState<RoomSettings>({
     maxEscorts: 1,
     maxTelefonistas: 10,
@@ -133,6 +142,7 @@ export function ChatGrupal() {
     turnsEnabled: false,
     soundEnabled: true,
     notificationsEnabled: true,
+    theme: "scarface",
   });
   
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -158,22 +168,26 @@ export function ChatGrupal() {
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  const currentTheme = THEMES[selectedTheme];
+
+  // SCROLL INTELIGENTE - Solo baja si estás al final
+  const scrollToBottom = (force: boolean = false) => {
+    if (!messagesEndRef.current) return;
+    const container = messagesEndRef.current.parentElement;
+    if (!container) return;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 150;
+    if (force || isNearBottom) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    scrollToBottom(false);
   }, [messages]);
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // PERSISTENCIA DE SESIÓN
-  // ══════════════════════════════════════════════════════════════════════════
 
   useEffect(() => {
     if (step === "chat") {
-      const sessionData = { roomCode, userName, userRole, currentUserId, isCreator, timestamp: Date.now() };
-      localStorage.setItem("chatSession", JSON.stringify(sessionData));
+      localStorage.setItem("chatSession", JSON.stringify({ roomCode, userName, userRole, currentUserId, isCreator, timestamp: Date.now() }));
     }
   }, [step, roomCode, userName, userRole, currentUserId, isCreator]);
 
@@ -195,13 +209,8 @@ export function ChatGrupal() {
     }
   }, []);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // NOTIFICACIONES
-  // ══════════════════════════════════════════════════════════════════════════
-
   const playNotification = () => {
     if (!roomSettings.soundEnabled) return;
-    
     const beep = () => {
       try {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -219,13 +228,10 @@ export function ChatGrupal() {
         console.error("Error playing beep:", e);
       }
     };
-    
     beep();
     setTimeout(beep, 250);
     setTimeout(beep, 500);
-    
     if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
-    
     if (roomSettings.notificationsEnabled && typeof Notification !== "undefined") {
       if (Notification.permission === "granted") {
         const notification = new Notification("🔔 NUEVO CLIENTE ABAJO", {
@@ -240,13 +246,8 @@ export function ChatGrupal() {
     }
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // HEARTBEAT Y SINCRONIZACIÓN
-  // ══════════════════════════════════════════════════════════════════════════
-
   useEffect(() => {
     if (step !== "chat" || !roomCode || !currentUserId) return;
-
     const updateHeartbeat = async () => {
       try {
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/lastActive.json`, {
@@ -258,10 +259,8 @@ export function ChatGrupal() {
         console.error("Error updating heartbeat:", error);
       }
     };
-
     updateHeartbeat();
     heartbeatIntervalRef.current = setInterval(updateHeartbeat, 5000);
-
     return () => {
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
     };
@@ -269,29 +268,23 @@ export function ChatGrupal() {
 
   useEffect(() => {
     if (step !== "chat" || !roomCode) return;
-
     const syncChat = async () => {
       try {
         const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
         const data: RoomData | null = await response.json();
-
         if (data) {
           const messagesArray = data.messages 
             ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
             : [];
-          
           if (userRole === "escort" && messagesArray.length > messages.length) {
             const newMsg = messagesArray[messagesArray.length - 1];
             if (newMsg.isClientCode) playNotification();
           }
-          
           setMessages(messagesArray);
-
           if (data.participants) {
             const now = Date.now();
             const activeParticipants: Record<string, Participant> = {};
             let hasInactive = false;
-
             for (const [id, participant] of Object.entries(data.participants)) {
               if (now - participant.lastActive < 30000) {
                 activeParticipants[id] = participant;
@@ -299,7 +292,6 @@ export function ChatGrupal() {
                 hasInactive = true;
               }
             }
-
             if (hasInactive) {
               await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants.json`, {
                 method: "PUT",
@@ -307,9 +299,7 @@ export function ChatGrupal() {
                 body: JSON.stringify(activeParticipants),
               });
             }
-
             setParticipants(Object.values(activeParticipants));
-            
             const myData = activeParticipants[currentUserId];
             if (myData) {
               setMyViolations(myData.violations || 0);
@@ -317,19 +307,19 @@ export function ChatGrupal() {
               setMyBadges(myData.badges || []);
             }
           }
-
           if (data.escortStatus) setEscortStatus(data.escortStatus);
           if (data.waitingClients) setWaitingClients(data.waitingClients);
-          if (data.settings) setRoomSettings(data.settings);
+          if (data.settings) {
+            setRoomSettings(data.settings);
+            setSelectedTheme(data.settings.theme);
+          }
         }
       } catch (error) {
         console.error("Error syncing chat:", error);
       }
     };
-
     syncChat();
     syncIntervalRef.current = setInterval(syncChat, 2000);
-
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
     };
@@ -341,9 +331,18 @@ export function ChatGrupal() {
     }
   }, [step, userRole]);
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // FUNCIONES DE SALA
-  // ══════════════════════════════════════════════════════════════════════════
+  const changeTheme = async (newTheme: ThemeName) => {
+    setSelectedTheme(newTheme);
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/theme.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTheme),
+      });
+    } catch (error) {
+      console.error("Error changing theme:", error);
+    }
+  };
 
   const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
@@ -368,36 +367,29 @@ export function ChatGrupal() {
       alert("Por favor ingresa tu nombre");
       return;
     }
-
     if (isJoining) return;
     setIsJoining(true);
-
     try {
       const checkResponse = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
       const existingRoom: RoomData | null = await checkResponse.json();
-
       if (existingRoom?.participants) {
         const existingUser = Object.values(existingRoom.participants).find(
           p => p.name.toLowerCase() === userName.trim().toLowerCase()
         );
-        
         if (existingUser) {
           alert("Este nombre ya está en uso. Elige otro.");
           setIsJoining(false);
           return;
         }
-
         if (!isCreator) {
           const currentRoles = Object.values(existingRoom.participants);
           const escortCount = currentRoles.filter(p => p.role === "escort").length;
           const telefonistaCount = currentRoles.filter(p => p.role === "telefonista").length;
-
           if (userRole === "escort" && escortCount >= existingRoom.settings.maxEscorts) {
             alert(`Máximo de escorts alcanzado (${existingRoom.settings.maxEscorts})`);
             setIsJoining(false);
             return;
           }
-
           if (userRole === "telefonista" && telefonistaCount >= existingRoom.settings.maxTelefonistas) {
             alert(`Máximo de telefonistas alcanzado (${existingRoom.settings.maxTelefonistas})`);
             setIsJoining(false);
@@ -405,12 +397,9 @@ export function ChatGrupal() {
           }
         }
       }
-
       const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       setCurrentUserId(userId);
-
       const finalRole: UserRole = isCreator ? "admin" : userRole;
-
       const newParticipant: Participant = {
         id: userId,
         name: userName.trim(),
@@ -424,15 +413,16 @@ export function ChatGrupal() {
         totalRatings: 0,
         badges: [],
       };
-
       const getRoleLabel = (role: UserRole) => {
         switch (role) {
-          case "escort": return "Escort";
-          case "telefonista": return "Telefonista";
-          case "admin": return "Administrador";
+          case "escort":
+            return "Escort";
+          case "telefonista":
+            return "Telefonista";
+          case "admin":
+            return "Administrador";
         }
       };
-
       const welcomeMsg: Message = {
         id: `msg_${Date.now()}`,
         text: `${userName.trim()} se ha unido (${getRoleLabel(finalRole)})`,
@@ -441,7 +431,6 @@ export function ChatGrupal() {
         timestamp: Date.now(),
         isSystem: true,
       };
-
       if (!existingRoom) {
         const initialData: RoomData = {
           messages: { [welcomeMsg.id]: welcomeMsg },
@@ -455,11 +444,11 @@ export function ChatGrupal() {
             turnsEnabled: false,
             soundEnabled: true,
             notificationsEnabled: true,
+            theme: selectedTheme,
           },
           createdAt: Date.now(),
           creatorId: userId,
         };
-
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -471,14 +460,12 @@ export function ChatGrupal() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(newParticipant),
         });
-
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${welcomeMsg.id}.json`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(welcomeMsg),
         });
       }
-
       if (isCreator) setUserRole("admin");
       setStep("chat");
     } catch (error) {
@@ -488,10 +475,6 @@ export function ChatGrupal() {
       setIsJoining(false);
     }
   };
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // FUNCIONES DE RANKING
-  // ══════════════════════════════════════════════════════════════════════════
 
   const getTopTelefonistas = () => {
     const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -521,27 +504,18 @@ export function ChatGrupal() {
     return earnedBadges;
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // FUNCIONES DE MENSAJERÍA
-  // ══════════════════════════════════════════════════════════════════════════
-
   const registerViolation = async (reason: string) => {
     try {
       const newViolations = myViolations + 1;
-      
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/violations.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newViolations),
       });
-
       setMyViolations(newViolations);
-
       let warningText = `⚠️ ADVERTENCIA: No está permitido enviar ${reason} en el chat.`;
-      
       if (newViolations >= 3) {
         warningText += `\n\n🚨 Has sido advertido ${newViolations} veces. El administrador ha sido notificado.`;
-        
         const adminAlert: Message = {
           id: `msg_${Date.now()}_alert`,
           text: `🚨 ALERTA: ${userName} ha intentado enviar ${reason} (${newViolations} infracciones)`,
@@ -551,14 +525,12 @@ export function ChatGrupal() {
           isSystem: true,
           isWarning: true,
         };
-
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${adminAlert.id}.json`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(adminAlert),
         });
       }
-      
       alert(warningText);
     } catch (error) {
       console.error("Error registering violation:", error);
@@ -568,15 +540,12 @@ export function ChatGrupal() {
   const sendMessage = async (customText?: string) => {
     const text = customText || newMessage.trim();
     if (!text) return;
-
     const { isProhibited, reason } = detectProhibitedContent(text);
-    
     if (isProhibited) {
       await registerViolation(reason);
       setNewMessage("");
       return;
     }
-
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text,
@@ -585,15 +554,14 @@ export function ChatGrupal() {
       timestamp: Date.now(),
       isSystem: false,
     };
-
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
-
       if (!customText) setNewMessage("");
+      setTimeout(() => scrollToBottom(true), 100);
     } catch (error) {
       console.error("Error sending message:", error);
     }
@@ -601,7 +569,6 @@ export function ChatGrupal() {
 
   const sendPrivateMessage = async () => {
     if (!privateMessage.trim() || !privateChatRecipient) return;
-
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text: privateMessage.trim(),
@@ -612,14 +579,12 @@ export function ChatGrupal() {
       isPrivate: true,
       recipientId: privateChatRecipient,
     };
-
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
-
       setPrivateMessage("");
       setShowPrivateChat(false);
       alert("Mensaje privado enviado");
@@ -633,7 +598,6 @@ export function ChatGrupal() {
       alert("El código debe ser 4 dígitos");
       return;
     }
-
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text: `🔔 CLIENTE ABAJO - Terminal: ${clientCode}`,
@@ -644,37 +608,31 @@ export function ChatGrupal() {
       isClientCode: true,
       clientCode: clientCode,
     };
-
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
-
       const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
       const currentWaiting = await response.json() || [];
       const updatedWaiting = [...currentWaiting, clientCode];
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
-
       const newCount = myClientsSent + 1;
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/clientsSent.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCount),
       });
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/lastClientTime.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Date.now()),
       });
-
       const newBadges = calculateBadges(newCount);
       if (newBadges.length > 0) {
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/badges.json`, {
@@ -683,9 +641,9 @@ export function ChatGrupal() {
           body: JSON.stringify(newBadges),
         });
       }
-
       setMyClientsSent(newCount);
       setClientCode("");
+      setTimeout(() => scrollToBottom(true), 100);
     } catch (error) {
       console.error("Error sending client code:", error);
     }
@@ -693,14 +651,12 @@ export function ChatGrupal() {
 
   const toggleEscortStatus = async () => {
     const newStatus: EscortStatus = escortStatus === "disponible" ? "ocupada" : "disponible";
-    
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/escortStatus.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newStatus),
       });
-
       const message: Message = {
         id: `msg_${Date.now()}`,
         text: `🚦 ${userName} ahora está ${newStatus === "ocupada" ? "OCUPADA" : "DISPONIBLE"}`,
@@ -709,13 +665,11 @@ export function ChatGrupal() {
         timestamp: Date.now(),
         isSystem: true,
       };
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
-
       setEscortStatus(newStatus);
     } catch (error) {
       console.error("Error updating status:", error);
@@ -725,18 +679,15 @@ export function ChatGrupal() {
   const markClientAttended = async (code: string, price: number) => {
     if (processingClient === code) return;
     setProcessingClient(code);
-
     try {
       const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
       const currentWaiting = await response.json() || [];
       const updatedWaiting = currentWaiting.filter((c: string) => c !== code);
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
-
       const message: Message = {
         id: `msg_${Date.now()}`,
         text: `✅ Cliente ${code} atendido por ${userName} - PAGÓ $${price}`,
@@ -745,13 +696,11 @@ export function ChatGrupal() {
         timestamp: Date.now(),
         isSystem: true,
       };
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
-
       setSelectedClientForPrice(null);
     } catch (error) {
       console.error("Error marking client:", error);
@@ -762,29 +711,23 @@ export function ChatGrupal() {
 
   const rateTelefonista = async () => {
     if (!selectedTelefonistaToRate || rating < 1 || rating > 5) return;
-
     try {
       const telefonistaData = participants.find(p => p.id === selectedTelefonistaToRate);
       if (!telefonistaData) return;
-
       const currentRating = telefonistaData.rating || 0;
       const currentTotal = telefonistaData.totalRatings || 0;
-      
       const newTotal = currentTotal + 1;
       const newRating = ((currentRating * currentTotal) + rating) / newTotal;
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${selectedTelefonistaToRate}/rating.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newRating),
       });
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${selectedTelefonistaToRate}/totalRatings.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newTotal),
       });
-
       setShowRatingModal(false);
       setSelectedTelefonistaToRate(null);
       setRating(5);
@@ -798,36 +741,31 @@ export function ChatGrupal() {
     const maxEscorts = parseInt(editingSettings.maxEscorts);
     const maxTelefonistas = parseInt(editingSettings.maxTelefonistas);
     const newPrices = editingSettings.prices.map(p => parseInt(p)).filter(p => !isNaN(p) && p > 0);
-
     if (isNaN(maxEscorts) || maxEscorts < 1 || maxEscorts > 10) {
       alert("Escorts: 1-10");
       return;
     }
-
     if (isNaN(maxTelefonistas) || maxTelefonistas < 1 || maxTelefonistas > 20) {
       alert("Telefonistas: 1-20");
       return;
     }
-
     if (newPrices.length === 0) {
       alert("Configura al menos un precio");
       return;
     }
-
     const newSettings: RoomSettings = {
       ...roomSettings,
       maxEscorts,
       maxTelefonistas,
       prices: newPrices,
+      theme: selectedTheme,
     };
-
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newSettings),
       });
-
       setRoomSettings(newSettings);
       setShowSettingsModal(false);
       alert("Configuración actualizada");
@@ -840,12 +778,10 @@ export function ChatGrupal() {
   const handleLeaveChat = async () => {
     const confirmLeave = confirm("¿Seguro que quieres salir?");
     if (!confirmLeave) return;
-
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}.json`, {
         method: "DELETE",
       });
-
       const leaveMsg: Message = {
         id: `msg_${Date.now()}`,
         text: `${userName} ha salido del chat`,
@@ -854,7 +790,6 @@ export function ChatGrupal() {
         timestamp: Date.now(),
         isSystem: true,
       };
-
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${leaveMsg.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -863,7 +798,6 @@ export function ChatGrupal() {
     } catch (error) {
       console.error("Error leaving chat:", error);
     }
-
     localStorage.removeItem("chatSession");
     setStep("room-select");
     setRoomCode("");
@@ -872,53 +806,58 @@ export function ChatGrupal() {
     setParticipants([]);
   };
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RENDERIZADO - SELECCIÓN DE SALA
-  // ══════════════════════════════════════════════════════════════════════════
+  const escorts = participants.filter(p => p.role === "escort");
+  const telefonistas = participants.filter(p => p.role === "telefonista");
+  const topTelefonistas = getTopTelefonistas();
 
+  // RENDERIZADO
   if (step === "room-select") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-green-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-3xl border-2 border-orange-200 bg-white shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6 text-center">
-            <h1 className="text-4xl font-bold text-white mb-2">MegaPersonals</h1>
-            <p className="text-orange-100 text-sm">Sistema de Gestión</p>
+      <div 
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ 
+          backgroundImage: `url(${currentTheme.bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        <div className={`relative w-full max-w-md rounded-3xl border-2 ${currentTheme.cardBg} backdrop-blur-md shadow-2xl overflow-hidden border-amber-500/50`}>
+          <div className={`bg-gradient-to-r ${currentTheme.primary} p-6 text-center`}>
+            <h1 className="text-4xl font-bold text-white mb-2">{currentTheme.name}</h1>
+            <p className="text-amber-100 text-sm">Sistema de Gestión</p>
           </div>
-
           <div className="p-8 space-y-4">
             <Button
               onClick={handleCreateRoom}
-              className="w-full h-14 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-lg font-bold rounded-xl shadow-lg"
+              className={`w-full h-14 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white text-lg font-bold rounded-xl shadow-lg`}
             >
               ➕ Crear Sala Nueva
             </Button>
-
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t-2 border-gray-200"></div>
+                <div className="w-full border-t-2 border-gray-600"></div>
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500 font-medium">o</span>
+                <span className="px-4 bg-black text-gray-400 font-medium">o</span>
               </div>
             </div>
-
             <div className="space-y-2">
-              <label className="block text-sm font-bold text-gray-700">Código de Sala</label>
+              <label className="block text-sm font-bold text-amber-400">Código de Sala</label>
               <Input
                 type="text"
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
                 onKeyPress={(e) => e.key === "Enter" && handleJoinExistingRoom()}
                 placeholder="ABC123"
-                className="h-12 text-center text-lg tracking-wider uppercase font-bold border-2 border-gray-300 focus:border-orange-500"
+                className="h-12 text-center text-lg tracking-wider uppercase font-bold bg-black/50 border-2 border-amber-500 text-amber-300"
                 maxLength={6}
               />
             </div>
-
             <Button
               onClick={handleJoinExistingRoom}
               disabled={!roomCode.trim()}
-              className="w-full h-12 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold rounded-xl shadow-lg"
+              className={`w-full h-12 bg-gradient-to-r ${currentTheme.secondary} hover:opacity-90 text-white font-bold rounded-xl shadow-lg`}
             >
               🔑 Unirse a Sala
             </Button>
@@ -928,63 +867,62 @@ export function ChatGrupal() {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RENDERIZADO - INGRESO
-  // ══════════════════════════════════════════════════════════════════════════
-
   if (step === "join") {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-green-50 flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-3xl border-2 border-orange-200 bg-white shadow-2xl overflow-hidden">
-          <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-6">
+      <div 
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ 
+          backgroundImage: `url(${currentTheme.bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        <div className={`relative w-full max-w-md rounded-3xl border-2 ${currentTheme.cardBg} backdrop-blur-md shadow-2xl overflow-hidden border-amber-500/50`}>
+          <div className={`bg-gradient-to-r ${currentTheme.primary} p-6`}>
             <button
               onClick={() => setStep("room-select")}
-              className="text-white hover:text-orange-100 transition-colors mb-4"
+              className="text-white hover:opacity-80 transition-colors mb-4"
             >
               ← Volver
             </button>
             <h1 className="text-3xl font-bold text-white text-center">Sala: {roomCode}</h1>
-            {isCreator && (
-              <p className="text-center text-orange-100 text-sm mt-2">👑 Serás el Administrador</p>
-            )}
+            {isCreator && <p className="text-center text-amber-100 text-sm mt-2">👑 Serás el Administrador</p>}
           </div>
-
           <div className="p-8 space-y-6">
             <div>
-              <label className="block text-sm font-bold text-gray-700 mb-2">Tu Nombre</label>
+              <label className="block text-sm font-bold text-amber-400 mb-2">Tu Nombre</label>
               <Input
                 type="text"
                 value={userName}
                 onChange={(e) => setUserName(e.target.value)}
                 placeholder="Ej: Maria"
-                className="h-12 border-2 border-gray-300 focus:border-orange-500"
+                className="h-12 bg-black/50 border-2 border-amber-500 text-amber-300"
               />
             </div>
-
             {!isCreator && (
               <div>
-                <label className="block text-sm font-bold text-gray-700 mb-3">Tu Rol</label>
+                <label className="block text-sm font-bold text-amber-400 mb-3">Tu Rol</label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setUserRole("escort")}
                     className={cn(
                       "h-24 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-2",
                       userRole === "escort"
-                        ? "border-orange-500 bg-orange-50 text-orange-600 shadow-lg scale-105"
-                        : "border-gray-300 bg-white text-gray-600 hover:border-orange-300"
+                        ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-lg scale-105"
+                        : "border-gray-600 bg-black/30 text-gray-400 hover:border-amber-500"
                     )}
                   >
                     <span className="text-3xl">💃</span>
                     <span className="text-sm">Escort</span>
                   </button>
-                  
                   <button
                     onClick={() => setUserRole("telefonista")}
                     className={cn(
                       "h-24 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-2",
                       userRole === "telefonista"
-                        ? "border-green-500 bg-green-50 text-green-600 shadow-lg scale-105"
-                        : "border-gray-300 bg-white text-gray-600 hover:border-green-300"
+                        ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-lg scale-105"
+                        : "border-gray-600 bg-black/30 text-gray-400 hover:border-amber-500"
                     )}
                   >
                     <span className="text-3xl">📞</span>
@@ -993,11 +931,10 @@ export function ChatGrupal() {
                 </div>
               </div>
             )}
-
             <Button
               onClick={handleJoin}
               disabled={!userName.trim() || isJoining}
-              className="w-full h-14 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white text-lg font-bold rounded-xl shadow-lg"
+              className={`w-full h-14 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white text-lg font-bold rounded-xl shadow-lg`}
             >
               {isJoining ? "Uniéndose..." : isCreator ? "Crear Sala" : "Entrar al Chat"}
             </Button>
@@ -1007,43 +944,42 @@ export function ChatGrupal() {
     );
   }
 
-  // ══════════════════════════════════════════════════════════════════════════
-  // RENDERIZADO - CHAT PRINCIPAL
-  // ══════════════════════════════════════════════════════════════════════════
-
-  const escorts = participants.filter(p => p.role === "escort");
-  const telefonistas = participants.filter(p => p.role === "telefonista");
-  const topTelefonistas = getTopTelefonistas();
-
+  // CHAT PRINCIPAL
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-green-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-6xl h-[700px] rounded-2xl border-2 border-orange-200 bg-white shadow-2xl overflow-hidden flex flex-col">
-        {/* HEADER */}
-        <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-4 text-white">
+    <div 
+      className="min-h-screen bg-black flex items-center justify-center p-4"
+      style={{ 
+        backgroundImage: `url(${currentTheme.bgImage})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }}
+    >
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
+      <div className={`relative w-full max-w-6xl h-[700px] rounded-2xl border-2 ${currentTheme.cardBg} backdrop-blur-md shadow-2xl overflow-hidden border-amber-500/50 flex flex-col`}>
+        {/* Header */}
+        <div className={`bg-gradient-to-r ${currentTheme.primary} p-4 text-white`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-2xl">🏢</div>
+              <div className="text-2xl">{currentTheme.icon}</div>
               <div>
                 <h2 className="text-xl font-bold">Sala: {roomCode}</h2>
-                <p className="text-xs text-orange-100">{participants.length} persona{participants.length !== 1 ? "s" : ""}</p>
+                <p className="text-xs text-amber-100">{participants.length} persona{participants.length !== 1 ? "s" : ""}</p>
               </div>
             </div>
-
             <div className="flex items-center gap-2">
               <Button
                 onClick={() => setShowRankingModal(true)}
-                className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-xs px-3 py-1 rounded-lg"
+                className="bg-yellow-500 hover:bg-yellow-600 text-black font-bold text-xs px-3 py-1 rounded-lg"
               >
-                🏆 Ranking
+                🏆
               </Button>
-
               {userRole === "admin" && (
                 <>
                   <Button
                     onClick={() => setShowStatsModal(true)}
                     className="bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs px-3 py-1 rounded-lg"
                   >
-                    📊 Stats
+                    📊
                   </Button>
                   <Button
                     onClick={() => {
@@ -1056,23 +992,23 @@ export function ChatGrupal() {
                     }}
                     className="bg-purple-500 hover:bg-purple-600 text-white font-bold text-xs px-3 py-1 rounded-lg"
                   >
-                    ⚙️ Config
+                    ⚙️
                   </Button>
                 </>
               )}
-
               <div className="text-right">
                 <p className="text-sm font-bold">{userName}</p>
-                <p className="text-xs text-orange-100">
-                  {userRole === "telefonista" && `📞 ${myClientsSent} clientes`}
-                  {userRole === "escort" && "💃 Escort"}
-                  {userRole === "admin" && "👑 Admin"}
+                <p className="text-xs text-amber-100">
+                  {userRole === "telefonista" && `📞 ${myClientsSent}`}
+                  {userRole === "escort" && "💃"}
+                  {userRole === "admin" && "👑"}
                 </p>
                 {myBadges.length > 0 && (
-                  <p className="text-xs">{myBadges.map(badge => BADGES[badge as keyof typeof BADGES].icon).join(" ")}</p>
+                  <p className="text-xs">
+                    {myBadges.map(badge => BADGES[badge as keyof typeof BADGES].icon).join(" ")}
+                  </p>
                 )}
               </div>
-              
               <Button
                 onClick={handleLeaveChat}
                 className="bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 py-2"
@@ -1083,33 +1019,42 @@ export function ChatGrupal() {
           </div>
         </div>
 
-        {/* BANNER SEGURIDAD */}
-        <div className="bg-red-50 border-b-2 border-red-200 p-2 text-center">
-          <p className="text-xs text-red-600 font-medium">
+        {/* Barra de advertencia */}
+        <div className="bg-red-900/80 border-b-2 border-red-600 p-2 text-center">
+          <p className="text-xs text-red-200 font-medium">
             🚫 Prohibido compartir números, links o redes sociales
           </p>
         </div>
 
-        {/* ESTADO ESCORTS */}
+        {/* Estado Escorts */}
         {escorts.map(escort => (
           <div
             key={escort.id}
             className={cn(
               "flex items-center justify-between p-3 border-b-2",
-              escortStatus === "disponible" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
+              escortStatus === "disponible" ? "bg-green-900/30 border-green-600" : "bg-red-900/30 border-red-600"
             )}
           >
             <div className="flex items-center gap-2">
-              <div className={cn("w-3 h-3 rounded-full", escortStatus === "disponible" ? "bg-green-500 animate-pulse" : "bg-red-500")}></div>
-              <span className="font-bold text-sm">
+              <div
+                className={cn(
+                  "w-3 h-3 rounded-full",
+                  escortStatus === "disponible" ? "bg-green-500 animate-pulse" : "bg-red-500"
+                )}
+              ></div>
+              <span className="font-bold text-sm text-white">
                 {escort.name} {escortStatus === "disponible" ? "DISPONIBLE 🟢" : "OCUPADA 🔴"}
               </span>
             </div>
-
             {userRole === "escort" && escort.id === currentUserId && (
               <Button
                 onClick={toggleEscortStatus}
-                className={cn("h-8 text-sm font-bold rounded-lg", escortStatus === "disponible" ? "bg-red-500 hover:bg-red-600" : "bg-green-500 hover:bg-green-600")}
+                className={cn(
+                  "h-8 text-sm font-bold rounded-lg",
+                  escortStatus === "disponible"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-500 hover:bg-green-600"
+                )}
               >
                 {escortStatus === "disponible" ? "Marcar Ocupada" : "Marcar Disponible"}
               </Button>
@@ -1117,23 +1062,28 @@ export function ChatGrupal() {
           </div>
         ))}
 
-        {/* COLA */}
+        {/* Clientes en espera */}
         {waitingClients.length > 0 && (
-          <div className="p-4 bg-yellow-50 border-b-2 border-yellow-200">
-            <p className="text-sm font-bold text-yellow-700 mb-2">
+          <div className="p-4 bg-yellow-900/30 border-b-2 border-yellow-600">
+            <p className="text-sm font-bold text-yellow-300 mb-2">
               ⏳ {waitingClients.length} Cliente{waitingClients.length !== 1 ? "s" : ""} en Espera
             </p>
             <div className="space-y-2">
               {waitingClients.map((code, index) => (
-                <div key={index} className="flex items-center justify-between gap-3 bg-white p-3 rounded-lg border-2 border-yellow-300">
-                  <span className="font-mono font-bold text-2xl text-gray-800">{code}</span>
+                <div
+                  key={index}
+                  className="flex items-center justify-between gap-3 bg-black/50 p-3 rounded-lg border-2 border-yellow-600"
+                >
+                  <span className="font-mono font-bold text-2xl text-yellow-300">{code}</span>
                   {userRole === "escort" && (
                     <button
                       onClick={() => setSelectedClientForPrice(code)}
                       disabled={processingClient === code}
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all",
-                        processingClient === code ? "bg-gray-300 cursor-not-allowed" : "bg-green-500 hover:bg-green-600 text-white shadow-lg hover:scale-105"
+                        processingClient === code
+                          ? "bg-gray-600 cursor-not-allowed"
+                          : "bg-green-500 hover:bg-green-600 text-white shadow-lg hover:scale-105"
                       )}
                     >
                       <span>✓</span>
@@ -1146,12 +1096,11 @@ export function ChatGrupal() {
           </div>
         )}
 
-        {/* MENSAJES */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
+        {/* Mensajes */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-black/40">
           {messages.map((msg) => {
             const isForMe = msg.recipientId === currentUserId || msg.senderId === currentUserId;
             if (msg.isPrivate && !isForMe && userRole !== "admin") return null;
-
             return (
               <div
                 key={msg.id}
@@ -1162,15 +1111,15 @@ export function ChatGrupal() {
                     "max-w-[70%] rounded-2xl px-4 py-2 shadow",
                     msg.isSystem
                       ? msg.isWarning
-                        ? "bg-red-100 text-red-700 border-2 border-red-300 w-full max-w-none text-center font-bold"
-                        : "bg-gray-100 text-gray-600 w-full max-w-none text-center text-sm italic"
+                        ? "bg-red-900/80 text-red-200 border-2 border-red-600 w-full max-w-none text-center font-bold"
+                        : "bg-gray-800/80 text-gray-300 w-full max-w-none text-center text-sm italic"
                       : msg.isClientCode
-                      ? "bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold border-2 border-orange-300 animate-pulse"
+                      ? "bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold border-2 border-orange-400 animate-pulse"
                       : msg.isPrivate
-                      ? "bg-purple-100 text-purple-800 border-2 border-purple-300"
+                      ? "bg-purple-900/80 text-purple-200 border-2 border-purple-500"
                       : msg.sender === userName
-                      ? "bg-gradient-to-r from-orange-500 to-orange-600 text-white"
-                      : "bg-white text-gray-800 border-2 border-gray-200"
+                      ? `bg-gradient-to-r ${currentTheme.primary} text-white`
+                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600"
                   )}
                 >
                   {!msg.isSystem && (
@@ -1190,8 +1139,8 @@ export function ChatGrupal() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* INPUT */}
-        <div className="border-t-2 border-gray-200 p-4 bg-white space-y-3">
+        {/* Input de mensajes */}
+        <div className={`border-t-2 border-gray-700 p-4 ${currentTheme.cardBg} space-y-3`}>
           {userRole === "telefonista" && (
             <div className="flex gap-2">
               <Input
@@ -1200,31 +1149,29 @@ export function ChatGrupal() {
                 onChange={(e) => setClientCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
                 onKeyPress={(e) => e.key === "Enter" && sendClientCode()}
                 placeholder="4 dígitos"
-                className="flex-1 h-12 text-center text-lg font-mono font-bold border-2 border-gray-300"
+                className="flex-1 h-12 text-center text-lg font-mono font-bold bg-black/50 border-2 border-amber-500 text-amber-300"
                 maxLength={4}
               />
               <Button
                 onClick={sendClientCode}
                 disabled={clientCode.length !== 4}
-                className="h-12 px-6 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white font-bold rounded-lg shadow-lg"
+                className={`h-12 px-6 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white font-bold rounded-lg shadow-lg`}
               >
                 📞 Enviar
               </Button>
             </div>
           )}
-
           <div className="flex flex-wrap gap-2">
             {QUICK_MESSAGES[userRole === "escort" ? "escort" : "telefonista"].map((msg, index) => (
               <button
                 key={index}
                 onClick={() => sendMessage(msg)}
-                className="px-3 py-1.5 text-xs font-medium bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg border border-gray-300"
+                className="px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-lg border border-gray-600"
               >
                 {msg}
               </button>
             ))}
           </div>
-
           <div className="flex gap-2">
             <Input
               type="text"
@@ -1232,12 +1179,12 @@ export function ChatGrupal() {
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && sendMessage()}
               placeholder="Mensaje..."
-              className="flex-1 h-10 border-2 border-gray-300"
+              className="flex-1 h-10 bg-black/50 border-2 border-gray-600 text-gray-200"
             />
             <Button
               onClick={() => sendMessage()}
               disabled={!newMessage.trim()}
-              className="h-10 px-4 bg-orange-500 hover:bg-orange-600 text-white rounded-lg"
+              className={`h-10 px-4 ${currentTheme.accent} hover:opacity-90 text-white rounded-lg`}
             >
               📤
             </Button>
@@ -1245,152 +1192,181 @@ export function ChatGrupal() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* MODAL RANKING */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-
       {showRankingModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-orange-600">🏆 Ranking Semanal</h3>
-              <button onClick={() => setShowRankingModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+              <h3 className="text-2xl font-bold text-amber-400">🏆 TOP 3 TELEFONISTAS</h3>
+              <button
+                onClick={() => setShowRankingModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
             </div>
-
+            <p className="text-sm text-gray-400 mb-6">Últimos 7 días</p>
             <div className="space-y-4">
-              {topTelefonistas.length === 0 ? (
-                <p className="text-center text-gray-500 py-8">No hay telefonistas en el ranking</p>
-              ) : (
-                topTelefonistas.map((tel, index) => {
-                  const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
-                  const bgColor = index === 0 ? "bg-yellow-50 border-yellow-300" : index === 1 ? "bg-gray-50 border-gray-300" : "bg-orange-50 border-orange-300";
-                  
-                  return (
-                    <div key={tel.id} className={cn("flex items-center justify-between p-4 rounded-xl border-2", bgColor)}>
-                      <div className="flex items-center gap-3">
-                        <span className="text-4xl">{medal}</span>
-                        <div>
-                          <p className="font-bold text-lg">{tel.name}</p>
-                          <div className="flex items-center gap-2 text-sm text-gray-600">
-                            <span>📞 {tel.clientsSent} clientes</span>
-                            {tel.rating && tel.rating > 0 && <span>⭐ {tel.rating.toFixed(1)}</span>}
-                          </div>
-                          {tel.badges && tel.badges.length > 0 && (
-                            <div className="flex gap-1 mt-1">
-                              {tel.badges.map(badge => (
-                                <span key={badge} className="text-lg">{BADGES[badge as keyof typeof BADGES].icon}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+              {topTelefonistas.map((tel, index) => {
+                const badges = calculateBadges(tel.clientsSent);
+                return (
+                  <div
+                    key={tel.id}
+                    className={cn(
+                      "p-4 rounded-xl border-2 flex items-center justify-between",
+                      index === 0 && "bg-yellow-900/20 border-yellow-500",
+                      index === 1 && "bg-gray-700/20 border-gray-400",
+                      index === 2 && "bg-orange-900/20 border-orange-600"
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="text-4xl">
+                        {index === 0 && "🥇"}
+                        {index === 1 && "🥈"}
+                        {index === 2 && "🥉"}
                       </div>
-                      
-                      {userRole === "escort" && (
-                        <Button
-                          onClick={() => {
-                            setSelectedTelefonistaToRate(tel.id);
-                            setShowRankingModal(false);
-                            setShowRatingModal(true);
-                          }}
-                          className="bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1 rounded-lg"
-                        >
-                          ⭐ Calificar
-                        </Button>
+                      <div>
+                        <p className="font-bold text-lg text-white">{tel.name}</p>
+                        <p className="text-sm text-gray-400">
+                          {tel.clientsSent} cliente{tel.clientsSent !== 1 ? "s" : ""}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Último: {getTimeSinceLastClient(tel.lastClientTime)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      {badges.length > 0 && (
+                        <div className="flex gap-1">
+                          {badges.map(badge => (
+                            <span key={badge} className="text-2xl">
+                              {BADGES[badge as keyof typeof BADGES].icon}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {tel.rating && tel.rating > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-yellow-500">★</span>
+                          <span className="text-sm font-bold text-white">
+                            {tel.rating.toFixed(1)}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            ({tel.totalRatings})
+                          </span>
+                        </div>
                       )}
                     </div>
-                  );
-                })
+                  </div>
+                );
+              })}
+              {topTelefonistas.length === 0 && (
+                <p className="text-center text-gray-500 py-8">
+                  No hay datos suficientes para mostrar ranking
+                </p>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* MODAL ESTADÍSTICAS */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-
       {showStatsModal && userRole === "admin" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-4xl bg-white rounded-2xl shadow-2xl border-2 border-blue-300 p-6 max-h-[80vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-4xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-2xl font-bold text-blue-600">📊 Panel Admin</h3>
-              <button onClick={() => setShowStatsModal(false)} className="text-gray-500 hover:text-gray-700">✕</button>
+              <h3 className="text-2xl font-bold text-amber-400">📊 Panel de Administración</h3>
+              <button
+                onClick={() => setShowStatsModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
             </div>
 
+            {/* Estadísticas generales */}
             <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-orange-50 p-4 rounded-xl border-2 border-orange-200">
-                <p className="text-xs text-orange-600 font-medium mb-1">Total Clientes</p>
-                <p className="text-3xl font-bold text-orange-600">
-                  {participants.reduce((sum, p) => sum + (p.clientsSent || 0), 0)}
+              <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-600">
+                <p className="text-xs text-blue-300 mb-1">Total Participantes</p>
+                <p className="text-2xl font-bold text-white">{participants.length}</p>
+              </div>
+              <div className="bg-green-900/30 p-4 rounded-lg border border-green-600">
+                <p className="text-xs text-green-300 mb-1">Clientes Totales</p>
+                <p className="text-2xl font-bold text-white">
+                  {participants.reduce((sum, p) => sum + p.clientsSent, 0)}
                 </p>
               </div>
-              
-              <div className="bg-green-50 p-4 rounded-xl border-2 border-green-200">
-                <p className="text-xs text-green-600 font-medium mb-1">Telefonistas</p>
-                <p className="text-3xl font-bold text-green-600">{telefonistas.length}</p>
-              </div>
-              
-              <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-200">
-                <p className="text-xs text-blue-600 font-medium mb-1">Escorts</p>
-                <p className="text-3xl font-bold text-blue-600">{escorts.length}</p>
+              <div className="bg-yellow-900/30 p-4 rounded-lg border border-yellow-600">
+                <p className="text-xs text-yellow-300 mb-1">En Espera</p>
+                <p className="text-2xl font-bold text-white">{waitingClients.length}</p>
               </div>
             </div>
 
+            {/* Telefonistas */}
             <div className="mb-6">
-              <h4 className="text-lg font-bold text-gray-700 mb-3">📞 Telefonistas</h4>
+              <h4 className="text-lg font-bold text-amber-400 mb-3">
+                📞 Telefonistas ({telefonistas.length})
+              </h4>
               <div className="space-y-2">
                 {telefonistas.map(tel => (
-                  <div key={tel.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="flex-1">
-                      <p className="font-bold">{tel.name}</p>
-                      <p className="text-xs text-gray-600">
-                        {tel.clientsSent} clientes
-                        {tel.badges && tel.badges.length > 0 && (
-                          <span className="ml-2">{tel.badges.map(badge => BADGES[badge as keyof typeof BADGES].icon).join(" ")}</span>
-                        )}
+                  <div
+                    key={tel.id}
+                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-600"
+                  >
+                    <div>
+                      <p className="font-bold text-white">{tel.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {tel.clientsSent} cliente{tel.clientsSent !== 1 ? "s" : ""} • 
+                        {tel.violations > 0 && ` ${tel.violations} violación${tel.violations !== 1 ? "es" : ""}`}
                       </p>
                     </div>
-                    
-                    <div className="text-right mr-3">
-                      <p className="text-sm text-gray-600">Último cliente:</p>
-                      <p className="text-xs font-medium text-orange-600">{getTimeSinceLastClient(tel.lastClientTime)}</p>
+                    <div className="flex items-center gap-2">
+                      {tel.rating && tel.rating > 0 && (
+                        <div className="flex items-center gap-1 bg-yellow-900/30 px-2 py-1 rounded">
+                          <span className="text-yellow-500 text-xs">★</span>
+                          <span className="text-sm font-bold text-white">{tel.rating.toFixed(1)}</span>
+                        </div>
+                      )}
+                      <Button
+                        onClick={() => {
+                          setPrivateChatRecipient(tel.id);
+                          setShowPrivateChat(true);
+                          setShowStatsModal(false);
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded"
+                      >
+                        💬
+                      </Button>
                     </div>
-
-                    <Button
-                      onClick={() => {
-                        setPrivateChatRecipient(tel.id);
-                        setShowStatsModal(false);
-                        setShowPrivateChat(true);
-                      }}
-                      className="bg-purple-500 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded-lg"
-                    >
-                      💬
-                    </Button>
                   </div>
                 ))}
               </div>
             </div>
 
+            {/* Escorts */}
             <div>
-              <h4 className="text-lg font-bold text-gray-700 mb-3">💃 Escorts</h4>
+              <h4 className="text-lg font-bold text-amber-400 mb-3">
+                💃 Escorts ({escorts.length})
+              </h4>
               <div className="space-y-2">
                 {escorts.map(esc => (
-                  <div key={esc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div
+                    key={esc.id}
+                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-600"
+                  >
                     <div>
-                      <p className="font-bold">{esc.name}</p>
-                      <p className="text-xs text-gray-600">
-                        {escortStatus === "disponible" ? "🟢 Disponible" : "🔴 Ocupada"}
+                      <p className="font-bold text-white">{esc.name}</p>
+                      <p className="text-xs text-gray-400">
+                        Estado: {escortStatus === "disponible" ? "🟢 Disponible" : "🔴 Ocupada"}
                       </p>
                     </div>
-
                     <Button
                       onClick={() => {
                         setPrivateChatRecipient(esc.id);
-                        setShowStatsModal(false);
                         setShowPrivateChat(true);
+                        setShowStatsModal(false);
                       }}
-                      className="bg-purple-500 hover:bg-purple-600 text-white text-xs px-3 py-1 rounded-lg"
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded"
                     >
                       💬
                     </Button>
@@ -1402,211 +1378,238 @@ export function ChatGrupal() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* MODAL CALIFICAR */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-
-      {showRatingModal && selectedTelefonistaToRate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border-2 border-orange-300 p-6">
-            <h3 className="text-2xl font-bold text-orange-600 mb-4">⭐ Calificar</h3>
-            
-            <p className="text-gray-600 mb-4">
-              ¿Cómo fue tu experiencia con <span className="font-bold">{participants.find(p => p.id === selectedTelefonistaToRate)?.name}</span>?
-            </p>
-
-            <div className="flex justify-center gap-2 mb-6">
-              {[1, 2, 3, 4, 5].map(star => (
-                <button
-                  key={star}
-                  onClick={() => setRating(star)}
-                  className={cn("text-4xl transition-transform hover:scale-110", star <= rating ? "text-yellow-500" : "text-gray-300")}
-                >
-                  ⭐
-                </button>
-              ))}
+      {/* MODAL CONFIGURACIÓN CON SELECTOR DE TEMA */}
+      {showSettingsModal && userRole === "admin" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-amber-400">⚙️ Configuración de Sala</h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
             </div>
 
-            <div className="flex gap-2">
-              <Button onClick={rateTelefonista} className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-3">
-                Enviar
-              </Button>
+            {/* SELECTOR DE TEMA */}
+            <div className="mb-6">
+              <h4 className="text-lg font-bold text-amber-400 mb-3">🎬 Tema Visual</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {(Object.keys(THEMES) as ThemeName[]).map((themeKey) => {
+                  const theme = THEMES[themeKey];
+                  return (
+                    <button
+                      key={themeKey}
+                      onClick={() => changeTheme(themeKey)}
+                      className={cn(
+                        "relative h-40 rounded-xl border-4 transition-all hover:scale-105 overflow-hidden",
+                        selectedTheme === themeKey
+                          ? "border-yellow-500 shadow-2xl shadow-yellow-500/50 ring-4 ring-yellow-400/50"
+                          : "border-gray-600 hover:border-amber-500"
+                      )}
+                    >
+                      <div
+                        className="absolute inset-0 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${theme.bgImage})` }}
+                      ></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                      
+                      {selectedTheme === themeKey && (
+                        <div className="absolute top-2 right-2 bg-yellow-500 text-black font-bold px-2 py-1 rounded-full text-xs">
+                          ✓ ACTUAL
+                        </div>
+                      )}
+                      
+                      <div className="relative h-full flex flex-col items-center justify-end p-4">
+                        <span className="text-4xl mb-2">{theme.icon}</span>
+                        <p className="font-black text-xl text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,1)' }}>
+                          {theme.name}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Configuración de límites */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Máximo de Escorts
+                </label>
+                <Input
+                  type="number"
+                  value={editingSettings.maxEscorts}
+                  onChange={(e) =>
+                    setEditingSettings({ ...editingSettings, maxEscorts: e.target.value })
+                  }
+                  min="1"
+                  max="10"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Máximo de Telefonistas
+                </label>
+                <Input
+                  type="number"
+                  value={editingSettings.maxTelefonistas}
+                  onChange={(e) =>
+                    setEditingSettings({ ...editingSettings, maxTelefonistas: e.target.value })
+                  }
+                  min="1"
+                  max="20"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Precios (separados por comas)
+                </label>
+                <Input
+                  type="text"
+                  value={editingSettings.prices.join(", ")}
+                  onChange={(e) =>
+                    setEditingSettings({
+                      ...editingSettings,
+                      prices: e.target.value.split(",").map(p => p.trim()),
+                    })
+                  }
+                  placeholder="100, 150, 200"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
               <Button
-                onClick={() => {
-                  setShowRatingModal(false);
-                  setSelectedTelefonistaToRate(null);
-                  setRating(5);
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg py-3"
+                onClick={saveSettings}
+                className={`w-full h-12 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white font-bold rounded-lg`}
               >
-                Cancelar
+                💾 Guardar Configuración
               </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* MODAL CHAT PRIVADO */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* MODAL CALIFICAR TELEFONISTA */}
+      {showRatingModal && selectedTelefonistaToRate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-amber-400">⭐ Calificar Telefonista</h3>
+              <button
+                onClick={() => {
+                  setShowRatingModal(false);
+                  setSelectedTelefonistaToRate(null);
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
 
-      {showPrivateChat && privateChatRecipient && userRole === "admin" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border-2 border-purple-300 p-6">
-            <h3 className="text-2xl font-bold text-purple-600 mb-4">💬 Mensaje Privado</h3>
-            
-            <p className="text-gray-600 mb-4">
+            <div className="text-center mb-6">
+              <p className="text-white font-bold mb-4">
+                {participants.find(p => p.id === selectedTelefonistaToRate)?.name}
+              </p>
+              <div className="flex justify-center gap-2 mb-4">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className={cn(
+                      "text-4xl transition-transform hover:scale-110",
+                      star <= rating ? "text-yellow-500" : "text-gray-600"
+                    )}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              onClick={rateTelefonista}
+              className={`w-full h-12 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white font-bold rounded-lg`}
+            >
+              Enviar Calificación
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHAT PRIVADO */}
+      {showPrivateChat && privateChatRecipient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-purple-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-purple-400">💬 Mensaje Privado</h3>
+              <button
+                onClick={() => {
+                  setShowPrivateChat(false);
+                  setPrivateChatRecipient(null);
+                  setPrivateMessage("");
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-white mb-4">
               Para: <span className="font-bold">{participants.find(p => p.id === privateChatRecipient)?.name}</span>
             </p>
 
             <textarea
               value={privateMessage}
               onChange={(e) => setPrivateMessage(e.target.value)}
-              placeholder="Escribe..."
-              className="w-full h-32 p-3 border-2 border-gray-300 rounded-lg resize-none focus:border-purple-500 outline-none"
+              placeholder="Escribe tu mensaje privado..."
+              className="w-full h-32 p-3 bg-black/50 border-2 border-purple-500 text-white rounded-lg resize-none mb-4"
             />
 
-            <div className="flex gap-2 mt-4">
-              <Button
-                onClick={sendPrivateMessage}
-                disabled={!privateMessage.trim()}
-                className="flex-1 bg-purple-500 hover:bg-purple-600 text-white rounded-lg py-3"
-              >
-                Enviar 📤
-              </Button>
-              <Button
-                onClick={() => {
-                  setShowPrivateChat(false);
-                  setPrivateChatRecipient(null);
-                  setPrivateMessage("");
-                }}
-                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg py-3"
-              >
-                Cancelar
-              </Button>
-            </div>
+            <Button
+              onClick={sendPrivateMessage}
+              disabled={!privateMessage.trim()}
+              className="w-full h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white font-bold rounded-lg"
+            >
+              📤 Enviar Mensaje Privado
+            </Button>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* MODAL CONFIGURACIÓN */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-
-      {showSettingsModal && userRole === "admin" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border-2 border-purple-300 p-6">
-            <h3 className="text-2xl font-bold text-purple-600 mb-4">⚙️ Configuración</h3>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">💃 Máx Escorts</label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={editingSettings.maxEscorts}
-                  onChange={(e) => setEditingSettings({...editingSettings, maxEscorts: e.target.value})}
-                  className="h-10"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">📞 Máx Telefonistas</label>
-                <Input
-                  type="number"
-                  min="1"
-                  max="20"
-                  value={editingSettings.maxTelefonistas}
-                  onChange={(e) => setEditingSettings({...editingSettings, maxTelefonistas: e.target.value})}
-                  className="h-10"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-2">💰 Precios</label>
-                <div className="space-y-2">
-                  {editingSettings.prices.map((price, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        value={price}
-                        onChange={(e) => {
-                          const newPrices = [...editingSettings.prices];
-                          newPrices[index] = e.target.value;
-                          setEditingSettings({...editingSettings, prices: newPrices});
-                        }}
-                        className="flex-1 h-10"
-                      />
-                      {editingSettings.prices.length > 1 && (
-                        <button
-                          onClick={() => setEditingSettings({
-                            ...editingSettings,
-                            prices: editingSettings.prices.filter((_, i) => i !== index)
-                          })}
-                          className="text-red-500"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                  
-                  {editingSettings.prices.length < 5 && (
-                    <Button
-                      onClick={() => setEditingSettings({
-                        ...editingSettings,
-                        prices: [...editingSettings.prices, ""]
-                      })}
-                      className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700"
-                    >
-                      ➕ Precio
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-2 mt-6">
-              <Button onClick={saveSettings} className="flex-1 bg-green-500 hover:bg-green-600 text-white">
-                Guardar
-              </Button>
-              <Button onClick={() => setShowSettingsModal(false)} className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-700">
-                Cancelar
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* MODAL SELECCIONAR PRECIO */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-
       {selectedClientForPrice && userRole === "escort" && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl border-2 border-green-300 p-6">
-            <h3 className="text-2xl font-bold text-green-600 mb-2">Cliente: {selectedClientForPrice}</h3>
-            <p className="text-gray-600 mb-6">Precio que pagó:</p>
-            
-            <div className="space-y-3">
-              {roomSettings.prices.map((price, index) => (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-green-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-green-400">💵 Cliente {selectedClientForPrice}</h3>
+              <button
+                onClick={() => setSelectedClientForPrice(null)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-white mb-4 text-center">Selecciona el precio que pagó:</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {roomSettings.prices.map((price) => (
                 <button
-                  key={index}
+                  key={price}
                   onClick={() => markClientAttended(selectedClientForPrice, price)}
-                  className="w-full h-16 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-bold text-2xl rounded-xl transition-all hover:scale-105 shadow-lg"
+                  className="h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105"
                 >
                   ${price}
                 </button>
               ))}
             </div>
-
-            <Button
-              onClick={() => setSelectedClientForPrice(null)}
-              className="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg py-3"
-            >
-              Cancelar
-            </Button>
           </div>
         </div>
       )}
