@@ -1223,6 +1223,45 @@ export function ChatGrupal() {
           </p>
         </div>
 
+        {/* Contador de Período - VISIBLE PARA TODOS */}
+        <div className="bg-gradient-to-r from-amber-900/50 to-orange-900/50 border-b-2 border-amber-500 px-4 py-3">
+          <div className="max-w-7xl mx-auto flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📊</span>
+                <div>
+                  <p className="text-sm text-gray-300">Clientes Atendidos ({getPeriodLabel()})</p>
+                  <p className="text-2xl font-bold text-amber-300">
+                    {periodSettings.clientsAttended}
+                  </p>
+                </div>
+              </div>
+              
+              <div className="h-10 w-px bg-amber-500/30"></div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⏰</span>
+                <div>
+                  <p className="text-sm text-gray-300">Días Restantes</p>
+                  <p className="text-2xl font-bold text-amber-300">
+                    {getDaysRemaining()}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {userRole === "admin" && (
+              <button
+                onClick={() => setShowPeriodConfig(true)}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+              >
+                <span>⚙️</span>
+                <span className="hidden sm:inline">Configurar Período</span>
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Estado Escorts */}
         {escorts.map(escort => (
           <div
