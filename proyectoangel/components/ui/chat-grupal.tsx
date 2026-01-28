@@ -10,6 +10,129 @@ type UserRole = "escort" | "telefonista" | "admin";
 type EscortStatus = "disponible" | "ocupada";
 type ThemeName = "scarface" | "elpatron";
 
+// Componente de reproductor de audio estilo WhatsApp moderno
+const AudioPlayer = ({ audioUrl }: { audioUrl: string }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const updateTime = () => setCurrentTime(audio.currentTime);
+    const updateDuration = () => setDuration(audio.duration);
+    const handleEnded = () => setIsPlaying(false);
+
+    audio.addEventListener('timeupdate', updateTime);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+
+    return () => {
+      audio.removeEventListener('timeupdate', updateTime);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    audio.currentTime = percentage * duration;
+  };
+
+  const formatTime = (time: number) => {
+    if (isNaN(time)) return "0:00";
+    const minutes = Math.floor(time / 60);
+    const seconds = Math.floor(time % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+  // Generar forma de onda visual (simulada)
+  const waveformBars = Array.from({ length: 40 }, (_, i) => {
+    const height = Math.sin(i * 0.5) * 20 + 25;
+    const isActive = (i / 40) * 100 < progress;
+    return (
+      <div
+        key={i}
+        className={cn(
+          "w-1 rounded-full transition-all duration-150",
+          isActive ? "bg-white" : "bg-white/30"
+        )}
+        style={{ height: `${height}%` }}
+      />
+    );
+  });
+
+  return (
+    <div 
+      className="flex items-center gap-3 p-3 bg-gradient-to-r from-green-600/20 to-emerald-600/20 rounded-xl border border-green-500/30"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <audio ref={audioRef} src={audioUrl} preload="metadata" />
+      
+      {/* Botón Play/Pausa circular verde WhatsApp */}
+      <button
+        onClick={togglePlay}
+        className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 flex items-center justify-center shadow-lg transition-all active:scale-95"
+      >
+        {isPlaying ? (
+          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+          </svg>
+        ) : (
+          <svg className="w-5 h-5 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M8 5v14l11-7z" />
+          </svg>
+        )}
+      </button>
+
+      {/* Área de forma de onda y progreso */}
+      <div className="flex-1 flex flex-col gap-1">
+        {/* Forma de onda */}
+        <div className="flex items-center justify-between h-8 gap-0.5">
+          {waveformBars}
+        </div>
+        
+        {/* Barra de progreso clickeable */}
+        <div
+          className="h-1 bg-white/20 rounded-full cursor-pointer"
+          onClick={handleSeek}
+        >
+          <div
+            className="h-full bg-white rounded-full transition-all"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Tiempo */}
+      <div className="flex-shrink-0 text-xs font-medium text-white/90 min-w-[35px] text-right">
+        {formatTime(duration - currentTime)}
+      </div>
+    </div>
+  );
+};
+
 interface ChatTheme {
   name: string;
   icon: string;
@@ -1972,16 +2095,7 @@ export function ChatGrupal() {
                   {/* ✅ Mostrar AUDIO si existe */}
                   {msg.mediaType === "audio" && msg.mediaUrl && (
                     <div className="mb-2">
-                      <audio
-                        controls
-                        className="w-full max-w-xs"
-                        style={{ height: "40px" }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <source src={msg.mediaUrl} type="audio/webm" />
-                        <source src={msg.mediaUrl} type="audio/mpeg" />
-                        Tu navegador no soporta audio.
-                      </audio>
+                      <AudioPlayer audioUrl={msg.mediaUrl} />
                     </div>
                   )}
                   
