@@ -57,6 +57,11 @@ interface Message {
   isWarning?: boolean;
   isPrivate?: boolean;
   recipientId?: string;
+  replyTo?: {
+    messageId: string;
+    text: string;
+    sender: string;
+  };
 }
 
 interface Participant {
@@ -187,6 +192,7 @@ export function ChatGrupal() {
   const [leftReason, setLeftReason] = useState("");
   const [customLeftReason, setCustomLeftReason] = useState("");
   const [showHistory, setShowHistory] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [myViolations, setMyViolations] = useState(0);
   const [myClientsSent, setMyClientsSent] = useState(0);
   const [myBadges, setMyBadges] = useState<string[]>([]);
@@ -800,6 +806,13 @@ export function ChatGrupal() {
       senderRole: userRole,
       timestamp: Date.now(),
       isSystem: false,
+      ...(replyingTo && {
+        replyTo: {
+          messageId: replyingTo.id,
+          text: replyingTo.text,
+          sender: replyingTo.sender,
+        },
+      }),
     };
     try {
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
@@ -808,6 +821,7 @@ export function ChatGrupal() {
         body: JSON.stringify(message),
       });
       if (!customText) setNewMessage("");
+      setReplyingTo(null); // Limpiar respuesta después de enviar
       setTimeout(() => scrollToBottom(true), 100);
     } catch (error) {
       console.error("Error sending message:", error);
@@ -1515,6 +1529,11 @@ export function ChatGrupal() {
           {messages.map((msg) => {
             const isForMe = msg.recipientId === currentUserId || msg.senderId === currentUserId;
             if (msg.isPrivate && !isForMe && userRole !== "admin") return null;
+            
+            // ✅ Si es mensaje de cliente y soy escort, hacer clickeable con respuesta automática
+            const isClientMessage = msg.isClientCode && userRole === "escort";
+            const canReply = !msg.isSystem; // Todos los mensajes no-sistema pueden ser respondidos
+            
             return (
               <div
                 key={msg.id}
@@ -1528,13 +1547,27 @@ export function ChatGrupal() {
                         ? "bg-red-900/80 text-red-200 border-2 border-red-600 w-full max-w-none text-center font-bold"
                         : "bg-gray-800/80 text-gray-300 w-full max-w-none text-center text-sm italic"
                       : msg.isClientCode
-                      ? "bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold border-2 border-orange-400 animate-pulse"
+                      ? cn(
+                          "bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold border-2 border-orange-400 animate-pulse",
+                          canReply && "cursor-pointer hover:scale-[1.02] transition-transform active:scale-95"
+                        )
                       : msg.isPrivate
                       ? "bg-purple-900/80 text-purple-200 border-2 border-purple-500"
                       : msg.sender === userName
                       ? `bg-gradient-to-r ${currentTheme.primary} text-white`
-                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600"
+                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600",
+                    canReply && !msg.isClientCode && "cursor-pointer hover:opacity-90 transition-opacity"
                   )}
+                  onClick={() => {
+                    if (canReply) {
+                      setReplyingTo(msg);
+                      if (isClientMessage) {
+                        setNewMessage("Manda estare esperandolo");
+                      }
+                      // Hacer scroll hacia abajo para que vea el input
+                      setTimeout(() => scrollToBottom(true), 100);
+                    }
+                  }}
                 >
                   {!msg.isSystem && (
                     <div className="flex items-center gap-2 mb-1">
@@ -1562,6 +1595,15 @@ export function ChatGrupal() {
                       )}
                     </div>
                   )}
+                  
+                  {/* ✅ Mostrar mensaje respondido si existe */}
+                  {msg.replyTo && (
+                    <div className="mb-2 pl-3 border-l-4 border-amber-500 bg-black/30 rounded p-2">
+                      <p className="text-xs font-bold text-amber-400">{msg.replyTo.sender}</p>
+                      <p className="text-xs text-gray-300 line-clamp-2">{msg.replyTo.text}</p>
+                    </div>
+                  )}
+                  
                   <p className="text-sm break-words">{msg.text}</p>
                   <p className="text-xs opacity-70 mt-1">
                     {new Date(msg.timestamp).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
@@ -1576,6 +1618,31 @@ export function ChatGrupal() {
 
         {/* Input de mensajes compacto tipo WhatsApp */}
         <div className="bg-gray-900 px-2 py-2 space-y-2">
+          {/* ✅ Área de respuesta */}
+          {replyingTo && (
+            <div className="bg-gray-800 border-l-4 border-amber-500 rounded-lg p-3 flex items-start justify-between gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-bold text-amber-400 mb-1">
+                  Respondiendo a {replyingTo.sender}
+                </p>
+                <p className="text-sm text-gray-300 truncate">
+                  {replyingTo.text}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setReplyingTo(null);
+                  if (replyingTo.isClientCode && newMessage === "Manda estare esperandolo") {
+                    setNewMessage(""); // Limpiar el mensaje pre-llenado si cancela
+                  }
+                }}
+                className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          
           {userRole === "telefonista" && (
             <div className="flex gap-2">
               <Input
@@ -1601,7 +1668,10 @@ export function ChatGrupal() {
             {QUICK_MESSAGES[userRole === "escort" ? "escort" : "telefonista"].map((msg, index) => (
               <button
                 key={index}
-                onClick={() => sendMessage(msg)}
+                onClick={() => {
+                  sendMessage(msg);
+                  setReplyingTo(null);
+                }}
                 className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-full whitespace-nowrap"
               >
                 {msg}
