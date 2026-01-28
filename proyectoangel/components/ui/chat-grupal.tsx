@@ -581,14 +581,25 @@ export function ChatGrupal() {
             body: JSON.stringify(Date.now()),
           });
           
+          // ✅ Obtener y ordenar mensajes de Firebase
           const messagesArray = data.messages 
-            ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
+            ? Object.values(data.messages)
             : [];
+          
+          // ✅ CRÍTICO: Ordenar SIEMPRE por timestamp (más reciente al final)
+          messagesArray.sort((a, b) => {
+            const timeA = a.timestamp || 0;
+            const timeB = b.timestamp || 0;
+            return timeA - timeB; // Menor timestamp primero (más antiguo arriba)
+          });
+          
           if (userRole === "escort" && messagesArray.length > messages.length) {
             const newMsg = messagesArray[messagesArray.length - 1];
             if (newMsg.isClientCode) playNotification();
           }
+          
           setMessages(messagesArray);
+          
           if (data.participants) {
             const now = Date.now();
             const activeParticipants: Record<string, Participant> = {};
@@ -724,7 +735,7 @@ export function ChatGrupal() {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
       clearInterval(cleanupInterval);
     };
-  }, [step, roomCode, messages.length, userRole, currentUserId]);
+  }, [step, roomCode, userRole, currentUserId]); // ✅ SIN messages.length
 
   useEffect(() => {
     if (step === "chat" && userRole === "escort" && typeof Notification !== "undefined") {
@@ -977,15 +988,15 @@ export function ChatGrupal() {
     };
     
     try {
-      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE con ordenamiento
-      setMessages(prev => [...prev, message].sort((a, b) => a.timestamp - b.timestamp));
-      
-      // Luego guardar en Firebase
+      // Guardar en Firebase PRIMERO
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
+      
+      // ✅ Actualizar localmente SIN ordenar (Firebase sincronizará con orden correcto)
+      setMessages(prev => [...prev, message]);
       
       if (!customText) setNewMessage("");
       setReplyingTo(null);
