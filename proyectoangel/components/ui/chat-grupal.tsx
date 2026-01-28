@@ -863,7 +863,7 @@ export function ChatGrupal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
-      setWaitingClients(updatedWaiting);
+      // ✅ ELIMINADO: setWaitingClients(updatedWaiting) - ahora todos se sincronizan desde Firebase
       
       // Incrementar contador de período
       const newCount = periodSettings.clientsAttended + 1;
