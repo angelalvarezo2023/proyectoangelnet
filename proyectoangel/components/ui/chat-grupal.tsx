@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, listAll } from "firebase/storage";
 
 type UserRole = "escort" | "telefonista" | "admin";
 type EscortStatus = "disponible" | "ocupada";
@@ -62,6 +63,8 @@ interface Message {
     text: string;
     sender: string;
   };
+  mediaUrl?: string;
+  mediaType?: "photo" | "audio";
 }
 
 interface Participant {
@@ -193,6 +196,25 @@ export function ChatGrupal() {
   const [customLeftReason, setCustomLeftReason] = useState("");
   const [showHistory, setShowHistory] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  
+  // Estados para fotos y audio
+  const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [fullscreenPhoto, setFullscreenPhoto] = useState<string | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  
   const [myViolations, setMyViolations] = useState(0);
   const [myClientsSent, setMyClientsSent] = useState(0);
   const [myBadges, setMyBadges] = useState<string[]>([]);
@@ -1169,6 +1191,9 @@ export function ChatGrupal() {
         // Esperar 1 segundo para que todos vean el mensaje
         await new Promise(resolve => setTimeout(resolve, 1000));
         
+        // ✅ ELIMINAR ARCHIVOS DE STORAGE
+        await deleteRoomMedia(roomCode);
+        
         // ELIMINAR TODA LA SALA
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
           method: "DELETE",
@@ -1204,6 +1229,316 @@ export function ChatGrupal() {
     setUserName("");
     setMessages([]);
     setParticipants([]);
+  };
+
+  // ===== FUNCIONES DE FOTOS =====
+  
+  const compressImage = async (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          
+          // Reducir tamaño si es muy grande
+          const MAX_WIDTH = 1920;
+          const MAX_HEIGHT = 1080;
+          
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height = height * (MAX_WIDTH / width);
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width = width * (MAX_HEIGHT / height);
+              height = MAX_HEIGHT;
+            }
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob(
+            (blob) => {
+              resolve(blob || file);
+            },
+            'image/jpeg',
+            0.8 // Calidad 80%
+          );
+        };
+        img.src = e.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handlePhotoSelect = async (file: File) => {
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      alert('Solo se permiten imágenes');
+      return;
+    }
+    
+    // Validar tamaño (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('La imagen es muy grande (máx 5MB)');
+      return;
+    }
+    
+    setSelectedPhoto(file);
+    
+    // Crear preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setPhotoPreview(e.target?.result as string);
+      setShowPhotoModal(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const sendPhoto = async () => {
+    if (!selectedPhoto) return;
+    
+    setUploadingMedia(true);
+    try {
+      // Comprimir imagen
+      const compressedBlob = await compressImage(selectedPhoto);
+      
+      // Crear referencia en Storage
+      const storage = getStorage();
+      const timestamp = Date.now();
+      const filename = `photo_${timestamp}.jpg`;
+      const photoRef = storageRef(storage, `chat-rooms/${roomCode}/${filename}`);
+      
+      // Subir a Firebase Storage
+      await uploadBytes(photoRef, compressedBlob);
+      
+      // Obtener URL pública
+      const photoURL = await getDownloadURL(photoRef);
+      
+      // Crear mensaje con foto
+      const message: Message = {
+        id: `msg_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+        text: newMessage.trim() || "", // Puede tener texto opcional
+        sender: userName,
+        senderId: currentUserId,
+        senderRole: userRole,
+        timestamp,
+        isSystem: false,
+        mediaUrl: photoURL,
+        mediaType: "photo",
+        ...(replyingTo && {
+          replyTo: {
+            messageId: replyingTo.id,
+            text: replyingTo.text,
+            sender: replyingTo.sender,
+          },
+        }),
+      };
+      
+      // Guardar mensaje en Firebase
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      
+      // Limpiar
+      setSelectedPhoto(null);
+      setPhotoPreview(null);
+      setShowPhotoModal(false);
+      setNewMessage("");
+      setReplyingTo(null);
+      
+      setTimeout(() => scrollToBottom(true), 100);
+    } catch (error) {
+      console.error("Error sending photo:", error);
+      alert("Error al enviar la foto");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  // ===== FUNCIONES DE AUDIO =====
+  
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      // Crear visualización de onda
+      const audioContext = new AudioContext();
+      audioContextRef.current = audioContext;
+      const analyser = audioContext.createAnalyser();
+      analyserRef.current = analyser;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyser.fftSize = 256;
+      
+      mediaRecorder.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      // Contador de tiempo
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 60) {
+            stopRecording();
+            return 60;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+      
+      // Vibración de inicio
+      if (navigator.vibrate) navigator.vibrate(50);
+      
+    } catch (error) {
+      console.error("Error starting recording:", error);
+      alert("No se pudo acceder al micrófono. Verifica los permisos.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+      
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+      
+      // Vibración de fin
+      if (navigator.vibrate) navigator.vibrate(50);
+    }
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setAudioBlob(null);
+      audioChunksRef.current = [];
+      
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+      
+      if (audioContextRef.current) {
+        audioContextRef.current.close();
+      }
+    }
+  };
+
+  const sendAudio = async () => {
+    if (!audioBlob) return;
+    
+    setUploadingMedia(true);
+    try {
+      // Crear referencia en Storage
+      const storage = getStorage();
+      const timestamp = Date.now();
+      const filename = `audio_${timestamp}.webm`;
+      const audioRef = storageRef(storage, `chat-rooms/${roomCode}/${filename}`);
+      
+      // Subir a Firebase Storage
+      await uploadBytes(audioRef, audioBlob);
+      
+      // Obtener URL pública
+      const audioURL = await getDownloadURL(audioRef);
+      
+      // Crear mensaje con audio
+      const message: Message = {
+        id: `msg_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
+        text: `🎤 Nota de voz (${recordingTime}s)`,
+        sender: userName,
+        senderId: currentUserId,
+        senderRole: userRole,
+        timestamp,
+        isSystem: false,
+        mediaUrl: audioURL,
+        mediaType: "audio",
+        ...(replyingTo && {
+          replyTo: {
+            messageId: replyingTo.id,
+            text: replyingTo.text,
+            sender: replyingTo.sender,
+          },
+        }),
+      };
+      
+      // Guardar mensaje en Firebase
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      
+      // Limpiar
+      setAudioBlob(null);
+      setRecordingTime(0);
+      setReplyingTo(null);
+      
+      setTimeout(() => scrollToBottom(true), 100);
+    } catch (error) {
+      console.error("Error sending audio:", error);
+      alert("Error al enviar el audio");
+    } finally {
+      setUploadingMedia(false);
+    }
+  };
+
+  // Enviar audio automáticamente cuando se detiene la grabación
+  useEffect(() => {
+    if (audioBlob && !isRecording) {
+      sendAudio();
+    }
+  }, [audioBlob, isRecording]);
+
+  // ===== FUNCIÓN PARA ELIMINAR ARCHIVOS AL CERRAR SALA =====
+  
+  const deleteRoomMedia = async (roomId: string) => {
+    try {
+      const storage = getStorage();
+      const roomFolderRef = storageRef(storage, `chat-rooms/${roomId}`);
+      
+      // Listar todos los archivos
+      const fileList = await listAll(roomFolderRef);
+      
+      // Eliminar cada archivo
+      const deletePromises = fileList.items.map(itemRef => deleteObject(itemRef));
+      await Promise.all(deletePromises);
+      
+      console.log(`✅ Archivos de sala ${roomId} eliminados`);
+    } catch (error) {
+      console.error("Error deleting room media:", error);
+    }
   };
 
   const escorts = participants.filter(p => p.role === "escort");
@@ -1618,7 +1953,39 @@ export function ChatGrupal() {
                     </div>
                   )}
                   
-                  <p className="text-sm break-words">{msg.text}</p>
+                  {/* ✅ Mostrar FOTO si existe */}
+                  {msg.mediaType === "photo" && msg.mediaUrl && (
+                    <div className="mb-2">
+                      <img
+                        src={msg.mediaUrl}
+                        alt="Foto compartida"
+                        className="rounded-lg max-w-full cursor-pointer hover:opacity-90 transition-opacity"
+                        style={{ maxHeight: "300px", objectFit: "cover" }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFullscreenPhoto(msg.mediaUrl!);
+                        }}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* ✅ Mostrar AUDIO si existe */}
+                  {msg.mediaType === "audio" && msg.mediaUrl && (
+                    <div className="mb-2">
+                      <audio
+                        controls
+                        className="w-full max-w-xs"
+                        style={{ height: "40px" }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <source src={msg.mediaUrl} type="audio/webm" />
+                        <source src={msg.mediaUrl} type="audio/mpeg" />
+                        Tu navegador no soporta audio.
+                      </audio>
+                    </div>
+                  )}
+                  
+                  {msg.text && <p className="text-sm break-words">{msg.text}</p>}
                   <p className="text-xs opacity-70 mt-1">
                     {new Date(msg.timestamp).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
                   </p>
@@ -1632,6 +1999,20 @@ export function ChatGrupal() {
 
         {/* Input de mensajes compacto tipo WhatsApp */}
         <div className="bg-gray-900 px-2 py-2 space-y-2">
+          {/* Input oculto para seleccionar fotos */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handlePhotoSelect(file);
+              e.target.value = ""; // Reset input
+            }}
+            className="hidden"
+          />
+          
           {/* ✅ Área de respuesta */}
           {replyingTo && (
             <div className="bg-gray-800 border-l-4 border-amber-500 rounded-lg p-3 flex items-start justify-between gap-3">
@@ -1692,18 +2073,46 @@ export function ChatGrupal() {
               </button>
             ))}
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Botón de Foto */}
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingMedia}
+              className="h-10 w-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              📸
+            </button>
+            
+            {/* Botón de Audio (Presionar y mantener) */}
+            <button
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onMouseLeave={cancelRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              disabled={uploadingMedia || isRecording}
+              className={cn(
+                "h-10 w-10 rounded-full text-white flex items-center justify-center transition-all",
+                isRecording 
+                  ? "bg-red-600 animate-pulse scale-110" 
+                  : "bg-green-600 hover:bg-green-700"
+              )}
+            >
+              {isRecording ? "🔴" : "🎤"}
+            </button>
+            
             <Input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               onKeyPress={(e) => e.key === "Enter" && sendMessage()}
-              placeholder="Mensaje..."
+              placeholder={isRecording ? "Grabando..." : "Mensaje..."}
+              disabled={isRecording || uploadingMedia}
               className="flex-1 h-10 bg-gray-800 border border-gray-700 text-white rounded-full px-4"
             />
             <Button
               onClick={() => sendMessage()}
-              disabled={!newMessage.trim()}
+              disabled={!newMessage.trim() || uploadingMedia}
               className={`h-10 w-10 rounded-full ${currentTheme.accent} text-white flex items-center justify-center`}
             >
               📤
@@ -1711,6 +2120,114 @@ export function ChatGrupal() {
           </div>
         </div>
       </div>
+
+      {/* MODAL DE PREVIEW DE FOTO */}
+      {showPhotoModal && photoPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-blue-500 p-6`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-blue-400">📸 Preview de Foto</h3>
+              <button
+                onClick={() => {
+                  setShowPhotoModal(false);
+                  setSelectedPhoto(null);
+                  setPhotoPreview(null);
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mb-4">
+              <img
+                src={photoPreview}
+                alt="Preview"
+                className="w-full rounded-lg"
+                style={{ maxHeight: "400px", objectFit: "contain" }}
+              />
+            </div>
+
+            <div className="mb-4">
+              <Input
+                type="text"
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Agregar descripción (opcional)..."
+                className="w-full h-10 bg-black/50 border-2 border-blue-500 text-white"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <Button
+                onClick={() => {
+                  setShowPhotoModal(false);
+                  setSelectedPhoto(null);
+                  setPhotoPreview(null);
+                }}
+                className="flex-1 h-12 bg-gray-700 hover:bg-gray-600 text-white font-bold rounded-lg"
+              >
+                ❌ Cancelar
+              </Button>
+              <Button
+                onClick={sendPhoto}
+                disabled={uploadingMedia}
+                className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white font-bold rounded-lg"
+              >
+                {uploadingMedia ? "Enviando..." : "✓ Enviar Foto"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INDICADOR DE GRABACIÓN */}
+      {isRecording && (
+        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-40 bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
+            <p className="font-bold">Grabando... {recordingTime}s / 60s</p>
+          </div>
+          <p className="text-xs text-center mt-1">Suelta para enviar</p>
+        </div>
+      )}
+
+      {/* MODAL FOTO PANTALLA COMPLETA */}
+      {fullscreenPhoto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"
+          onClick={() => setFullscreenPhoto(null)}
+        >
+          <div className="relative w-full h-full flex flex-col">
+            <div className="flex justify-end mb-4">
+              <button
+                onClick={() => setFullscreenPhoto(null)}
+                className="text-white text-4xl hover:opacity-80"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 flex items-center justify-center">
+              <img
+                src={fullscreenPhoto}
+                alt="Foto completa"
+                className="max-w-full max-h-full object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+            <div className="flex justify-center mt-4">
+              <a
+                href={fullscreenPhoto}
+                download
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                ⬇️ Descargar
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL RANKING */}
       {showRankingModal && (
