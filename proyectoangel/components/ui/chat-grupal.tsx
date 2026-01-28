@@ -168,35 +168,51 @@ export function ChatGrupal() {
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastScrollPosition = useRef<number>(0);
+  const shouldAutoScroll = useRef<boolean>(true);
+  const previousMessageCount = useRef<number>(0);
 
   const currentTheme = THEMES[selectedTheme];
 
-  // ✅ SCROLL INTELIGENTE ARREGLADO - NO baja si estás leyendo arriba
+  // ✅ SCROLL ARREGLADO - Solo baja cuando REALMENTE llegan mensajes nuevos
   const scrollToBottom = (force: boolean = false) => {
-    if (!messagesEndRef.current || !messagesContainerRef.current) return;
+    if (!messagesEndRef.current) return;
     
-    const container = messagesContainerRef.current;
-    const { scrollHeight, scrollTop, clientHeight } = container;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    
-    // Detectar si el usuario está scrolleando hacia arriba
-    const currentScroll = scrollTop;
-    const isScrollingUp = currentScroll < lastScrollPosition.current;
-    lastScrollPosition.current = currentScroll;
-    
-    // Solo hacer scroll si:
-    // 1. Se fuerza (cuando el usuario envía mensaje)
-    // 2. O si está cerca del final (menos de 150px) Y NO está scrolleando hacia arriba
-    if (force || (distanceFromBottom < 150 && !isScrollingUp)) {
+    // Solo hacer scroll si se fuerza O si shouldAutoScroll está activado
+    if (force || shouldAutoScroll.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   };
 
+  // Detectar si el usuario está al final del chat
   useEffect(() => {
-    // Solo intentar scroll automático, no forzado
-    scrollToBottom(false);
-  }, [messages]);
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollHeight, scrollTop, clientHeight } = container;
+      const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+      
+      // Si está a menos de 150px del final, activar auto-scroll
+      shouldAutoScroll.current = distanceFromBottom < 150;
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ✅ CRÍTICO: Solo hacer scroll cuando REALMENTE llegan mensajes NUEVOS
+  useEffect(() => {
+    const currentCount = messages.length;
+    const previousCount = previousMessageCount.current;
+    
+    // Solo hacer scroll si aumentó el número de mensajes
+    if (currentCount > previousCount && previousCount > 0) {
+      scrollToBottom(false);
+    }
+    
+    // Actualizar el contador
+    previousMessageCount.current = currentCount;
+  }, [messages.length]); // ✅ Depende solo de la CANTIDAD, no del array completo
 
   useEffect(() => {
     if (step === "chat") {
