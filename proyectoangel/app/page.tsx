@@ -8,7 +8,7 @@ import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
 import { ProxyPanel } from "@/components/proxy-panel";
-import { ChatGrupal } from "@/components/ui/chat-grupal";
+import { ChatGrupal } from "@/components/chat-grupal";
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
