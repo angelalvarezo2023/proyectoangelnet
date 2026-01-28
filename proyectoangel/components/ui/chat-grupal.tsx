@@ -337,6 +337,11 @@ export function ChatGrupal() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const recordButtonRef = useRef<HTMLButtonElement | null>(null);
+  const touchStartYRef = useRef<number>(0);
+  const touchStartXRef = useRef<number>(0);
+  const isRecordingRef = useRef<boolean>(false);
+  const [audioSending, setAudioSending] = useState(false);
   
   const [myViolations, setMyViolations] = useState(0);
   const [myClientsSent, setMyClientsSent] = useState(0);
@@ -946,12 +951,14 @@ export function ChatGrupal() {
   const sendMessage = async (customText?: string) => {
     const text = customText || newMessage.trim();
     if (!text) return;
+    
     const { isProhibited, reason } = detectProhibitedContent(text);
     if (isProhibited) {
       await registerViolation(reason);
       setNewMessage("");
       return;
     }
+    
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text,
@@ -968,17 +975,27 @@ export function ChatGrupal() {
         },
       }),
     };
+    
     try {
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
+      setMessages(prev => [...prev, message]);
+      
+      // Luego guardar en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
+      
       if (!customText) setNewMessage("");
-      setReplyingTo(null); // Limpiar respuesta después de enviar
-      setTimeout(() => scrollToBottom(true), 100);
+      setReplyingTo(null);
+      
+      // Scroll después de actualizar mensajes
+      setTimeout(() => scrollToBottom(true), 50);
     } catch (error) {
       console.error("Error sending message:", error);
+      // Si falla, remover el mensaje local
+      setMessages(prev => prev.filter(m => m.id !== message.id));
     }
   };
 
@@ -1014,6 +1031,7 @@ export function ChatGrupal() {
       alert("El código debe ser 4 dígitos");
       return;
     }
+    
     const message: Message = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       text: `🔔 CLIENTE ABAJO - Terminal: ${clientCode}`,
@@ -1025,12 +1043,17 @@ export function ChatGrupal() {
       isClientCode: true,
       clientCode: clientCode,
     };
+    
     try {
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
+      setMessages(prev => [...prev, message]);
+      
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
+      
       const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
       const currentWaiting = await response.json() || [];
       const updatedWaiting = [...currentWaiting, clientCode];
@@ -1039,17 +1062,20 @@ export function ChatGrupal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
+      
       const newCount = myClientsSent + 1;
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/clientsSent.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newCount),
       });
+      
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/lastClientTime.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Date.now()),
       });
+      
       const newBadges = calculateBadges(newCount);
       if (newBadges.length > 0) {
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/badges.json`, {
@@ -1058,9 +1084,10 @@ export function ChatGrupal() {
           body: JSON.stringify(newBadges),
         });
       }
+      
       setMyClientsSent(newCount);
       setClientCode("");
-      setTimeout(() => scrollToBottom(true), 100);
+      setTimeout(() => scrollToBottom(true), 50);
     } catch (error) {
       console.error("Error sending client code:", error);
     }
@@ -1449,7 +1476,7 @@ export function ChatGrupal() {
       // Crear mensaje con foto
       const message: Message = {
         id: `msg_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
-        text: newMessage.trim() || "", // Puede tener texto opcional
+        text: newMessage.trim() || "",
         sender: userName,
         senderId: currentUserId,
         senderRole: userRole,
@@ -1466,6 +1493,9 @@ export function ChatGrupal() {
         }),
       };
       
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
+      setMessages(prev => [...prev, message]);
+      
       // Guardar mensaje en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
@@ -1480,7 +1510,7 @@ export function ChatGrupal() {
       setNewMessage("");
       setReplyingTo(null);
       
-      setTimeout(() => scrollToBottom(true), 100);
+      setTimeout(() => scrollToBottom(true), 50);
     } catch (error) {
       console.error("Error sending photo:", error);
       alert("Error al enviar la foto");
@@ -1489,15 +1519,21 @@ export function ChatGrupal() {
     }
   };
 
-  // ===== FUNCIONES DE AUDIO =====
+  // ===== FUNCIONES DE AUDIO - MEJORADAS PARA MÓVIL =====
   
   const startRecording = async () => {
+    // Prevenir grabaciones múltiples
+    if (isRecordingRef.current || isRecording || uploadingMedia) {
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
+      isRecordingRef.current = true;
       
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -1509,6 +1545,7 @@ export function ChatGrupal() {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setAudioBlob(audioBlob);
         stream.getTracks().forEach(track => track.stop());
+        isRecordingRef.current = false;
       };
       
       // Crear visualización de onda
@@ -1541,13 +1578,15 @@ export function ChatGrupal() {
     } catch (error) {
       console.error("Error starting recording:", error);
       alert("No se pudo acceder al micrófono. Verifica los permisos.");
+      isRecordingRef.current = false;
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && isRecordingRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      isRecordingRef.current = false;
       
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
@@ -1563,11 +1602,12 @@ export function ChatGrupal() {
   };
 
   const cancelRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && isRecordingRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setAudioBlob(null);
       audioChunksRef.current = [];
+      isRecordingRef.current = false;
       
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
@@ -1576,12 +1616,70 @@ export function ChatGrupal() {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+      
+      // Vibración de cancelación (patrón diferente)
+      if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
+    }
+  };
+
+  // ===== NUEVAS FUNCIONES PARA MANEJO TÁCTIL (MÓVIL) =====
+  
+  const handleTouchStart = (e: React.TouchEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchStartYRef.current = touch.clientY;
+    touchStartXRef.current = touch.clientX;
+    startRecording();
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
+    if (!isRecording) return;
+    
+    const touch = e.touches[0];
+    const deltaY = touchStartYRef.current - touch.clientY;
+    const deltaX = touchStartXRef.current - touch.clientX;
+    
+    // Si desliza hacia arriba > 80px O hacia izquierda > 100px = CANCELAR
+    if (deltaY > 80 || deltaX > 100) {
+      cancelRecording();
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    if (isRecording) {
+      stopRecording();
+    }
+  };
+
+  // ===== FUNCIONES PARA MOUSE (PC) =====
+  
+  const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Solo si NO es un dispositivo táctil
+    if ('ontouchstart' in window) return;
+    e.preventDefault();
+    startRecording();
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if ('ontouchstart' in window) return;
+    e.preventDefault();
+    if (isRecording) {
+      stopRecording();
+    }
+  };
+
+  const handleMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if ('ontouchstart' in window) return;
+    if (isRecording) {
+      cancelRecording();
     }
   };
 
   const sendAudio = async () => {
-    if (!audioBlob) return;
+    if (!audioBlob || uploadingMedia || audioSending) return;
     
+    setAudioSending(true);
     setUploadingMedia(true);
     try {
       // Crear referencia en Storage
@@ -1616,6 +1714,9 @@ export function ChatGrupal() {
         }),
       };
       
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
+      setMessages(prev => [...prev, message]);
+      
       // Guardar mensaje en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
@@ -1628,18 +1729,19 @@ export function ChatGrupal() {
       setRecordingTime(0);
       setReplyingTo(null);
       
-      setTimeout(() => scrollToBottom(true), 100);
+      setTimeout(() => scrollToBottom(true), 50);
     } catch (error) {
       console.error("Error sending audio:", error);
       alert("Error al enviar el audio");
     } finally {
       setUploadingMedia(false);
+      setAudioSending(false);
     }
   };
 
   // Enviar audio automáticamente cuando se detiene la grabación
   useEffect(() => {
-    if (audioBlob && !isRecording) {
+    if (audioBlob && !isRecording && !audioSending && !isRecordingRef.current) {
       sendAudio();
     }
   }, [audioBlob, isRecording]);
@@ -2068,11 +2170,22 @@ export function ChatGrupal() {
                     </div>
                   )}
                   
-                  {/* ✅ Mostrar mensaje respondido si existe */}
+                  {/* ✅ Mostrar mensaje respondido si existe - Estilo WhatsApp */}
                   {msg.replyTo && (
-                    <div className="mb-2 pl-3 border-l-4 border-amber-500 bg-black/30 rounded p-2">
-                      <p className="text-xs font-bold text-amber-400">{msg.replyTo.sender}</p>
-                      <p className="text-xs text-gray-300 line-clamp-2">{msg.replyTo.text}</p>
+                    <div 
+                      className="mb-2 pl-2 border-l-4 border-green-500 bg-black/40 rounded-r p-2 cursor-pointer hover:bg-black/60 transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // Aquí podrías hacer scroll al mensaje original
+                      }}
+                    >
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <p className="text-[10px] font-bold text-green-400">{msg.replyTo.sender}</p>
+                        {msg.sender === msg.replyTo.sender && (
+                          <span className="text-[8px] text-green-400">tú</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-300 line-clamp-2 leading-tight">{msg.replyTo.text}</p>
                     </div>
                   )}
                   
@@ -2127,25 +2240,33 @@ export function ChatGrupal() {
             className="hidden"
           />
           
-          {/* ✅ Área de respuesta */}
+          {/* ✅ Área de respuesta - Estilo WhatsApp */}
           {replyingTo && (
-            <div className="bg-gray-800 border-l-4 border-amber-500 rounded-lg p-3 flex items-start justify-between gap-3">
+            <div className="bg-gray-800/80 rounded-lg p-2 flex items-start justify-between gap-2 border-l-4 border-green-500">
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-amber-400 mb-1">
-                  Respondiendo a {replyingTo.sender}
-                </p>
-                <p className="text-sm text-gray-300 truncate">
-                  {replyingTo.text}
+                <div className="flex items-center gap-2 mb-1">
+                  <p className="text-xs font-bold text-green-400">
+                    {replyingTo.sender}
+                  </p>
+                  {replyingTo.senderRole === "escort" && <span className="text-[8px]">💃</span>}
+                  {replyingTo.senderRole === "telefonista" && <span className="text-[8px]">📞</span>}
+                  {replyingTo.senderRole === "admin" && <span className="text-[8px]">👑</span>}
+                </div>
+                <p className="text-sm text-gray-300 truncate leading-tight">
+                  {replyingTo.isClientCode && "🔔 "}
+                  {replyingTo.mediaType === "photo" && "📸 Foto"}
+                  {replyingTo.mediaType === "audio" && "🎤 Audio"}
+                  {!replyingTo.mediaType && replyingTo.text}
                 </p>
               </div>
               <button
                 onClick={() => {
                   setReplyingTo(null);
                   if (replyingTo.isClientCode && newMessage === "Manda estare esperandolo") {
-                    setNewMessage(""); // Limpiar el mensaje pre-llenado si cancela
+                    setNewMessage("");
                   }
                 }}
-                className="text-gray-400 hover:text-white transition-colors flex-shrink-0"
+                className="text-gray-400 hover:text-white transition-colors flex-shrink-0 text-xl leading-none"
               >
                 ✕
               </button>
@@ -2197,22 +2318,28 @@ export function ChatGrupal() {
               📸
             </button>
             
-            {/* Botón de Audio (Presionar y mantener) */}
+            {/* Botón de Audio (Presionar y mantener) - Mejorado para móvil */}
             <button
-              onMouseDown={startRecording}
-              onMouseUp={stopRecording}
-              onMouseLeave={cancelRecording}
-              onTouchStart={startRecording}
-              onTouchEnd={stopRecording}
-              disabled={uploadingMedia || isRecording}
+              ref={recordButtonRef}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
+              onTouchCancel={handleTouchEnd}
+              onMouseDown={handleMouseDown}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+              disabled={uploadingMedia || audioSending}
               className={cn(
-                "h-10 w-10 rounded-full text-white flex items-center justify-center transition-all",
-                isRecording 
-                  ? "bg-red-600 animate-pulse scale-110" 
-                  : "bg-green-600 hover:bg-green-700"
+                "h-10 w-10 rounded-full text-white flex items-center justify-center transition-all touch-none select-none",
+                uploadingMedia || audioSending
+                  ? "bg-gray-600 cursor-not-allowed opacity-50"
+                  : isRecording 
+                  ? "bg-red-600 animate-pulse scale-110 shadow-lg shadow-red-500/50" 
+                  : "bg-green-600 hover:bg-green-700 active:scale-95"
               )}
+              title={uploadingMedia ? "Enviando..." : "Mantén presionado para grabar"}
             >
-              {isRecording ? "🔴" : "🎤"}
+              {uploadingMedia || audioSending ? "⏳" : isRecording ? "🔴" : "🎤"}
             </button>
             
             <Input
@@ -2295,14 +2422,42 @@ export function ChatGrupal() {
         </div>
       )}
 
-      {/* INDICADOR DE GRABACIÓN */}
+      {/* INDICADOR DE GRABACIÓN - Estilo WhatsApp */}
       {isRecording && (
-        <div className="fixed bottom-24 left-1/2 transform -translate-x-1/2 z-40 bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl animate-pulse">
-          <div className="flex items-center gap-3">
-            <div className="w-3 h-3 bg-white rounded-full animate-ping"></div>
-            <p className="font-bold">Grabando... {recordingTime}s / 60s</p>
+        <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/95 to-transparent pb-32 pt-8">
+          <div className="flex flex-col items-center gap-4">
+            {/* Tiempo y estado */}
+            <div className="bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
+              <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
+              <p className="font-bold text-lg">{recordingTime}s / 60s</p>
+            </div>
+            
+            {/* Instrucciones */}
+            <div className="flex flex-col items-center gap-2 text-white/80 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">👆</span>
+                <p>Suelta para enviar</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">←</span>
+                  <p>Desliza para cancelar</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl">↑</span>
+                  <p>Arrastra arriba para cancelar</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Barra de progreso */}
+            <div className="w-64 h-2 bg-white/20 rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-white transition-all duration-1000"
+                style={{ width: `${(recordingTime / 60) * 100}%` }}
+              />
+            </div>
           </div>
-          <p className="text-xs text-center mt-1">Suelta para enviar</p>
         </div>
       )}
 
