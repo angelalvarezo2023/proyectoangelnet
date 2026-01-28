@@ -472,7 +472,8 @@ export function ChatGrupal() {
             }
           }
           if (data.escortStatus) setEscortStatus(data.escortStatus);
-          if (data.waitingClients) setWaitingClients(data.waitingClients);
+          // ✅ CRÍTICO: Siempre actualizar waitingClients, incluso si está vacío
+          setWaitingClients(data.waitingClients || []);
           if (data.settings) {
             setRoomSettings(data.settings);
             setSelectedTheme(data.settings.theme);
@@ -959,7 +960,9 @@ export function ChatGrupal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
-      // ✅ ELIMINADO: setWaitingClients(updatedWaiting) - ahora todos se sincronizan desde Firebase
+      
+      // ✅ Actualizar inmediatamente para quien atiende el cliente
+      setWaitingClients(updatedWaiting);
       
       // Incrementar contador de período
       const newCount = periodSettings.clientsAttended + 1;
@@ -1024,6 +1027,9 @@ export function ChatGrupal() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updatedWaiting),
       });
+      
+      // ✅ Actualizar inmediatamente para quien marca al cliente
+      setWaitingClients(updatedWaiting);
       
       // 🆕 Guardar en historial
       const recordId = `record_${Date.now()}`;
