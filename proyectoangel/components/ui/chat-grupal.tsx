@@ -49,6 +49,7 @@ interface Message {
   text: string;
   sender: string;
   senderId: string;
+  senderRole?: UserRole;
   timestamp: number;
   isSystem: boolean;
   isClientCode?: boolean;
@@ -580,6 +581,7 @@ export function ChatGrupal() {
       text,
       sender: userName,
       senderId: currentUserId,
+      senderRole: userRole,
       timestamp: Date.now(),
       isSystem: false,
     };
@@ -603,6 +605,7 @@ export function ChatGrupal() {
       text: privateMessage.trim(),
       sender: userName,
       senderId: currentUserId,
+      senderRole: userRole,
       timestamp: Date.now(),
       isSystem: false,
       isPrivate: true,
@@ -632,6 +635,7 @@ export function ChatGrupal() {
       text: `🔔 CLIENTE ABAJO - Terminal: ${clientCode}`,
       sender: userName,
       senderId: currentUserId,
+      senderRole: userRole,
       timestamp: Date.now(),
       isSystem: false,
       isClientCode: true,
@@ -1143,10 +1147,30 @@ export function ChatGrupal() {
                   )}
                 >
                   {!msg.isSystem && (
-                    <p className="text-xs font-bold mb-1 opacity-80">
-                      {msg.sender}
-                      {msg.isPrivate && " 🔒"}
-                    </p>
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-xs font-bold opacity-80">
+                        {msg.sender}
+                      </p>
+                      {/* Badge de ROL muy visible */}
+                      {msg.senderRole === "admin" && (
+                        <span className="px-2 py-0.5 rounded-full bg-yellow-500 text-black text-[9px] font-black flex items-center gap-1">
+                          👑 ADMIN
+                        </span>
+                      )}
+                      {msg.senderRole === "escort" && (
+                        <span className="px-2 py-0.5 rounded-full bg-pink-500 text-white text-[9px] font-black flex items-center gap-1">
+                          💃 ESCORT
+                        </span>
+                      )}
+                      {msg.senderRole === "telefonista" && (
+                        <span className="px-2 py-0.5 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center gap-1">
+                          📞 TELEFONISTA
+                        </span>
+                      )}
+                      {msg.isPrivate && (
+                        <span className="text-purple-300">🔒</span>
+                      )}
+                    </div>
                   )}
                   <p className="text-sm break-words">{msg.text}</p>
                   <p className="text-xs opacity-70 mt-1">
