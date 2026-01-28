@@ -581,24 +581,60 @@ export function ChatGrupal() {
             body: JSON.stringify(Date.now()),
           });
           
-          // ✅ Obtener y ordenar mensajes de Firebase
-          const messagesArray = data.messages 
+          // ✅ Obtener mensajes de Firebase
+          const firebaseMessages = data.messages 
             ? Object.values(data.messages)
             : [];
           
-          // ✅ CRÍTICO: Ordenar SIEMPRE por timestamp (más reciente al final)
-          messagesArray.sort((a, b) => {
-            const timeA = a.timestamp || 0;
-            const timeB = b.timestamp || 0;
-            return timeA - timeB; // Menor timestamp primero (más antiguo arriba)
+          console.log("🔄 Sincronización - Firebase tiene", firebaseMessages.length, "mensajes");
+          console.log("🔄 Sincronización - Local tiene", messages.length, "mensajes");
+          
+          // ✅ FUSIÓN INTELIGENTE: Combinar Firebase + locales sin perder nada
+          setMessages(prev => {
+            // Crear mapa de mensajes de Firebase por ID
+            const firebaseMap = new Map(firebaseMessages.map(m => [m.id, m]));
+            
+            // Crear mapa de mensajes locales por ID
+            const localMap = new Map(prev.map(m => [m.id, m]));
+            
+            // Combinar: usar Firebase si existe, sino mantener local
+            const combinedMap = new Map();
+            
+            // Agregar todos los mensajes de Firebase (son la fuente de verdad)
+            firebaseMessages.forEach(msg => {
+              combinedMap.set(msg.id, msg);
+            });
+            
+            // Agregar mensajes locales que aún no están en Firebase (recién enviados)
+            prev.forEach(msg => {
+              if (!firebaseMap.has(msg.id)) {
+                console.log("⚠️ Mensaje local no en Firebase aún:", msg.text, new Date(msg.timestamp).toLocaleTimeString());
+                combinedMap.set(msg.id, msg);
+              }
+            });
+            
+            // Convertir a array y ordenar por timestamp
+            const combined = Array.from(combinedMap.values());
+            combined.sort((a, b) => {
+              const timeA = a.timestamp || 0;
+              const timeB = b.timestamp || 0;
+              return timeA - timeB;
+            });
+            
+            console.log("✅ Después de fusión:", combined.length, "mensajes");
+            console.log("📊 Últimos 3 mensajes:", combined.slice(-3).map(m => ({
+              sender: m.sender,
+              text: m.text.substring(0, 20),
+              time: new Date(m.timestamp).toLocaleTimeString()
+            })));
+            
+            return combined;
           });
           
-          if (userRole === "escort" && messagesArray.length > messages.length) {
-            const newMsg = messagesArray[messagesArray.length - 1];
+          if (userRole === "escort" && firebaseMessages.length > messages.length) {
+            const newMsg = firebaseMessages[firebaseMessages.length - 1];
             if (newMsg.isClientCode) playNotification();
           }
-          
-          setMessages(messagesArray);
           
           if (data.participants) {
             const now = Date.now();
@@ -970,13 +1006,22 @@ export function ChatGrupal() {
       return;
     }
     
+    // ✅ Generar timestamp confiable y asegurar que sea mayor que el último
+    let timestamp = Date.now();
+    const lastMessage = messages[messages.length - 1];
+    if (lastMessage && timestamp <= lastMessage.timestamp) {
+      // Si el reloj está atrasado, usar el timestamp del último mensaje + 1ms
+      timestamp = lastMessage.timestamp + 1;
+      console.warn("⚠️ Reloj atrasado detectado. Ajustando timestamp de", Date.now(), "a", timestamp);
+    }
+    
     const message: Message = {
-      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: `msg_${timestamp}_${Math.random().toString(36).substr(2, 9)}`,
       text,
       sender: userName,
       senderId: currentUserId,
       senderRole: userRole,
-      timestamp: Date.now(),
+      timestamp,
       isSystem: false,
       ...(replyingTo && {
         replyTo: {
@@ -987,16 +1032,24 @@ export function ChatGrupal() {
       }),
     };
     
+    console.log("📤 Enviando mensaje con timestamp:", new Date(timestamp).toLocaleTimeString(), "Real:", new Date(Date.now()).toLocaleTimeString());
+    
     try {
-      // Guardar en Firebase PRIMERO
+      // ✅ PRIMERO guardar en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(message),
       });
       
-      // ✅ Actualizar localmente SIN ordenar (Firebase sincronizará con orden correcto)
-      setMessages(prev => [...prev, message]);
+      // ✅ LUEGO actualizar localmente
+      setMessages(prev => {
+        // Verificar si ya existe (por si acaso)
+        if (prev.some(m => m.id === message.id)) {
+          return prev; // Ya existe, no duplicar
+        }
+        return [...prev, message];
+      });
       
       if (!customText) setNewMessage("");
       setReplyingTo(null);
