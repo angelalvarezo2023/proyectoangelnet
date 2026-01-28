@@ -6,8 +6,8 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { LoginForm } from "@/components/LoginForm";
 import { UnifiedAdmin } from "@/components/UnifiedAdmin";
 import { ControlPanel } from "@/components/control-panel";
-import { ProxyPanel } from "@/components/proxy-panel";
-import { ChatGrupal } from "@/components/ui/chat-grupal"; // 🆕 IMPORT DEL CHAT
+import { ProxyPanel } from "@/components/proxy-panel"; // 🆕 Import ProxyPanel
+import { ChatGrupal } from "@/components/chat-grupal"; // 🆕 Import Chat
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
@@ -15,13 +15,22 @@ import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 
-type View = "home" | "anuncios" | "admin" | "chat"; // 🆕 Agregamos "chat"
+type View = "home" | "anuncios" | "chat" | "admin";
 
 function HomeContent() {
   const { user, userData, signOut } = useAuth();
-  const [currentView, setCurrentView] = useState<View>("home");
+  
+  // ✅ RECUPERAR vista guardada al cargar
+  const [currentView, setCurrentView] = useState<View>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("currentView");
+      return (saved as View) || "home";
+    }
+    return "home";
+  });
+  
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [showProxyPanel, setShowProxyPanel] = useState(false);
+  const [showProxyPanel, setShowProxyPanel] = useState(false); // 🆕 Estado para panel de proxies
 
   const handleViewChange = (newView: View) => {
     if (newView === "admin") {
@@ -32,6 +41,8 @@ function HomeContent() {
       }
     }
     setCurrentView(newView);
+    // ✅ GUARDAR vista en localStorage
+    localStorage.setItem("currentView", newView);
     setShowAdminLogin(false); // Cerrar modal si está abierto
   };
 
@@ -39,6 +50,8 @@ function HomeContent() {
   const handleLoginSuccess = () => {
     setShowAdminLogin(false);
     setCurrentView("admin");
+    // ✅ GUARDAR vista admin
+    localStorage.setItem("currentView", "admin");
   };
 
   return (
@@ -112,7 +125,7 @@ function HomeContent() {
                   <ServiceCard 
                     key={service.id} 
                     service={service}
-                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined}
+                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined} // 🆕 Handler para proxies
                   />
                 ))}
               </div>
@@ -160,9 +173,9 @@ function HomeContent() {
           </div>
         )}
 
-        {/* 🆕🆕🆕 Chat View - PÚBLICO (sin login) 🆕🆕🆕 */}
+        {/* Chat View - PÚBLICO */}
         {currentView === "chat" && (
-          <div className="w-full">
+          <div className="space-y-6">
             <ChatGrupal />
           </div>
         )}
