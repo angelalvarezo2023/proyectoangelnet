@@ -98,6 +98,7 @@ interface RoomData {
   settings: RoomSettings;
   createdAt: number;
   creatorId: string;
+  lastActivity: number; // ✅ Nuevo campo para detectar salas inactivas
 }
 
 const FIREBASE_URL = "https://megapersonals-4f24c-default-rtdb.firebaseio.com";
@@ -397,6 +398,13 @@ export function ChatGrupal() {
         }
         
         if (data) {
+          // ✅ ACTUALIZAR lastActivity - la sala está siendo usada
+          await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/lastActivity.json`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(Date.now()),
+          });
+          
           const messagesArray = data.messages 
             ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
             : [];
@@ -490,10 +498,48 @@ export function ChatGrupal() {
         console.error("Error syncing chat:", error);
       }
     };
+    
+    // ✅ LIMPIEZA DE SALAS INACTIVAS (solo ejecuta si es admin y cada 10 minutos)
+    const cleanupInactiveRooms = async () => {
+      if (userRole !== "admin") return; // Solo admin limpia
+      
+      try {
+        const allRoomsResponse = await fetch(`${FIREBASE_URL}/chat-rooms.json`);
+        const allRooms = await allRoomsResponse.json();
+        
+        if (!allRooms) return;
+        
+        const now = Date.now();
+        const INACTIVITY_THRESHOLD = 24 * 60 * 60 * 1000; // 24 horas
+        
+        for (const [roomId, roomData] of Object.entries(allRooms)) {
+          const room = roomData as RoomData;
+          const lastActivity = room.lastActivity || room.createdAt || 0;
+          const inactivePeriod = now - lastActivity;
+          
+          // Si la sala lleva más de 24 horas inactiva, eliminarla
+          if (inactivePeriod > INACTIVITY_THRESHOLD && roomId !== roomCode) {
+            console.log(`🗑️ Eliminando sala inactiva: ${roomId} (${Math.floor(inactivePeriod / (60 * 60 * 1000))}h de inactividad)`);
+            await fetch(`${FIREBASE_URL}/chat-rooms/${roomId}.json`, {
+              method: "DELETE",
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error cleaning inactive rooms:", error);
+      }
+    };
+    
     syncChat();
     syncIntervalRef.current = setInterval(syncChat, 2000);
+    
+    // ✅ Ejecutar limpieza cada 10 minutos
+    const cleanupInterval = setInterval(cleanupInactiveRooms, 10 * 60 * 1000);
+    cleanupInactiveRooms(); // Ejecutar inmediatamente también
+    
     return () => {
       if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+      clearInterval(cleanupInterval);
     };
   }, [step, roomCode, messages.length, userRole, currentUserId]);
 
@@ -620,6 +666,7 @@ export function ChatGrupal() {
           },
           createdAt: Date.now(),
           creatorId: userId,
+          lastActivity: Date.now(), // ✅ Inicializar lastActivity
         };
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
           method: "PUT",
@@ -627,6 +674,13 @@ export function ChatGrupal() {
           body: JSON.stringify(initialData),
         });
       } else {
+        // ✅ Actualizar lastActivity al unirse a sala existente
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/lastActivity.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Date.now()),
+        });
+        
         await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${userId}.json`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
