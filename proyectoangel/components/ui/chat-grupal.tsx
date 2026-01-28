@@ -444,6 +444,12 @@ export function ChatGrupal() {
             const activeParticipants: Record<string, Participant> = {};
             let hasInactive = false;
             for (const [id, participant] of Object.entries(data.participants)) {
+              // ✅ Ignorar participantes null/undefined/corruptos
+              if (!participant || !participant.name || !participant.id) {
+                hasInactive = true;
+                continue;
+              }
+              
               if (now - participant.lastActive < 30000) {
                 activeParticipants[id] = participant;
               } else {
@@ -617,16 +623,18 @@ export function ChatGrupal() {
       const checkResponse = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
       const existingRoom: RoomData | null = await checkResponse.json();
       if (existingRoom?.participants) {
-        const existingUser = Object.values(existingRoom.participants).find(
-          p => p.name.toLowerCase() === userName.trim().toLowerCase()
-        );
+        // ✅ Filtrar valores null/undefined antes de buscar
+        const existingUser = Object.values(existingRoom.participants)
+          .filter(p => p && p.name) // Filtrar participantes válidos
+          .find(p => p.name.toLowerCase() === userName.trim().toLowerCase());
+        
         if (existingUser) {
           alert("Este nombre ya está en uso. Elige otro.");
           setIsJoining(false);
           return;
         }
         if (!isCreator) {
-          const currentRoles = Object.values(existingRoom.participants);
+          const currentRoles = Object.values(existingRoom.participants).filter(p => p); // Filtrar null/undefined
           const escortCount = currentRoles.filter(p => p.role === "escort").length;
           const telefonistaCount = currentRoles.filter(p => p.role === "telefonista").length;
           if (userRole === "escort" && escortCount >= existingRoom.settings.maxEscorts) {
@@ -722,7 +730,7 @@ export function ChatGrupal() {
       setStep("chat");
     } catch (error) {
       console.error("Error joining room:", error);
-      alert("Error al unirse a la sala");
+      alert("Error al unirse a la sala. Por favor verifica:\n- Que el código de sala sea correcto\n- Que tengas conexión a internet\n- Intenta de nuevo en unos segundos");
     } finally {
       setIsJoining(false);
     }
