@@ -977,8 +977,8 @@ export function ChatGrupal() {
     };
     
     try {
-      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
-      setMessages(prev => [...prev, message]);
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE con ordenamiento
+      setMessages(prev => [...prev, message].sort((a, b) => a.timestamp - b.timestamp));
       
       // Luego guardar en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
@@ -1045,8 +1045,8 @@ export function ChatGrupal() {
     };
     
     try {
-      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
-      setMessages(prev => [...prev, message]);
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE con ordenamiento
+      setMessages(prev => [...prev, message].sort((a, b) => a.timestamp - b.timestamp));
       
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
         method: "PUT",
@@ -1493,8 +1493,8 @@ export function ChatGrupal() {
         }),
       };
       
-      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
-      setMessages(prev => [...prev, message]);
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE con ordenamiento
+      setMessages(prev => [...prev, message].sort((a, b) => a.timestamp - b.timestamp));
       
       // Guardar mensaje en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
@@ -1672,8 +1672,8 @@ export function ChatGrupal() {
         }),
       };
       
-      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE
-      setMessages(prev => [...prev, message]);
+      // ✅ CRÍTICO: Actualizar estado local INMEDIATAMENTE con ordenamiento
+      setMessages(prev => [...prev, message].sort((a, b) => a.timestamp - b.timestamp));
       
       // Guardar mensaje en Firebase
       await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
