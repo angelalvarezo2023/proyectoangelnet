@@ -113,75 +113,7 @@ const BADGES = {
   bronze: { name: "Bronce", icon: "🥉", requirement: 25 },
 };
 
-
-  const getDaysRemaining = () => {
-    const now = Date.now();
-    const start = periodSettings.startDate;
-    const dayInMs = 24 * 60 * 60 * 1000;
-    
-    let endDate;
-    if (periodSettings.type === "daily") {
-      endDate = start + dayInMs;
-    } else if (periodSettings.type === "weekly") {
-      endDate = start + (7 * dayInMs);
-    } else {
-      endDate = start + (30 * dayInMs);
-    }
-    
-    const remaining = Math.ceil((endDate - now) / dayInMs);
-    return remaining > 0 ? remaining : 0;
-  };
-
-  const getPeriodLabel = () => {
-    if (periodSettings.type === "daily") return "Día";
-    if (periodSettings.type === "weekly") return "Semana";
-    return "Mes";
-  };
-
-  const resetPeriod = async () => {
-    if (!confirm("¿Resetear contador? Esto pondrá todo en 0.")) return;
-    
-    const newPeriod: PeriodSettings = {
-      ...periodSettings,
-      startDate: Date.now(),
-      clientsAttended: 0
-    };
-    
-    try {
-      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/period.json`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPeriod),
-      });
-      setPeriodSettings(newPeriod);
-      alert("Contador reseteado!");
-    } catch (error) {
-      console.error("Error resetting period:", error);
-    }
-  };
-
-  const changePeriodType = async (type: "daily" | "weekly" | "monthly") => {
-    const newPeriod: PeriodSettings = {
-      type,
-      startDate: Date.now(),
-      clientsAttended: 0
-    };
-    
-    try {
-      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/period.json`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPeriod),
-      });
-      setPeriodSettings(newPeriod);
-      setShowPeriodConfig(false);
-      alert("Período actualizado!");
-    } catch (error) {
-      console.error("Error updating period:", error);
-    }
-  };
-
-  const detectProhibitedContent = (text: string): { isProhibited: boolean; reason: string } => {
+const detectProhibitedContent = (text: string): { isProhibited: boolean; reason: string } => {
   const lowerText = text.toLowerCase();
   const cleanText = text.replace(/[\s\-_.()]/g, "");
   const phonePatterns = [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, /\b\d{10,11}\b/g, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, /\+\d{1,3}[\s-]?\d{3}[\s-]?\d{3}[-.\s]?\d{4}/g];
@@ -254,6 +186,74 @@ export function ChatGrupal() {
   const previousMessageCount = useRef<number>(0);
 
   const currentTheme = THEMES[selectedTheme];
+
+  // ✅ FUNCIONES DE PERÍODO (movidas DENTRO del componente)
+  const getDaysRemaining = () => {
+    const now = Date.now();
+    const start = periodSettings.startDate;
+    const dayInMs = 24 * 60 * 60 * 1000;
+    
+    let endDate;
+    if (periodSettings.type === "daily") {
+      endDate = start + dayInMs;
+    } else if (periodSettings.type === "weekly") {
+      endDate = start + (7 * dayInMs);
+    } else {
+      endDate = start + (30 * dayInMs);
+    }
+    
+    const remaining = Math.ceil((endDate - now) / dayInMs);
+    return remaining > 0 ? remaining : 0;
+  };
+
+  const getPeriodLabel = () => {
+    if (periodSettings.type === "daily") return "Día";
+    if (periodSettings.type === "weekly") return "Semana";
+    return "Mes";
+  };
+
+  const resetPeriod = async () => {
+    if (!confirm("¿Resetear contador? Esto pondrá todo en 0.")) return;
+    
+    const newPeriod: PeriodSettings = {
+      ...periodSettings,
+      startDate: Date.now(),
+      clientsAttended: 0
+    };
+    
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/period.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPeriod),
+      });
+      setPeriodSettings(newPeriod);
+      alert("Contador reseteado!");
+    } catch (error) {
+      console.error("Error resetting period:", error);
+    }
+  };
+
+  const changePeriodType = async (type: "daily" | "weekly" | "monthly") => {
+    const newPeriod: PeriodSettings = {
+      type,
+      startDate: Date.now(),
+      clientsAttended: 0
+    };
+    
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/period.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newPeriod),
+      });
+      setPeriodSettings(newPeriod);
+      setShowPeriodConfig(false);
+      alert("Período actualizado!");
+    } catch (error) {
+      console.error("Error updating period:", error);
+    }
+  };
 
   // ✅ SCROLL ARREGLADO - Solo baja cuando REALMENTE llegan mensajes nuevos
   const scrollToBottom = (force: boolean = false) => {
