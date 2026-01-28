@@ -1519,7 +1519,19 @@ export function ChatGrupal() {
     }
   };
 
-  // ===== FUNCIONES DE AUDIO - MEJORADAS PARA MÓVIL =====
+  // ===== FUNCIONES DE AUDIO - SISTEMA DE TOQUE ON/OFF =====
+  
+  const toggleRecording = async () => {
+    if (uploadingMedia || audioSending) return;
+    
+    if (isRecording) {
+      // Detener grabación y enviar
+      stopRecording();
+    } else {
+      // Iniciar grabación
+      startRecording();
+    }
+  };
   
   const startRecording = async () => {
     // Prevenir grabaciones múltiples
@@ -1619,60 +1631,6 @@ export function ChatGrupal() {
       
       // Vibración de cancelación (patrón diferente)
       if (navigator.vibrate) navigator.vibrate([50, 100, 50]);
-    }
-  };
-
-  // ===== NUEVAS FUNCIONES PARA MANEJO TÁCTIL (MÓVIL) =====
-  
-  const handleTouchStart = (e: React.TouchEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    const touch = e.touches[0];
-    touchStartYRef.current = touch.clientY;
-    touchStartXRef.current = touch.clientX;
-    startRecording();
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLButtonElement>) => {
-    if (!isRecording) return;
-    
-    const touch = e.touches[0];
-    const deltaY = touchStartYRef.current - touch.clientY;
-    const deltaX = touchStartXRef.current - touch.clientX;
-    
-    // Si desliza hacia arriba > 80px O hacia izquierda > 100px = CANCELAR
-    if (deltaY > 80 || deltaX > 100) {
-      cancelRecording();
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    if (isRecording) {
-      stopRecording();
-    }
-  };
-
-  // ===== FUNCIONES PARA MOUSE (PC) =====
-  
-  const handleMouseDown = (e: React.MouseEvent<HTMLButtonElement>) => {
-    // Solo si NO es un dispositivo táctil
-    if ('ontouchstart' in window) return;
-    e.preventDefault();
-    startRecording();
-  };
-
-  const handleMouseUp = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if ('ontouchstart' in window) return;
-    e.preventDefault();
-    if (isRecording) {
-      stopRecording();
-    }
-  };
-
-  const handleMouseLeave = (e: React.MouseEvent<HTMLButtonElement>) => {
-    if ('ontouchstart' in window) return;
-    if (isRecording) {
-      cancelRecording();
     }
   };
 
@@ -2108,10 +2066,20 @@ export function ChatGrupal() {
             const isClientMessage = msg.isClientCode && userRole === "escort";
             const canReply = !msg.isSystem; // Todos los mensajes no-sistema pueden ser respondidos
             
+            // ✅ CRÍTICO: Mensajes MÍOS a la DERECHA, otros a la IZQUIERDA
+            const isMyMessage = msg.senderId === currentUserId;
+            
             return (
               <div
                 key={msg.id}
-                className={cn("flex", msg.sender === userName && !msg.isSystem ? "justify-end" : "justify-start")}
+                className={cn(
+                  "flex",
+                  msg.isSystem 
+                    ? "justify-center" // Mensajes del sistema centrados
+                    : isMyMessage 
+                    ? "justify-end" // MIS mensajes a la DERECHA
+                    : "justify-start" // Mensajes de OTROS a la IZQUIERDA
+                )}
               >
                 <div
                   className={cn(
@@ -2127,10 +2095,10 @@ export function ChatGrupal() {
                         )
                       : msg.isPrivate
                       ? "bg-purple-900/80 text-purple-200 border-2 border-purple-500"
-                      : msg.sender === userName
-                      ? `bg-gradient-to-r ${currentTheme.primary} text-white`
-                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600",
-                    canReply && !msg.isClientCode && "cursor-pointer hover:opacity-90 transition-opacity"
+                      : isMyMessage
+                      ? `bg-gradient-to-r ${currentTheme.primary} text-white` // MIS mensajes - verde/color tema
+                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600", // Mensajes de OTROS - gris
+                    canReply && !msg.isClientCode && !msg.isSystem && "cursor-pointer hover:opacity-90 transition-opacity"
                   )}
                   onClick={() => {
                     if (canReply) {
@@ -2318,28 +2286,28 @@ export function ChatGrupal() {
               📸
             </button>
             
-            {/* Botón de Audio (Presionar y mantener) - Mejorado para móvil */}
+            {/* Botón de Audio - Sistema de toque ON/OFF */}
             <button
               ref={recordButtonRef}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              onTouchCancel={handleTouchEnd}
-              onMouseDown={handleMouseDown}
-              onMouseUp={handleMouseUp}
-              onMouseLeave={handleMouseLeave}
+              onClick={toggleRecording}
               disabled={uploadingMedia || audioSending}
               className={cn(
-                "h-10 w-10 rounded-full text-white flex items-center justify-center transition-all touch-none select-none",
+                "h-10 w-10 rounded-full text-white flex items-center justify-center transition-all select-none",
                 uploadingMedia || audioSending
                   ? "bg-gray-600 cursor-not-allowed opacity-50"
                   : isRecording 
                   ? "bg-red-600 animate-pulse scale-110 shadow-lg shadow-red-500/50" 
                   : "bg-green-600 hover:bg-green-700 active:scale-95"
               )}
-              title={uploadingMedia ? "Enviando..." : "Mantén presionado para grabar"}
+              title={
+                uploadingMedia 
+                  ? "Enviando..." 
+                  : isRecording 
+                  ? "Toca para DETENER y enviar" 
+                  : "Toca para GRABAR"
+              }
             >
-              {uploadingMedia || audioSending ? "⏳" : isRecording ? "🔴" : "🎤"}
+              {uploadingMedia || audioSending ? "⏳" : isRecording ? "⏹️" : "🎤"}
             </button>
             
             <Input
@@ -2422,40 +2390,60 @@ export function ChatGrupal() {
         </div>
       )}
 
-      {/* INDICADOR DE GRABACIÓN - Estilo WhatsApp */}
+      {/* INDICADOR DE GRABACIÓN - Sistema ON/OFF */}
       {isRecording && (
-        <div className="fixed inset-x-0 bottom-0 z-50 bg-gradient-to-t from-black via-black/95 to-transparent pb-32 pt-8">
-          <div className="flex flex-col items-center gap-4">
-            {/* Tiempo y estado */}
-            <div className="bg-red-600 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-3">
-              <div className="w-3 h-3 bg-white rounded-full animate-pulse"></div>
-              <p className="font-bold text-lg">{recordingTime}s / 60s</p>
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-6 max-w-md mx-4">
+            {/* Animación de grabación */}
+            <div className="relative">
+              <div className="w-32 h-32 bg-red-600 rounded-full flex items-center justify-center animate-pulse">
+                <div className="text-6xl">🎤</div>
+              </div>
+              <div className="absolute inset-0 border-4 border-red-400 rounded-full animate-ping"></div>
             </div>
             
-            {/* Instrucciones */}
-            <div className="flex flex-col items-center gap-2 text-white/80 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">👆</span>
-                <p>Suelta para enviar</p>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">←</span>
-                  <p>Desliza para cancelar</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl">↑</span>
-                  <p>Arrastra arriba para cancelar</p>
-                </div>
+            {/* Tiempo */}
+            <div className="bg-red-600 text-white px-8 py-4 rounded-full shadow-2xl">
+              <p className="font-bold text-3xl font-mono">{recordingTime}s / 60s</p>
+            </div>
+            
+            {/* Instrucciones GRANDES y CLARAS */}
+            <div className="text-center space-y-4">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <p className="text-white text-2xl font-bold mb-4">🔴 GRABANDO...</p>
+                <p className="text-white/90 text-lg">
+                  Toca el botón 🎤 de nuevo para <strong>DETENER Y ENVIAR</strong>
+                </p>
               </div>
             </div>
 
+            {/* Botones */}
+            <div className="flex gap-4">
+              {/* Botón para detener y enviar */}
+              <button
+                onClick={stopRecording}
+                className="px-8 py-4 bg-green-600 hover:bg-green-700 text-white rounded-full font-bold text-lg shadow-lg active:scale-95 transition-all"
+              >
+                ✅ Enviar
+              </button>
+              
+              {/* Botón para cancelar */}
+              <button
+                onClick={cancelRecording}
+                className="px-8 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-full font-bold text-lg shadow-lg active:scale-95 transition-all"
+              >
+                ❌ Cancelar
+              </button>
+            </div>
+
             {/* Barra de progreso */}
-            <div className="w-64 h-2 bg-white/20 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-white transition-all duration-1000"
-                style={{ width: `${(recordingTime / 60) * 100}%` }}
-              />
+            <div className="w-full max-w-sm">
+              <div className="h-3 bg-white/20 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-1000"
+                  style={{ width: `${(recordingTime / 60) * 100}%` }}
+                />
+              </div>
             </div>
           </div>
         </div>
