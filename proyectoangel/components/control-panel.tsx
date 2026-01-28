@@ -1,821 +1,1624 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
-import { SearchIcon, SettingsIcon, AlertTriangleIcon } from "@/components/icons";
-import { Dashboard } from "@/components/dashboard";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
-interface ControlPanelProps {
-  initialBrowserData?: BrowserData | null;
-  initialError?: string;
+type UserRole = "escort" | "telefonista" | "admin";
+type EscortStatus = "disponible" | "ocupada";
+type ThemeName = "scarface" | "elpatron";
+
+interface ChatTheme {
+  name: string;
+  icon: string;
+  bgImage: string;
+  primary: string;
+  secondary: string;
+  text: string;
+  accent: string;
+  cardBg: string;
 }
 
-// 🆕 MODIFICADO: Detecta y muestra DEUDA
-function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "Sin renta";
-  
-  // 🆕 DETECTAR DEUDA
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  
-  if (isDebt) {
-    const absDays = Math.abs(rental.days);
-    const parts = [];
-    if (absDays > 0) parts.push(`${absDays}d`);
-    if (rental.hours > 0) parts.push(`${rental.hours}h`);
-    if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
-    return `⚠️ DEUDA: ${parts.join(" ")}`;
-  }
-  
-  if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Por expirar";
-  const parts = [];
-  if (rental.days > 0) parts.push(`${rental.days}d`);
-  if (rental.hours > 0) parts.push(`${rental.hours}h`);
-  if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
-  return parts.join(" ");
+// 🎬 TEMAS CON IMÁGENES LOCALES
+const THEMES: Record<ThemeName, ChatTheme> = {
+  scarface: {
+    name: "SCARFACE",
+    icon: "🎬",
+    bgImage: "/temas/scarface.png",
+    primary: "from-amber-600 to-yellow-700",
+    secondary: "from-gray-900 to-black",
+    text: "text-amber-400",
+    accent: "bg-amber-500",
+    cardBg: "bg-black/85",
+  },
+  elpatron: {
+    name: "EL PATRÓN",
+    icon: "💎",
+    bgImage: "/temas/elpatron.png",
+    primary: "from-yellow-500 to-amber-600",
+    secondary: "from-orange-600 to-red-700",
+    text: "text-yellow-400",
+    accent: "bg-yellow-500",
+    cardBg: "bg-black/90",
+  },
+};
+
+interface Message {
+  id: string;
+  text: string;
+  sender: string;
+  senderId: string;
+  timestamp: number;
+  isSystem: boolean;
+  isClientCode?: boolean;
+  clientCode?: string;
+  isWarning?: boolean;
+  isPrivate?: boolean;
+  recipientId?: string;
 }
 
-// 🆕 MODIFICADO: Nuevo status "debt"
-function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "neutral";
-  
-  // 🆕 PRIORIDAD: Detectar deuda
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "debt";
-  
-  if (rental.days === 0 && rental.hours === 0) return "critical";
-  if (rental.days === 0) return "warning";
-  if (rental.days < 2) return "caution";
-  return "healthy";
+interface Participant {
+  id: string;
+  name: string;
+  role: UserRole;
+  joinedAt: number;
+  lastActive: number;
+  violations: number;
+  clientsSent: number;
+  lastClientTime?: number;
+  rating?: number;
+  totalRatings?: number;
+  badges?: string[];
 }
 
-function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "from-gray-500/10 to-gray-600/10";
-  
-  // 🆕 Gradiente especial para deuda
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "from-red-600/30 via-red-500/20 to-red-600/30";
-  
-  if (rental.days === 0 && rental.hours < 24) return "from-red-500/20 via-pink-500/20 to-red-600/20";
-  if (rental.days <= 1) return "from-orange-500/20 via-amber-500/20 to-orange-600/20";
-  if (rental.days <= 3) return "from-yellow-500/20 via-amber-400/20 to-yellow-600/20";
-  return "from-green-500/20 via-emerald-500/20 to-green-600/20";
+interface RoomSettings {
+  maxEscorts: number;
+  maxTelefonistas: number;
+  prices: number[];
+  turnsEnabled: boolean;
+  soundEnabled: boolean;
+  notificationsEnabled: boolean;
+  theme: ThemeName;
 }
 
-function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "shadow-gray-500/0";
-  
-  // 🆕 Borde especial para deuda
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "shadow-red-600/70 shadow-xl border-red-600/50";
-  
-  if (rental.days === 0 && rental.hours < 24) return "shadow-red-500/50 shadow-lg";
-  if (rental.days <= 1) return "shadow-orange-500/30 shadow-md";
-  if (rental.days <= 3) return "shadow-yellow-500/20 shadow-sm";
-  return "shadow-green-500/20 shadow-sm";
+interface RoomData {
+  messages: Record<string, Message>;
+  participants: Record<string, Participant>;
+  escortStatus: EscortStatus;
+  waitingClients: string[];
+  settings: RoomSettings;
+  createdAt: number;
+  creatorId: string;
 }
 
-function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "text-gray-400";
-  
-  // 🆕 Color especial para deuda
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "text-red-600 font-black animate-pulse";
-  
-  if (rental.days === 0 && rental.hours < 24) return "text-red-400";
-  if (rental.days <= 1) return "text-orange-400";
-  if (rental.days <= 3) return "text-yellow-400";
-  return "text-green-400";
-}
+const FIREBASE_URL = "https://megapersonals-4f24c-default-rtdb.firebaseio.com";
 
-// Componente para tarjeta de navegador - MEJORADO PARA MÓVILES
-function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onClick: () => void; viewMode: 'grid' | 'list' }) {
-  const [localRemaining, setLocalRemaining] = useState<number | null>(null);
-  const [progressPercent, setProgressPercent] = useState(0);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+const QUICK_MESSAGES = {
+  telefonista: ["Cliente abajo", "Cliente llegando en 5 min", "Cliente esperando", "Cliente canceló"],
+  escort: ["En camino", "Ya estoy lista", "Dame 5 minutos"],
+};
+
+const BADGES = {
+  gold: { name: "Oro", icon: "🥇", requirement: 100 },
+  silver: { name: "Plata", icon: "🥈", requirement: 50 },
+  bronze: { name: "Bronce", icon: "🥉", requirement: 25 },
+};
+
+const detectProhibitedContent = (text: string): { isProhibited: boolean; reason: string } => {
+  const lowerText = text.toLowerCase();
+  const cleanText = text.replace(/[\s\-_.()]/g, "");
+  const phonePatterns = [/\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g, /\b\d{10,11}\b/g, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, /\+\d{1,3}[\s-]?\d{3}[\s-]?\d{3}[-.\s]?\d{4}/g];
+  for (const pattern of phonePatterns) { if (pattern.test(text)) return { isProhibited: true, reason: "números de teléfono" }; }
+  const urlPatterns = [/https?:\/\//gi, /www\./gi, /\b\w+\.(com|net|org|edu|gov|io|co|me|info)\b/gi];
+  for (const pattern of urlPatterns) { if (pattern.test(text)) return { isProhibited: true, reason: "links o URLs" }; }
+  const socialPatterns = [/\bwhatsapp\b|\bwpp\b/gi, /\binstagram\b|\binsta\b/gi, /\bfacebook\b|\bface\b/gi, /\btelegram\b/gi];
+  for (const pattern of socialPatterns) { if (pattern.test(lowerText)) return { isProhibited: true, reason: "redes sociales" }; }
+  const longNumbers = cleanText.match(/\d{7,}/g);
+  if (longNumbers) return { isProhibited: true, reason: "números de teléfono" };
+  return { isProhibited: false, reason: "" };
+};
+
+export function ChatGrupal() {
+  const [step, setStep] = useState<"room-select" | "join" | "chat">("room-select");
+  const [roomCode, setRoomCode] = useState("");
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState<UserRole>("telefonista");
+  const [isCreator, setIsCreator] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [clientCode, setClientCode] = useState("");
+  const [escortStatus, setEscortStatus] = useState<EscortStatus>("disponible");
+  const [waitingClients, setWaitingClients] = useState<string[]>([]);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [isJoining, setIsJoining] = useState(false);
+  const [processingClient, setProcessingClient] = useState<string | null>(null);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeName>("scarface");
+  const [roomSettings, setRoomSettings] = useState<RoomSettings>({
+    maxEscorts: 1,
+    maxTelefonistas: 10,
+    prices: [100, 150, 200],
+    turnsEnabled: false,
+    soundEnabled: true,
+    notificationsEnabled: true,
+    theme: "scarface",
+  });
+  
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showRankingModal, setShowRankingModal] = useState(false);
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [selectedTelefonistaToRate, setSelectedTelefonistaToRate] = useState<string | null>(null);
+  const [rating, setRating] = useState(5);
+  const [selectedClientForPrice, setSelectedClientForPrice] = useState<string | null>(null);
+  const [myViolations, setMyViolations] = useState(0);
+  const [myClientsSent, setMyClientsSent] = useState(0);
+  const [myBadges, setMyBadges] = useState<string[]>([]);
+  const [showPrivateChat, setShowPrivateChat] = useState(false);
+  const [privateChatRecipient, setPrivateChatRecipient] = useState<string | null>(null);
+  const [privateMessage, setPrivateMessage] = useState("");
+  const [editingSettings, setEditingSettings] = useState({
+    maxEscorts: "1",
+    maxTelefonistas: "10",
+    prices: ["100", "150", "200"],
+  });
+  
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastScrollPosition = useRef<number>(0);
+
+  const currentTheme = THEMES[selectedTheme];
+
+  // ✅ SCROLL INTELIGENTE ARREGLADO - NO baja si estás leyendo arriba
+  const scrollToBottom = (force: boolean = false) => {
+    if (!messagesEndRef.current || !messagesContainerRef.current) return;
+    
+    const container = messagesContainerRef.current;
+    const { scrollHeight, scrollTop, clientHeight } = container;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    
+    // Detectar si el usuario está scrolleando hacia arriba
+    const currentScroll = scrollTop;
+    const isScrollingUp = currentScroll < lastScrollPosition.current;
+    lastScrollPosition.current = currentScroll;
+    
+    // Solo hacer scroll si:
+    // 1. Se fuerza (cuando el usuario envía mensaje)
+    // 2. O si está cerca del final (menos de 150px) Y NO está scrolleando hacia arriba
+    if (force || (distanceFromBottom < 150 && !isScrollingUp)) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  };
 
   useEffect(() => {
-    if (!browser.republishStatus || browser.isPaused) {
-      setLocalRemaining(null);
-      setProgressPercent(0);
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+    // Solo intentar scroll automático, no forzado
+    scrollToBottom(false);
+  }, [messages]);
+
+  useEffect(() => {
+    if (step === "chat") {
+      localStorage.setItem("chatSession", JSON.stringify({ roomCode, userName, userRole, currentUserId, isCreator, timestamp: Date.now() }));
+    }
+  }, [step, roomCode, userName, userRole, currentUserId, isCreator]);
+
+  useEffect(() => {
+    const savedSession = localStorage.getItem("chatSession");
+    if (savedSession) {
+      const session = JSON.parse(savedSession);
+      const isOld = Date.now() - session.timestamp > 24 * 60 * 60 * 1000;
+      if (!isOld) {
+        setRoomCode(session.roomCode);
+        setUserName(session.userName);
+        setUserRole(session.userRole);
+        setCurrentUserId(session.currentUserId);
+        setIsCreator(session.isCreator);
+        setStep("chat");
+      } else {
+        localStorage.removeItem("chatSession");
       }
-      return;
     }
+  }, []);
 
-    const firebaseRemaining = browser.republishStatus.remainingSeconds;
-    const totalSeconds = browser.republishStatus.totalSeconds;
-
-    const shouldUpdate = 
-      localRemaining === null || 
-      Math.abs(firebaseRemaining - localRemaining) > 5;
-
-    if (shouldUpdate) {
-      setLocalRemaining(firebaseRemaining);
-    }
-
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-    }
-
-    intervalRef.current = setInterval(() => {
-      setLocalRemaining(prev => {
-        if (prev === null || prev <= 0) {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-        intervalRef.current = null;
+  const playNotification = () => {
+    if (!roomSettings.soundEnabled) return;
+    const beep = () => {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        oscillator.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        oscillator.frequency.value = 1000;
+        oscillator.type = 'square';
+        gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+        oscillator.start(audioContext.currentTime);
+        oscillator.stop(audioContext.currentTime + 0.3);
+      } catch (e) {
+        console.error("Error playing beep:", e);
       }
     };
-  }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds, browser.isPaused]);
+    beep();
+    setTimeout(beep, 250);
+    setTimeout(beep, 500);
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+    if (roomSettings.notificationsEnabled && typeof Notification !== "undefined") {
+      if (Notification.permission === "granted") {
+        const notification = new Notification("🔔 NUEVO CLIENTE ABAJO", {
+          body: "Un telefonista ha enviado un cliente",
+          requireInteraction: true,
+          vibrate: [300, 100, 300],
+        });
+        setTimeout(() => notification.close(), 10000);
+      } else if (Notification.permission !== "denied") {
+        Notification.requestPermission();
+      }
+    }
+  };
 
   useEffect(() => {
-    if (localRemaining !== null && browser.republishStatus) {
-      const totalSeconds = browser.republishStatus.totalSeconds;
-      const elapsedSeconds = totalSeconds - localRemaining;
-      const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
-      setProgressPercent(Math.min(100, Math.max(0, progress)));
+    if (step !== "chat" || !roomCode || !currentUserId) return;
+    const updateHeartbeat = async () => {
+      try {
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/lastActive.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Date.now()),
+        });
+      } catch (error) {
+        console.error("Error updating heartbeat:", error);
+      }
+    };
+    updateHeartbeat();
+    heartbeatIntervalRef.current = setInterval(updateHeartbeat, 5000);
+    return () => {
+      if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
+    };
+  }, [step, roomCode, currentUserId]);
+
+  useEffect(() => {
+    if (step !== "chat" || !roomCode) return;
+    const syncChat = async () => {
+      try {
+        const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
+        const data: RoomData | null = await response.json();
+        if (data) {
+          const messagesArray = data.messages 
+            ? Object.values(data.messages).sort((a, b) => a.timestamp - b.timestamp)
+            : [];
+          if (userRole === "escort" && messagesArray.length > messages.length) {
+            const newMsg = messagesArray[messagesArray.length - 1];
+            if (newMsg.isClientCode) playNotification();
+          }
+          setMessages(messagesArray);
+          if (data.participants) {
+            const now = Date.now();
+            const activeParticipants: Record<string, Participant> = {};
+            let hasInactive = false;
+            for (const [id, participant] of Object.entries(data.participants)) {
+              if (now - participant.lastActive < 30000) {
+                activeParticipants[id] = participant;
+              } else {
+                hasInactive = true;
+              }
+            }
+            if (hasInactive) {
+              await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants.json`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(activeParticipants),
+              });
+            }
+            setParticipants(Object.values(activeParticipants));
+            const myData = activeParticipants[currentUserId];
+            if (myData) {
+              setMyViolations(myData.violations || 0);
+              setMyClientsSent(myData.clientsSent || 0);
+              setMyBadges(myData.badges || []);
+            }
+          }
+          if (data.escortStatus) setEscortStatus(data.escortStatus);
+          if (data.waitingClients) setWaitingClients(data.waitingClients);
+          if (data.settings) {
+            setRoomSettings(data.settings);
+            setSelectedTheme(data.settings.theme);
+          }
+        }
+      } catch (error) {
+        console.error("Error syncing chat:", error);
+      }
+    };
+    syncChat();
+    syncIntervalRef.current = setInterval(syncChat, 2000);
+    return () => {
+      if (syncIntervalRef.current) clearInterval(syncIntervalRef.current);
+    };
+  }, [step, roomCode, messages.length, userRole, currentUserId]);
+
+  useEffect(() => {
+    if (step === "chat" && userRole === "escort" && typeof Notification !== "undefined") {
+      if (Notification.permission === "default") Notification.requestPermission();
     }
-  }, [localRemaining, browser.republishStatus?.totalSeconds]);
+  }, [step, userRole]);
 
-  const timeRemaining = localRemaining !== null ? {
-    minutes: Math.floor(localRemaining / 60),
-    seconds: localRemaining % 60
-  } : null;
-  
-  const isCompleted = timeRemaining !== null && timeRemaining.minutes === 0 && timeRemaining.seconds === 0;
-  
-  const hasDataExtractionError = 
-    (browser.phoneNumber === "N/A" || browser.phoneNumber === "Manual") &&
-    (browser.city === "N/A" || browser.city === "Manual") &&
-    (browser.location === "N/A" || browser.location === "Manual");
-  
-  const hasRecentError = browser.lastError && 
-    (Date.now() - new Date(browser.lastError.timestamp).getTime()) < 5 * 60 * 1000;
-  
-  const hasRepublishFailure = browser.republishStatus && 
-    browser.republishStatus.elapsedSeconds > (browser.republishStatus.totalSeconds + 60);
-  
-  const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
+  const changeTheme = async (newTheme: ThemeName) => {
+    setSelectedTheme(newTheme);
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings/theme.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTheme),
+      });
+    } catch (error) {
+      console.error("Error changing theme:", error);
+    }
+  };
 
-  const showRentalAlert = browser.rentalRemaining && 
-    browser.rentalRemaining.days === 0 && 
-    browser.rentalRemaining.hours < 24;
+  const generateRoomCode = () => Math.random().toString(36).substring(2, 8).toUpperCase();
 
-  // 🆕 Detectar DEUDA
-  const isDebt = browser.rentalRemaining && 
-    (browser.rentalRemaining.days < 0 || (browser.rentalRemaining as any).isDebt === true);
+  const handleCreateRoom = () => {
+    const newRoomCode = generateRoomCode();
+    setRoomCode(newRoomCode);
+    setIsCreator(true);
+    setStep("join");
+  };
 
-  const rentalGradient = getRentalGradient(browser.rentalRemaining);
-  const rentalBorderGlow = getRentalBorderGlow(browser.rentalRemaining);
-  const rentalTextColor = getRentalTextColor(browser.rentalRemaining);
+  const handleJoinExistingRoom = () => {
+    if (!roomCode.trim()) {
+      alert("Por favor ingresa el código de la sala");
+      return;
+    }
+    setIsCreator(false);
+    setStep("join");
+  };
 
-  // 📋 VISTA DE LISTA - MEJORADA PARA MÓVILES
-  if (viewMode === 'list') {
+  const handleJoin = async () => {
+    if (!userName.trim()) {
+      alert("Por favor ingresa tu nombre");
+      return;
+    }
+    if (isJoining) return;
+    setIsJoining(true);
+    try {
+      const checkResponse = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`);
+      const existingRoom: RoomData | null = await checkResponse.json();
+      if (existingRoom?.participants) {
+        const existingUser = Object.values(existingRoom.participants).find(
+          p => p.name.toLowerCase() === userName.trim().toLowerCase()
+        );
+        if (existingUser) {
+          alert("Este nombre ya está en uso. Elige otro.");
+          setIsJoining(false);
+          return;
+        }
+        if (!isCreator) {
+          const currentRoles = Object.values(existingRoom.participants);
+          const escortCount = currentRoles.filter(p => p.role === "escort").length;
+          const telefonistaCount = currentRoles.filter(p => p.role === "telefonista").length;
+          if (userRole === "escort" && escortCount >= existingRoom.settings.maxEscorts) {
+            alert(`Máximo de escorts alcanzado (${existingRoom.settings.maxEscorts})`);
+            setIsJoining(false);
+            return;
+          }
+          if (userRole === "telefonista" && telefonistaCount >= existingRoom.settings.maxTelefonistas) {
+            alert(`Máximo de telefonistas alcanzado (${existingRoom.settings.maxTelefonistas})`);
+            setIsJoining(false);
+            return;
+          }
+        }
+      }
+      const userId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setCurrentUserId(userId);
+      const finalRole: UserRole = isCreator ? "admin" : userRole;
+      const newParticipant: Participant = {
+        id: userId,
+        name: userName.trim(),
+        role: finalRole,
+        joinedAt: Date.now(),
+        lastActive: Date.now(),
+        violations: 0,
+        clientsSent: 0,
+        lastClientTime: 0,
+        rating: 0,
+        totalRatings: 0,
+        badges: [],
+      };
+      const getRoleLabel = (role: UserRole) => {
+        switch (role) {
+          case "escort":
+            return "Escort";
+          case "telefonista":
+            return "Telefonista";
+          case "admin":
+            return "Administrador";
+        }
+      };
+      const welcomeMsg: Message = {
+        id: `msg_${Date.now()}`,
+        text: `${userName.trim()} se ha unido (${getRoleLabel(finalRole)})`,
+        sender: "Sistema",
+        senderId: "system",
+        timestamp: Date.now(),
+        isSystem: true,
+      };
+      if (!existingRoom) {
+        const initialData: RoomData = {
+          messages: { [welcomeMsg.id]: welcomeMsg },
+          participants: { [userId]: newParticipant },
+          escortStatus: "disponible",
+          waitingClients: [],
+          settings: {
+            maxEscorts: 1,
+            maxTelefonistas: 10,
+            prices: [100, 150, 200],
+            turnsEnabled: false,
+            soundEnabled: true,
+            notificationsEnabled: true,
+            theme: selectedTheme,
+          },
+          createdAt: Date.now(),
+          creatorId: userId,
+        };
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(initialData),
+        });
+      } else {
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${userId}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newParticipant),
+        });
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${welcomeMsg.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(welcomeMsg),
+        });
+      }
+      if (isCreator) setUserRole("admin");
+      setStep("chat");
+    } catch (error) {
+      console.error("Error joining room:", error);
+      alert("Error al unirse a la sala");
+    } finally {
+      setIsJoining(false);
+    }
+  };
+
+  const getTopTelefonistas = () => {
+    const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return participants
+      .filter(p => p.role === "telefonista" && p.joinedAt > oneWeekAgo)
+      .sort((a, b) => b.clientsSent - a.clientsSent)
+      .slice(0, 3);
+  };
+
+  const getTimeSinceLastClient = (timestamp?: number) => {
+    if (!timestamp) return "Nunca";
+    const diff = Date.now() - timestamp;
+    const minutes = Math.floor(diff / 60000);
+    if (minutes < 1) return "Ahora mismo";
+    if (minutes < 60) return `Hace ${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `Hace ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `Hace ${days}d`;
+  };
+
+  const calculateBadges = (clientsSent: number): string[] => {
+    const earnedBadges: string[] = [];
+    if (clientsSent >= 100) earnedBadges.push("gold");
+    else if (clientsSent >= 50) earnedBadges.push("silver");
+    else if (clientsSent >= 25) earnedBadges.push("bronze");
+    return earnedBadges;
+  };
+
+  const registerViolation = async (reason: string) => {
+    try {
+      const newViolations = myViolations + 1;
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/violations.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newViolations),
+      });
+      setMyViolations(newViolations);
+      let warningText = `⚠️ ADVERTENCIA: No está permitido enviar ${reason} en el chat.`;
+      if (newViolations >= 3) {
+        warningText += `\n\n🚨 Has sido advertido ${newViolations} veces. El administrador ha sido notificado.`;
+        const adminAlert: Message = {
+          id: `msg_${Date.now()}_alert`,
+          text: `🚨 ALERTA: ${userName} ha intentado enviar ${reason} (${newViolations} infracciones)`,
+          sender: "Sistema",
+          senderId: "system",
+          timestamp: Date.now(),
+          isSystem: true,
+          isWarning: true,
+        };
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${adminAlert.id}.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(adminAlert),
+        });
+      }
+      alert(warningText);
+    } catch (error) {
+      console.error("Error registering violation:", error);
+    }
+  };
+
+  const sendMessage = async (customText?: string) => {
+    const text = customText || newMessage.trim();
+    if (!text) return;
+    const { isProhibited, reason } = detectProhibitedContent(text);
+    if (isProhibited) {
+      await registerViolation(reason);
+      setNewMessage("");
+      return;
+    }
+    const message: Message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text,
+      sender: userName,
+      senderId: currentUserId,
+      timestamp: Date.now(),
+      isSystem: false,
+    };
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      if (!customText) setNewMessage("");
+      setTimeout(() => scrollToBottom(true), 100);
+    } catch (error) {
+      console.error("Error sending message:", error);
+    }
+  };
+
+  const sendPrivateMessage = async () => {
+    if (!privateMessage.trim() || !privateChatRecipient) return;
+    const message: Message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: privateMessage.trim(),
+      sender: userName,
+      senderId: currentUserId,
+      timestamp: Date.now(),
+      isSystem: false,
+      isPrivate: true,
+      recipientId: privateChatRecipient,
+    };
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      setPrivateMessage("");
+      setShowPrivateChat(false);
+      alert("Mensaje privado enviado");
+    } catch (error) {
+      console.error("Error sending private message:", error);
+    }
+  };
+
+  const sendClientCode = async () => {
+    if (clientCode.length !== 4 || !/^\d{4}$/.test(clientCode)) {
+      alert("El código debe ser 4 dígitos");
+      return;
+    }
+    const message: Message = {
+      id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      text: `🔔 CLIENTE ABAJO - Terminal: ${clientCode}`,
+      sender: userName,
+      senderId: currentUserId,
+      timestamp: Date.now(),
+      isSystem: false,
+      isClientCode: true,
+      clientCode: clientCode,
+    };
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
+      const currentWaiting = await response.json() || [];
+      const updatedWaiting = [...currentWaiting, clientCode];
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedWaiting),
+      });
+      const newCount = myClientsSent + 1;
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/clientsSent.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newCount),
+      });
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/lastClientTime.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Date.now()),
+      });
+      const newBadges = calculateBadges(newCount);
+      if (newBadges.length > 0) {
+        await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}/badges.json`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(newBadges),
+        });
+      }
+      setMyClientsSent(newCount);
+      setClientCode("");
+      setTimeout(() => scrollToBottom(true), 100);
+    } catch (error) {
+      console.error("Error sending client code:", error);
+    }
+  };
+
+  const toggleEscortStatus = async () => {
+    const newStatus: EscortStatus = escortStatus === "disponible" ? "ocupada" : "disponible";
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/escortStatus.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newStatus),
+      });
+      const message: Message = {
+        id: `msg_${Date.now()}`,
+        text: `🚦 ${userName} ahora está ${newStatus === "ocupada" ? "OCUPADA" : "DISPONIBLE"}`,
+        sender: "Sistema",
+        senderId: "system",
+        timestamp: Date.now(),
+        isSystem: true,
+      };
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      setEscortStatus(newStatus);
+    } catch (error) {
+      console.error("Error updating status:", error);
+    }
+  };
+
+  const markClientAttended = async (code: string, price: number) => {
+    if (processingClient === code) return;
+    setProcessingClient(code);
+    try {
+      const response = await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`);
+      const currentWaiting = await response.json() || [];
+      const updatedWaiting = currentWaiting.filter((c: string) => c !== code);
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/waitingClients.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updatedWaiting),
+      });
+      const message: Message = {
+        id: `msg_${Date.now()}`,
+        text: `✅ Cliente ${code} atendido por ${userName} - PAGÓ $${price}`,
+        sender: "Sistema",
+        senderId: "system",
+        timestamp: Date.now(),
+        isSystem: true,
+      };
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${message.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(message),
+      });
+      setSelectedClientForPrice(null);
+    } catch (error) {
+      console.error("Error marking client:", error);
+    } finally {
+      setTimeout(() => setProcessingClient(null), 2000);
+    }
+  };
+
+  const rateTelefonista = async () => {
+    if (!selectedTelefonistaToRate || rating < 1 || rating > 5) return;
+    try {
+      const telefonistaData = participants.find(p => p.id === selectedTelefonistaToRate);
+      if (!telefonistaData) return;
+      const currentRating = telefonistaData.rating || 0;
+      const currentTotal = telefonistaData.totalRatings || 0;
+      const newTotal = currentTotal + 1;
+      const newRating = ((currentRating * currentTotal) + rating) / newTotal;
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${selectedTelefonistaToRate}/rating.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newRating),
+      });
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${selectedTelefonistaToRate}/totalRatings.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newTotal),
+      });
+      setShowRatingModal(false);
+      setSelectedTelefonistaToRate(null);
+      setRating(5);
+      alert("Calificación enviada");
+    } catch (error) {
+      console.error("Error rating telefonista:", error);
+    }
+  };
+
+  const saveSettings = async () => {
+    const maxEscorts = parseInt(editingSettings.maxEscorts);
+    const maxTelefonistas = parseInt(editingSettings.maxTelefonistas);
+    const newPrices = editingSettings.prices.map(p => parseInt(p)).filter(p => !isNaN(p) && p > 0);
+    if (isNaN(maxEscorts) || maxEscorts < 1 || maxEscorts > 10) {
+      alert("Escorts: 1-10");
+      return;
+    }
+    if (isNaN(maxTelefonistas) || maxTelefonistas < 1 || maxTelefonistas > 20) {
+      alert("Telefonistas: 1-20");
+      return;
+    }
+    if (newPrices.length === 0) {
+      alert("Configura al menos un precio");
+      return;
+    }
+    const newSettings: RoomSettings = {
+      ...roomSettings,
+      maxEscorts,
+      maxTelefonistas,
+      prices: newPrices,
+      theme: selectedTheme,
+    };
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/settings.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newSettings),
+      });
+      setRoomSettings(newSettings);
+      setShowSettingsModal(false);
+      alert("Configuración actualizada");
+    } catch (error) {
+      console.error("Error saving settings:", error);
+      alert("Error al guardar");
+    }
+  };
+
+  const handleLeaveChat = async () => {
+    const confirmLeave = confirm("¿Seguro que quieres salir?");
+    if (!confirmLeave) return;
+    try {
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/participants/${currentUserId}.json`, {
+        method: "DELETE",
+      });
+      const leaveMsg: Message = {
+        id: `msg_${Date.now()}`,
+        text: `${userName} ha salido del chat`,
+        sender: "Sistema",
+        senderId: "system",
+        timestamp: Date.now(),
+        isSystem: true,
+      };
+      await fetch(`${FIREBASE_URL}/chat-rooms/${roomCode}/messages/${leaveMsg.id}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(leaveMsg),
+      });
+    } catch (error) {
+      console.error("Error leaving chat:", error);
+    }
+    localStorage.removeItem("chatSession");
+    setStep("room-select");
+    setRoomCode("");
+    setUserName("");
+    setMessages([]);
+    setParticipants([]);
+  };
+
+  const escorts = participants.filter(p => p.role === "escort");
+  const telefonistas = participants.filter(p => p.role === "telefonista");
+  const topTelefonistas = getTopTelefonistas();
+
+  // RENDERIZADO
+  if (step === "room-select") {
     return (
-      <div
-        onClick={onClick}
-        className={cn(
-          "group cursor-pointer rounded-2xl border border-white/10 p-5 sm:p-4 transition-all duration-300 hover:scale-[1.01] flex flex-col sm:flex-row items-start sm:items-center gap-4 backdrop-blur-xl",
-          hasError 
-            ? "bg-gradient-to-r from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-lg" 
-            : `bg-gradient-to-r ${rentalGradient} ${rentalBorderGlow}`
-        )}
+      <div 
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ 
+          backgroundImage: `url(${currentTheme.bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
       >
-        {/* Estado */}
-        <div className="flex items-center gap-3 min-w-[120px] sm:min-w-[100px]">
-          <div className={cn(
-            "h-4 w-4 sm:h-3 sm:w-3 rounded-full relative",
-            browser.isPaused ? "bg-yellow-400" : "bg-green-400"
-          )}>
-            {!browser.isPaused && (
-              <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
-            )}
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        <div className={`relative w-full max-w-md rounded-3xl border-2 ${currentTheme.cardBg} backdrop-blur-md shadow-2xl overflow-hidden border-amber-500/50`}>
+          <div className={`bg-gradient-to-r ${currentTheme.primary} p-6 text-center`}>
+            <h1 className="text-4xl font-bold text-white mb-2">{currentTheme.name}</h1>
+            <p className="text-amber-100 text-sm">Sistema de Gestión</p>
           </div>
-          <span className={cn(
-            "text-base sm:text-sm font-bold",
-            browser.isPaused ? "text-yellow-400" : "text-green-400"
-          )}>
-            {browser.isPaused ? "Pausado" : "Activo"}
-          </span>
-        </div>
-
-        {/* Nombre */}
-        <div className="flex-1 min-w-[150px]">
-          <h3 className="text-xl sm:text-lg font-bold text-white">{browser.browserName}</h3>
-          {browser.postName && browser.postName !== "N/A" && (
-            <p className="text-base sm:text-sm text-white/60 mt-1">{browser.postName}</p>
-          )}
-        </div>
-
-        {/* Countdown */}
-        <div className="w-full sm:w-auto sm:min-w-[140px] text-center bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
-          {browser.isPaused ? (
-            <span className="text-xl sm:text-lg font-bold text-yellow-400">⏸ Pausado</span>
-          ) : timeRemaining ? (
-            <span className="text-3xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
-              {timeRemaining.minutes}m {timeRemaining.seconds}s
-            </span>
-          ) : (
-            <span className="text-base sm:text-sm text-white/40">Sin datos</span>
-          )}
-        </div>
-
-        {/* Tiempo de Renta */}
-        <div className="w-full sm:w-auto sm:min-w-[120px] text-center sm:text-right bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
-          <div className="text-sm sm:text-xs text-white/60 mb-1">RENTA</div>
-          <div className={cn("text-2xl sm:text-xl font-black", rentalTextColor)}>
-            {formatRentalTime(browser.rentalRemaining)}
+          <div className="p-8 space-y-4">
+            <Button
+              onClick={handleCreateRoom}
+              className={`w-full h-14 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white text-lg font-bold rounded-xl shadow-lg`}
+            >
+              ➕ Crear Sala Nueva
+            </Button>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t-2 border-gray-600"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-black text-gray-400 font-medium">o</span>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-amber-400">Código de Sala</label>
+              <Input
+                type="text"
+                value={roomCode}
+                onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
+                onKeyPress={(e) => e.key === "Enter" && handleJoinExistingRoom()}
+                placeholder="ABC123"
+                className="h-12 text-center text-lg tracking-wider uppercase font-bold bg-black/50 border-2 border-amber-500 text-amber-300"
+                maxLength={6}
+              />
+            </div>
+            <Button
+              onClick={handleJoinExistingRoom}
+              disabled={!roomCode.trim()}
+              className={`w-full h-12 bg-gradient-to-r ${currentTheme.secondary} hover:opacity-90 text-white font-bold rounded-xl shadow-lg`}
+            >
+              🔑 Unirse a Sala
+            </Button>
           </div>
-        </div>
-
-        {/* 🆕 Banner de DEUDA para lista */}
-        {isDebt && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-600/30 border-2 border-red-500 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm animate-pulse">
-            <span className="text-red-400 text-2xl sm:text-xl">💀</span>
-            <span className="text-base sm:text-sm font-bold text-red-300">PAGA YA</span>
-          </div>
-        )}
-
-        {showRentalAlert && !isDebt && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm">
-            <AlertTriangleIcon className="h-6 w-6 sm:h-5 sm:w-5 text-red-400 animate-pulse" />
-            <span className="text-base sm:text-sm font-bold text-red-400">¡Expira hoy!</span>
-          </div>
-        )}
-
-        {hasError && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-5 py-3 sm:px-4 sm:py-2">
-            <span className="text-red-400 text-xl sm:text-lg">⚠️</span>
-            <span className="text-base sm:text-sm font-bold text-red-400">Error</span>
-          </div>
-        )}
-
-        <div className="hidden sm:block text-white/40 opacity-0 transition-opacity group-hover:opacity-100 text-xl">
-          →
         </div>
       </div>
     );
   }
 
-  // 🔲 VISTA DE GRID - MEJORADA PARA MÓVILES
-  return (
-    <div
-      onClick={onClick}
-      className={cn(
-        "group cursor-pointer rounded-3xl border border-white/10 p-6 transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 backdrop-blur-xl relative overflow-hidden",
-        hasError 
-          ? "bg-gradient-to-br from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-xl" 
-          : `bg-gradient-to-br ${rentalGradient} ${rentalBorderGlow}`
-      )}
-    >
-      {/* Efecto de brillo animado */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-
-      {/* 🆕 BANNER DE DEUDA - GRID */}
-      {isDebt && (
-        <div className="mb-4 rounded-2xl border-3 border-red-600 bg-gradient-to-br from-red-600/40 to-red-500/30 p-5 backdrop-blur-sm animate-pulse">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-14 h-14 rounded-full bg-red-600/40 flex items-center justify-center border-2 border-red-500">
-              <span className="text-3xl">💀</span>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-black text-xl text-red-300 mb-1">CUENTA VENCIDA</h4>
-              <p className="text-sm text-red-200">
-                {(() => {
-                  const absDays = Math.abs(browser.rentalRemaining!.days);
-                  return `Deuda: ${absDays}d ${browser.rentalRemaining!.hours}h ${browser.rentalRemaining!.minutes}m`;
-                })()}
-              </p>
-            </div>
-          </div>
-          <a 
-            href={`https://wa.me/18293837695?text=${encodeURIComponent(
-              `🚨 RENOVAR ${browser.browserName} - Tengo deuda`
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="block w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3 rounded-xl font-bold text-center hover:scale-105 transition-all"
-          >
-            💀 PAGAR AHORA 💀
-          </a>
-        </div>
-      )}
-
-      {/* Alerta de Error */}
-      {hasError && (
-        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 animate-pulse" />
-          <div className="relative flex items-center gap-3">
-            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-              <span className="text-2xl">⚠️</span>
-            </div>
-            <div>
-              <p className="text-base sm:text-sm font-bold text-red-400">
-                {hasRepublishFailure ? "⏰ Problema con Republicación" :
-                 hasDataExtractionError ? "📋 Error de Datos" :
-                 "❌ Hay un problema"}
-              </p>
-              <p className="text-sm sm:text-xs text-red-300/70 mt-1">
-                Revisa manualmente o contacta soporte
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Banner de Alerta de Renta (solo si NO es deuda) */}
-      {showRentalAlert && !isDebt && (
-        <div className="mb-4 rounded-2xl border-2 border-red-500/50 bg-gradient-to-br from-red-500/20 to-pink-500/20 p-5 sm:p-4 backdrop-blur-sm animate-pulse">
-          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-3 mb-4 sm:mb-3">
-            <div className="flex-shrink-0 w-16 h-16 sm:w-14 sm:h-14 rounded-2xl bg-red-500/30 flex items-center justify-center border border-red-500/50">
-              <span className="text-4xl sm:text-3xl">🚨</span>
-            </div>
-            
-            <div className="flex-1 text-center sm:text-left">
-              <p className="font-black text-xl sm:text-base text-red-400 mb-1">
-                ¡Expira en {browser.rentalRemaining.hours}h {browser.rentalRemaining.minutes}m!
-              </p>
-              <p className="text-sm sm:text-xs text-red-300/80">
-                Tu anuncio será eliminado automáticamente
-              </p>
-            </div>
-            
-            <a 
-              href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                `🚨 URGENTE: Renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="w-full sm:w-auto px-6 py-4 sm:px-5 sm:py-3 rounded-xl font-black text-base sm:text-sm bg-gradient-to-r from-red-500 to-pink-600 text-white hover:scale-105 transition-all duration-200 shadow-lg shadow-red-500/50 border border-red-400/50 whitespace-nowrap"
+  if (step === "join") {
+    return (
+      <div 
+        className="min-h-screen bg-black flex items-center justify-center p-4"
+        style={{ 
+          backgroundImage: `url(${currentTheme.bgImage})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }}
+      >
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+        <div className={`relative w-full max-w-md rounded-3xl border-2 ${currentTheme.cardBg} backdrop-blur-md shadow-2xl overflow-hidden border-amber-500/50`}>
+          <div className={`bg-gradient-to-r ${currentTheme.primary} p-6`}>
+            <button
+              onClick={() => setStep("room-select")}
+              className="text-white hover:opacity-80 transition-colors mb-4"
             >
-              🔥 RENOVAR
-            </a>
+              ← Volver
+            </button>
+            <h1 className="text-3xl font-bold text-white text-center">Sala: {roomCode}</h1>
+            {isCreator && <p className="text-center text-amber-100 text-sm mt-2">👑 Serás el Administrador</p>}
           </div>
-        </div>
-      )}
-
-      {/* Header - Estado y Nombre */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className={cn(
-            "flex items-center gap-3 px-4 py-2 rounded-full backdrop-blur-md border",
-            browser.isPaused 
-              ? "bg-yellow-500/20 border-yellow-500/30" 
-              : "bg-green-500/20 border-green-500/30"
-          )}>
-            <div className="relative">
-              <div className={cn(
-                "h-3 w-3 rounded-full",
-                browser.isPaused ? "bg-yellow-400" : "bg-green-400"
-              )} />
-              {!browser.isPaused && (
-                <div className="absolute inset-0 rounded-full bg-green-400 animate-ping" />
-              )}
-            </div>
-            <span className={cn(
-              "text-sm font-bold",
-              browser.isPaused ? "text-yellow-400" : "text-green-400"
-            )}>
-              {browser.isPaused ? "Pausado" : "En Línea"}
-            </span>
-          </div>
-          
-          <div className="hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/60 text-sm font-medium">
-            Ver detalles →
-          </div>
-        </div>
-
-        <h3 className="text-3xl font-black text-white mb-2 tracking-tight">
-          {browser.browserName}
-        </h3>
-        {browser.postName && browser.postName !== "N/A" && (
-          <p className="text-sm text-white/60">{browser.postName}</p>
-        )}
-      </div>
-
-      {/* Countdown de Republicación */}
-      <div className="mb-4 rounded-2xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
-        
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center">
-              <svg className="w-4 h-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">
-              {browser.isPaused ? "⏸ Pausado" : isCompleted ? "✓ Completado" : "Próximo Anuncio"}
-            </span>
-          </div>
-          
-          {browser.isPaused ? (
-            <div className="text-center py-4">
-              <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
-                ⏸ En Pausa
-              </span>
-            </div>
-          ) : timeRemaining ? (
-            <>
-              <div className="text-center py-2 mb-3">
-                {isCompleted ? (
-                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
-                    ✓ Lista
-                  </span>
-                ) : (
-                  <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
-                    {timeRemaining.minutes}<span className="text-3xl">m</span> {timeRemaining.seconds}<span className="text-3xl">s</span>
-                  </span>
-                )}
-              </div>
-              
-              {/* Barra de progreso mejorada */}
-              <div className="relative h-3 w-full overflow-hidden rounded-full bg-black/30 border border-white/10">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden",
-                    isCompleted 
-                      ? "bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" 
-                      : "bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"
-                  )}
-                  style={{ width: `${progressPercent}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="text-center py-6 text-white/40">
-              Sin datos
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Tiempo de Renta */}
-      <div className={cn(
-        "rounded-2xl border p-5 backdrop-blur-sm relative overflow-hidden",
-        `bg-gradient-to-br ${rentalGradient} border-white/10`
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,0.05),transparent)]" />
-        
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-2">
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", 
-              isDebt ? "bg-red-600/30" : 
-              browser.rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
-            )}>
-              <span className="text-lg">{isDebt ? "💀" : "⏰"}</span>
-            </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-white/60">
-              Tiempo de Renta
-            </span>
-          </div>
-          
-          <div className="text-center py-2">
-            <span className={cn("text-5xl font-black", rentalTextColor)}>
-              {formatRentalTime(browser.rentalRemaining)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Hover Tooltip */}
-      <div className="mt-4 text-center text-xs text-white/40 opacity-0 transition-opacity group-hover:opacity-100">
-        👆 Toca para ver más opciones
-      </div>
-    </div>
-  );
-}
-
-export function ControlPanel({ initialBrowserData, initialError }: ControlPanelProps) {
-  const [clientSearch, setClientSearch] = useState("");
-  const [browserData, setBrowserData] = useState<BrowserData | null>(initialBrowserData || null);
-  const [browserList, setBrowserList] = useState<BrowserData[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [error, setError] = useState(initialError || "");
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  
-  const [showCriticalModal, setShowCriticalModal] = useState(false);
-  const [criticalBrowser, setCriticalBrowser] = useState<BrowserData | null>(null);
-
-  useEffect(() => {
-    if (browserList.length === 0) return;
-
-    const unsubscribers: (() => void)[] = [];
-
-    browserList.forEach((browser, index) => {
-      const unsubscribe = FirebaseAPI.listenToBrowser(
-        browser.browserName,
-        (updatedData) => {
-          setBrowserList(prev => {
-            const newList = [...prev];
-            newList[index] = updatedData;
-            return newList;
-          });
-        }
-      );
-      unsubscribers.push(unsubscribe);
-    });
-
-    return () => {
-      unsubscribers.forEach(unsub => unsub());
-    };
-  }, [browserList.length]);
-
-  useEffect(() => {
-    if (browserList.length === 0) return;
-
-    const criticalBrowsers = browserList.filter(browser => {
-      if (!browser.rentalRemaining) return false;
-      const { days, hours } = browser.rentalRemaining;
-      return days === 0 && hours < 12;
-    });
-
-    if (criticalBrowsers.length > 0) {
-      const browser = criticalBrowsers[0];
-      
-      const lastShown = localStorage.getItem(`modal-renta-${browser.browserName}`);
-      const sixHoursAgo = Date.now() - (6 * 60 * 60 * 1000);
-      
-      if (!lastShown || parseInt(lastShown) < sixHoursAgo) {
-        setCriticalBrowser(browser);
-        setShowCriticalModal(true);
-      }
-    }
-  }, [browserList]);
-
-  const handleSearch = async () => {
-    if (!clientSearch.trim()) {
-      setError("Por favor escribe tu nombre");
-      return;
-    }
-
-    setSearching(true);
-    setError("");
-    setBrowserData(null);
-    setBrowserList([]);
-
-    const results = await FirebaseAPI.findAllBrowsersByClientName(clientSearch);
-
-    if (results.length === 0) {
-      setError("No encontramos tu nombre. Verifica que esté bien escrito.");
-    } else if (results.length === 1) {
-      setBrowserData(results[0]);
-    } else {
-      setBrowserList(results);
-    }
-
-    setSearching(false);
-  };
-
-  const handleSelectBrowser = (browser: BrowserData) => {
-    setBrowserData(browser);
-  };
-
-  return (
-    <>
-      <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* Panel de búsqueda mejorado para móviles */}
-        <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 min-h-[360px] sm:min-h-[320px] flex flex-col justify-center">
-          <div className="mb-6 sm:mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
-              <SettingsIcon className="h-10 w-10 sm:h-10 sm:w-10 text-primary" />
-            </div>
-            <h2 className="mb-2 text-3xl sm:text-3xl font-bold text-foreground">Mis Anuncios</h2>
-            <p className="text-lg sm:text-base text-muted-foreground px-4">Escribe tu nombre para buscar</p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="p-8 space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-amber-400 mb-2">Tu Nombre</label>
               <Input
                 type="text"
-                value={clientSearch}
-                onChange={(e) => setClientSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Escribe tu nombre..."
-                className="h-16 sm:h-12 flex-1 bg-input text-foreground text-lg sm:text-sm px-5"
-                disabled={searching}
+                value={userName}
+                onChange={(e) => setUserName(e.target.value)}
+                placeholder="Ej: Maria"
+                className="h-12 bg-black/50 border-2 border-amber-500 text-amber-300"
               />
-              <Button
-                onClick={handleSearch}
-                disabled={searching}
-                className="h-16 sm:h-12 bg-gradient-to-r from-pink-500 to-purple-500 sm:px-8 px-6 text-white hover:from-pink-600 hover:to-purple-600 font-bold text-lg sm:text-sm whitespace-nowrap"
-              >
-                <SearchIcon className="mr-2 h-6 w-6 sm:h-4 sm:w-4" />
-                {searching ? "Buscando..." : "🔍 Buscar"}
-              </Button>
             </div>
-
-            {error && (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-5 py-4 text-center text-base sm:text-sm text-destructive">
-                {error}
+            {!isCreator && (
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-3">Tu Rol</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setUserRole("escort")}
+                    className={cn(
+                      "h-24 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-2",
+                      userRole === "escort"
+                        ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-lg scale-105"
+                        : "border-gray-600 bg-black/30 text-gray-400 hover:border-amber-500"
+                    )}
+                  >
+                    <span className="text-3xl">💃</span>
+                    <span className="text-sm">Escort</span>
+                  </button>
+                  <button
+                    onClick={() => setUserRole("telefonista")}
+                    className={cn(
+                      "h-24 rounded-xl border-2 font-bold transition-all flex flex-col items-center justify-center gap-2",
+                      userRole === "telefonista"
+                        ? "border-amber-500 bg-amber-500/20 text-amber-300 shadow-lg scale-105"
+                        : "border-gray-600 bg-black/30 text-gray-400 hover:border-amber-500"
+                    )}
+                  >
+                    <span className="text-3xl">📞</span>
+                    <span className="text-sm">Telefonista</span>
+                  </button>
+                </div>
               </div>
             )}
+            <Button
+              onClick={handleJoin}
+              disabled={!userName.trim() || isJoining}
+              className={`w-full h-14 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white text-lg font-bold rounded-xl shadow-lg`}
+            >
+              {isJoining ? "Uniéndose..." : isCreator ? "Crear Sala" : "Entrar al Chat"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // CHAT PRINCIPAL - FULLSCREEN TIPO WHATSAPP
+  return (
+    <div className="h-screen flex flex-col bg-gray-900">
+      <div className={`relative w-full h-full flex flex-col`}>
+        {/* Header compacto tipo WhatsApp */}
+        <div className={`bg-gradient-to-r ${currentTheme.primary} px-3 py-2 flex items-center justify-between`}>
+          <div className="flex items-center gap-2">
+            <div className="text-xl">{currentTheme.icon}</div>
+            <div>
+              <h2 className="text-sm font-bold text-white">Sala: {roomCode}</h2>
+              <p className="text-xs text-amber-100">{participants.length} online</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              onClick={() => setShowRankingModal(true)}
+              className="bg-yellow-500/90 hover:bg-yellow-600 text-black font-bold text-xs px-2 py-1 rounded-lg h-7"
+            >
+              🏆
+            </Button>
+            {userRole === "admin" && (
+              <>
+                <Button
+                  onClick={() => setShowStatsModal(true)}
+                  className="bg-blue-500/90 hover:bg-blue-600 text-white font-bold text-xs px-2 py-1 rounded-lg h-7"
+                >
+                  📊
+                </Button>
+                <Button
+                  onClick={() => {
+                    setEditingSettings({
+                      maxEscorts: roomSettings.maxEscorts.toString(),
+                      maxTelefonistas: roomSettings.maxTelefonistas.toString(),
+                      prices: roomSettings.prices.map(p => p.toString()),
+                    });
+                    setShowSettingsModal(true);
+                  }}
+                  className="bg-purple-500/90 hover:bg-purple-600 text-white font-bold text-xs px-2 py-1 rounded-lg h-7"
+                >
+                  ⚙️
+                </Button>
+              </>
+            )}
+            <Button
+              onClick={handleLeaveChat}
+              className="bg-red-500/90 hover:bg-red-600 text-white rounded-lg px-2 py-1 h-7"
+            >
+              🚪
+            </Button>
           </div>
         </div>
 
-        {browserList.length > 0 && (
-          <div className="mt-8 space-y-6">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-center sm:text-left flex-1 w-full sm:w-auto">
-                <h3 className="text-2xl md:text-3xl font-bold text-foreground">
-                  Tus Perfiles
-                </h3>
-                <p className="text-base md:text-base text-muted-foreground">
-                  {browserList.length} {browserList.length === 1 ? "perfil" : "perfiles"}
-                </p>
-              </div>
+        {/* Barra de advertencia */}
+        <div className="bg-red-900/80 border-b-2 border-red-600 p-2 text-center">
+          <p className="text-xs text-red-200 font-medium">
+            🚫 Prohibido compartir números, links o redes sociales
+          </p>
+        </div>
 
-              <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1.5 border border-border w-full sm:w-auto justify-center">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={cn(
-                    "px-5 py-3 sm:px-4 sm:py-2 rounded-lg text-base sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
-                    viewMode === 'grid'
-                      ? "bg-background text-foreground shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <span className="text-xl sm:text-base">🔲</span>
-                  <span>Grid</span>
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={cn(
-                    "px-5 py-3 sm:px-4 sm:py-2 rounded-lg text-base sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
-                    viewMode === 'list'
-                      ? "bg-background text-foreground shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <span className="text-xl sm:text-base">📋</span>
-                  <span>Lista</span>
-                </button>
-              </div>
+        {/* Estado Escorts */}
+        {escorts.map(escort => (
+          <div
+            key={escort.id}
+            className={cn(
+              "flex items-center justify-between p-3 border-b-2",
+              escortStatus === "disponible" ? "bg-green-900/30 border-green-600" : "bg-red-900/30 border-red-600"
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "w-3 h-3 rounded-full",
+                  escortStatus === "disponible" ? "bg-green-500 animate-pulse" : "bg-red-500"
+                )}
+              ></div>
+              <span className="font-bold text-sm text-white">
+                {escort.name} {escortStatus === "disponible" ? "DISPONIBLE 🟢" : "OCUPADA 🔴"}
+              </span>
             </div>
+            {userRole === "escort" && escort.id === currentUserId && (
+              <Button
+                onClick={toggleEscortStatus}
+                className={cn(
+                  "h-8 text-sm font-bold rounded-lg",
+                  escortStatus === "disponible"
+                    ? "bg-red-500 hover:bg-red-600"
+                    : "bg-green-500 hover:bg-green-600"
+                )}
+              >
+                {escortStatus === "disponible" ? "Marcar Ocupada" : "Marcar Disponible"}
+              </Button>
+            )}
+          </div>
+        ))}
 
-            <div className={cn(
-              viewMode === 'grid' 
-                ? "grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2" 
-                : "space-y-3"
-            )}>
-              {browserList.map((browser) => (
-                <BrowserCard
-                  key={browser.browserName}
-                  browser={browser}
-                  onClick={() => handleSelectBrowser(browser)}
-                  viewMode={viewMode}
-                />
+        {/* Clientes en espera */}
+        {waitingClients.length > 0 && (
+          <div className="p-4 bg-yellow-900/30 border-b-2 border-yellow-600">
+            <p className="text-sm font-bold text-yellow-300 mb-2">
+              ⏳ {waitingClients.length} Cliente{waitingClients.length !== 1 ? "s" : ""} en Espera
+            </p>
+            <div className="space-y-2">
+              {waitingClients.map((code, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between gap-3 bg-black/50 p-3 rounded-lg border-2 border-yellow-600"
+                >
+                  <span className="font-mono font-bold text-2xl text-yellow-300">{code}</span>
+                  {userRole === "escort" && (
+                    <button
+                      onClick={() => setSelectedClientForPrice(code)}
+                      disabled={processingClient === code}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 rounded-lg font-bold transition-all",
+                        processingClient === code
+                          ? "bg-gray-600 cursor-not-allowed"
+                          : "bg-green-500 hover:bg-green-600 text-white shadow-lg hover:scale-105"
+                      )}
+                    >
+                      <span>✓</span>
+                      <span className="text-sm">Atendido</span>
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
         )}
+
+        {/* ✅ ÁREA DE MENSAJES CON FONDO DENTRO */}
+        <div 
+          ref={messagesContainerRef}
+          className="flex-1 overflow-y-auto px-3 py-2 space-y-2 relative"
+          style={{
+            backgroundImage: `url(${currentTheme.bgImage})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundAttachment: 'local'
+          }}
+        >
+          {/* Overlay oscuro para legibilidad */}
+          <div className="absolute inset-0 bg-black/70 pointer-events-none"></div>
+          
+          {/* Mensajes encima del fondo */}
+          <div className="relative z-10 space-y-2">
+          {messages.map((msg) => {
+            const isForMe = msg.recipientId === currentUserId || msg.senderId === currentUserId;
+            if (msg.isPrivate && !isForMe && userRole !== "admin") return null;
+            return (
+              <div
+                key={msg.id}
+                className={cn("flex", msg.sender === userName && !msg.isSystem ? "justify-end" : "justify-start")}
+              >
+                <div
+                  className={cn(
+                    "max-w-[70%] rounded-2xl px-4 py-2 shadow",
+                    msg.isSystem
+                      ? msg.isWarning
+                        ? "bg-red-900/80 text-red-200 border-2 border-red-600 w-full max-w-none text-center font-bold"
+                        : "bg-gray-800/80 text-gray-300 w-full max-w-none text-center text-sm italic"
+                      : msg.isClientCode
+                      ? "bg-gradient-to-r from-orange-600 to-red-600 text-white font-bold border-2 border-orange-400 animate-pulse"
+                      : msg.isPrivate
+                      ? "bg-purple-900/80 text-purple-200 border-2 border-purple-500"
+                      : msg.sender === userName
+                      ? `bg-gradient-to-r ${currentTheme.primary} text-white`
+                      : "bg-gray-800/80 text-gray-200 border-2 border-gray-600"
+                  )}
+                >
+                  {!msg.isSystem && (
+                    <p className="text-xs font-bold mb-1 opacity-80">
+                      {msg.sender}
+                      {msg.isPrivate && " 🔒"}
+                    </p>
+                  )}
+                  <p className="text-sm break-words">{msg.text}</p>
+                  <p className="text-xs opacity-70 mt-1">
+                    {new Date(msg.timestamp).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
+          </div>
+        </div>
+
+        {/* Input de mensajes compacto tipo WhatsApp */}
+        <div className="bg-gray-900 px-2 py-2 space-y-2">
+          {userRole === "telefonista" && (
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                value={clientCode}
+                onChange={(e) => setClientCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                onKeyPress={(e) => e.key === "Enter" && sendClientCode()}
+                placeholder="4 dígitos"
+                className="flex-1 h-10 text-center text-base font-mono font-bold bg-black border-2 border-amber-500 text-amber-300"
+                maxLength={4}
+              />
+              <Button
+                onClick={sendClientCode}
+                disabled={clientCode.length !== 4}
+                className={`h-10 px-4 bg-gradient-to-r ${currentTheme.primary} text-white font-bold rounded-lg`}
+              >
+                📞
+              </Button>
+            </div>
+          )}
+          {/* Botones rápidos con scroll horizontal */}
+          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'thin' }}>
+            {QUICK_MESSAGES[userRole === "escort" ? "escort" : "telefonista"].map((msg, index) => (
+              <button
+                key={index}
+                onClick={() => sendMessage(msg)}
+                className="flex-shrink-0 px-3 py-1.5 text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-full whitespace-nowrap"
+              >
+                {msg}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Mensaje..."
+              className="flex-1 h-10 bg-gray-800 border border-gray-700 text-white rounded-full px-4"
+            />
+            <Button
+              onClick={() => sendMessage()}
+              disabled={!newMessage.trim()}
+              className={`h-10 w-10 rounded-full ${currentTheme.accent} text-white flex items-center justify-center`}
+            >
+              📤
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {browserData && (
-        <Dashboard
-          browserData={browserData}
-          onClose={() => {
-            setBrowserData(null);
-          }}
-        />
-      )}
-
-      {showCriticalModal && criticalBrowser && criticalBrowser.rentalRemaining && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
-          <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-destructive/20 via-transparent to-destructive/20 animate-pulse" />
-            
-            <div className="relative p-8">
-              <div className="text-center">
-                <div className="text-7xl mb-4 animate-bounce">🚨</div>
-                
-                <h2 className="text-3xl font-black text-destructive mb-2 uppercase tracking-tight">
-                  ¡Atención Urgente!
-                </h2>
-                <p className="text-muted-foreground mb-6">
-                  Tu cuenta está por expirar
-                </p>
-                
-                <div className="bg-destructive/20 border-2 border-destructive rounded-xl p-6 mb-6 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
-                  <p className="text-lg font-bold text-destructive mb-2">
-                    Expira en
-                  </p>
-                  <div className="flex items-center justify-center gap-2">
-                    <div className="bg-black/40 rounded-lg px-4 py-2">
-                      <div className="text-4xl font-black text-destructive tabular-nums">
-                        {criticalBrowser.rentalRemaining.hours.toString().padStart(2, '0')}
+      {/* MODAL RANKING */}
+      {showRankingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-amber-400">🏆 TOP 3 TELEFONISTAS</h3>
+              <button
+                onClick={() => setShowRankingModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-6">Últimos 7 días</p>
+            <div className="space-y-4">
+              {topTelefonistas.map((tel, index) => {
+                const badges = calculateBadges(tel.clientsSent);
+                return (
+                  <div
+                    key={tel.id}
+                    className={cn(
+                      "p-4 rounded-xl border-2 flex items-center justify-between",
+                      index === 0 && "bg-yellow-900/20 border-yellow-500",
+                      index === 1 && "bg-gray-700/20 border-gray-400",
+                      index === 2 && "bg-orange-900/20 border-orange-600"
+                    )}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="text-4xl">
+                        {index === 0 && "🥇"}
+                        {index === 1 && "🥈"}
+                        {index === 2 && "🥉"}
                       </div>
-                      <div className="text-xs text-muted-foreground">horas</div>
+                      <div>
+                        <p className="font-bold text-lg text-white">{tel.name}</p>
+                        <p className="text-sm text-gray-400">
+                          {tel.clientsSent} cliente{tel.clientsSent !== 1 ? "s" : ""}
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Último: {getTimeSinceLastClient(tel.lastClientTime)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-3xl font-bold text-destructive">:</div>
-                    <div className="bg-black/40 rounded-lg px-4 py-2">
-                      <div className="text-4xl font-black text-destructive tabular-nums">
-                        {criticalBrowser.rentalRemaining.minutes.toString().padStart(2, '0')}
-                      </div>
-                      <div className="text-xs text-muted-foreground">minutos</div>
+                    <div className="flex flex-col items-end gap-2">
+                      {badges.length > 0 && (
+                        <div className="flex gap-1">
+                          {badges.map(badge => (
+                            <span key={badge} className="text-2xl">
+                              {BADGES[badge as keyof typeof BADGES].icon}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {tel.rating && tel.rating > 0 && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-yellow-500">★</span>
+                          <span className="text-sm font-bold text-white">
+                            {tel.rating.toFixed(1)}
+                          </span>
+                          <span className="text-xs text-gray-400">
+                            ({tel.totalRatings})
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                </div>
-                
-                <div className="bg-black/60 rounded-xl p-5 mb-6 text-left border border-destructive/30">
-                  <p className="text-destructive font-bold mb-3 text-center text-lg flex items-center justify-center gap-2">
-                    <span>💀</span>
-                    <span>Después de eso:</span>
-                    <span>💀</span>
-                  </p>
-                  <ul className="space-y-2.5">
-                    <li className="flex items-start gap-2 text-sm">
-                      <span className="text-destructive flex-shrink-0 text-lg">❌</span>
-                      <span className="text-foreground">
-                        Tu anuncio será <strong className="text-destructive">ELIMINADO</strong>
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <span className="text-warning flex-shrink-0 text-lg">❌</span>
-                      <span className="text-foreground">
-                        Perderás tu <strong className="text-warning">posicionamiento</strong>
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <span className="text-orange-500 flex-shrink-0 text-lg">❌</span>
-                      <span className="text-foreground">
-                        Las estadísticas se <strong className="text-orange-500">borrarán</strong>
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-2 text-sm">
-                      <span className="text-pink-500 flex-shrink-0 text-lg">❌</span>
-                      <span className="text-foreground">
-                        No lo podrás recuperar después de <strong className="text-pink-500">48 horas</strong>
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-
-                <a
-                  href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                    `🚨 URGENTE: Renovar ${criticalBrowser.browserName} - Expira en ${criticalBrowser.rentalRemaining.hours}h ${criticalBrowser.rentalRemaining.minutes}m`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="block w-full bg-gradient-to-r from-destructive to-pink-600 text-white py-4 rounded-xl font-black text-lg mb-4 hover:scale-105 transition-transform shadow-lg shadow-destructive/50 uppercase tracking-wide"
-                  onClick={() => {
-                    localStorage.setItem(`modal-renta-${criticalBrowser.browserName}`, Date.now().toString());
-                    setShowCriticalModal(false);
-                  }}
-                >
-                  🔥 Renovar Ahora 🔥
-                </a>
-                
-                <button
-                  onClick={() => {
-                    localStorage.setItem(`modal-renta-${criticalBrowser.browserName}`, Date.now().toString());
-                    setShowCriticalModal(false);
-                  }}
-                  className="text-muted-foreground text-sm hover:text-foreground transition-colors underline"
-                >
-                  Recordar en 6 horas
-                </button>
-                
-                <p className="mt-4 text-xs text-destructive/70">
-                  ⚠️ Este mensaje se mostrará cada 6 horas
+                );
+              })}
+              {topTelefonistas.length === 0 && (
+                <p className="text-center text-gray-500 py-8">
+                  No hay datos suficientes para mostrar ranking
                 </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ESTADÍSTICAS */}
+      {showStatsModal && userRole === "admin" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-4xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-amber-400">📊 Panel de Administración</h3>
+              <button
+                onClick={() => setShowStatsModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Estadísticas generales */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="bg-blue-900/30 p-4 rounded-lg border border-blue-600">
+                <p className="text-xs text-blue-300 mb-1">Total Participantes</p>
+                <p className="text-2xl font-bold text-white">{participants.length}</p>
+              </div>
+              <div className="bg-green-900/30 p-4 rounded-lg border border-green-600">
+                <p className="text-xs text-green-300 mb-1">Clientes Totales</p>
+                <p className="text-2xl font-bold text-white">
+                  {participants.reduce((sum, p) => sum + p.clientsSent, 0)}
+                </p>
+              </div>
+              <div className="bg-yellow-900/30 p-4 rounded-lg border border-yellow-600">
+                <p className="text-xs text-yellow-300 mb-1">En Espera</p>
+                <p className="text-2xl font-bold text-white">{waitingClients.length}</p>
+              </div>
+            </div>
+
+            {/* Telefonistas */}
+            <div className="mb-6">
+              <h4 className="text-lg font-bold text-amber-400 mb-3">
+                📞 Telefonistas ({telefonistas.length})
+              </h4>
+              <div className="space-y-2">
+                {telefonistas.map(tel => (
+                  <div
+                    key={tel.id}
+                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-600"
+                  >
+                    <div>
+                      <p className="font-bold text-white">{tel.name}</p>
+                      <p className="text-xs text-gray-400">
+                        {tel.clientsSent} cliente{tel.clientsSent !== 1 ? "s" : ""} • 
+                        {tel.violations > 0 && ` ${tel.violations} violación${tel.violations !== 1 ? "es" : ""}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {tel.rating && tel.rating > 0 && (
+                        <div className="flex items-center gap-1 bg-yellow-900/30 px-2 py-1 rounded">
+                          <span className="text-yellow-500 text-xs">★</span>
+                          <span className="text-sm font-bold text-white">{tel.rating.toFixed(1)}</span>
+                        </div>
+                      )}
+                      <Button
+                        onClick={() => {
+                          setPrivateChatRecipient(tel.id);
+                          setShowPrivateChat(true);
+                          setShowStatsModal(false);
+                        }}
+                        className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded"
+                      >
+                        💬
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Escorts */}
+            <div>
+              <h4 className="text-lg font-bold text-amber-400 mb-3">
+                💃 Escorts ({escorts.length})
+              </h4>
+              <div className="space-y-2">
+                {escorts.map(esc => (
+                  <div
+                    key={esc.id}
+                    className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-600"
+                  >
+                    <div>
+                      <p className="font-bold text-white">{esc.name}</p>
+                      <p className="text-xs text-gray-400">
+                        Estado: {escortStatus === "disponible" ? "🟢 Disponible" : "🔴 Ocupada"}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setPrivateChatRecipient(esc.id);
+                        setShowPrivateChat(true);
+                        setShowStatsModal(false);
+                      }}
+                      className="bg-purple-600 hover:bg-purple-700 text-white text-xs px-3 py-1 rounded"
+                    >
+                      💬
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      <style jsx>{`
-        @keyframes shimmer {
-          0% {
-            transform: translateX(-100%);
-          }
-          100% {
-            transform: translateX(100%);
-          }
-        }
-        
-        .animate-shimmer {
-          animation: shimmer 3s infinite;
-        }
-      `}</style>
-    </>
+      {/* MODAL CONFIGURACIÓN CON SELECTOR DE TEMA */}
+      {showSettingsModal && userRole === "admin" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-2xl ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6 max-h-[80vh] overflow-y-auto`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold text-amber-400">⚙️ Configuración de Sala</h3>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* SELECTOR DE TEMA */}
+            <div className="mb-6">
+              <h4 className="text-lg font-bold text-amber-400 mb-3">🎬 Tema Visual</h4>
+              <div className="grid grid-cols-2 gap-4">
+                {(Object.keys(THEMES) as ThemeName[]).map((themeKey) => {
+                  const theme = THEMES[themeKey];
+                  return (
+                    <button
+                      key={themeKey}
+                      onClick={() => changeTheme(themeKey)}
+                      className={cn(
+                        "relative h-40 rounded-xl border-4 transition-all hover:scale-105 overflow-hidden",
+                        selectedTheme === themeKey
+                          ? "border-yellow-500 shadow-2xl shadow-yellow-500/50 ring-4 ring-yellow-400/50"
+                          : "border-gray-600 hover:border-amber-500"
+                      )}
+                    >
+                      <div
+                        className="absolute inset-0 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${theme.bgImage})` }}
+                      ></div>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent"></div>
+                      
+                      {selectedTheme === themeKey && (
+                        <div className="absolute top-2 right-2 bg-yellow-500 text-black font-bold px-2 py-1 rounded-full text-xs">
+                          ✓ ACTUAL
+                        </div>
+                      )}
+                      
+                      <div className="relative h-full flex flex-col items-center justify-end p-4">
+                        <span className="text-4xl mb-2">{theme.icon}</span>
+                        <p className="font-black text-xl text-white" style={{ textShadow: '2px 2px 8px rgba(0,0,0,1)' }}>
+                          {theme.name}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Configuración de límites */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Máximo de Escorts
+                </label>
+                <Input
+                  type="number"
+                  value={editingSettings.maxEscorts}
+                  onChange={(e) =>
+                    setEditingSettings({ ...editingSettings, maxEscorts: e.target.value })
+                  }
+                  min="1"
+                  max="10"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Máximo de Telefonistas
+                </label>
+                <Input
+                  type="number"
+                  value={editingSettings.maxTelefonistas}
+                  onChange={(e) =>
+                    setEditingSettings({ ...editingSettings, maxTelefonistas: e.target.value })
+                  }
+                  min="1"
+                  max="20"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-amber-400 mb-2">
+                  Precios (separados por comas)
+                </label>
+                <Input
+                  type="text"
+                  value={editingSettings.prices.join(", ")}
+                  onChange={(e) =>
+                    setEditingSettings({
+                      ...editingSettings,
+                      prices: e.target.value.split(",").map(p => p.trim()),
+                    })
+                  }
+                  placeholder="100, 150, 200"
+                  className="w-full h-10 bg-black/50 border-2 border-gray-600 text-white"
+                />
+              </div>
+
+              <Button
+                onClick={saveSettings}
+                className={`w-full h-12 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white font-bold rounded-lg`}
+              >
+                💾 Guardar Configuración
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CALIFICAR TELEFONISTA */}
+      {showRatingModal && selectedTelefonistaToRate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-amber-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-amber-400">⭐ Calificar Telefonista</h3>
+              <button
+                onClick={() => {
+                  setShowRatingModal(false);
+                  setSelectedTelefonistaToRate(null);
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-center mb-6">
+              <p className="text-white font-bold mb-4">
+                {participants.find(p => p.id === selectedTelefonistaToRate)?.name}
+              </p>
+              <div className="flex justify-center gap-2 mb-4">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    onClick={() => setRating(star)}
+                    className={cn(
+                      "text-4xl transition-transform hover:scale-110",
+                      star <= rating ? "text-yellow-500" : "text-gray-600"
+                    )}
+                  >
+                    ★
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <Button
+              onClick={rateTelefonista}
+              className={`w-full h-12 bg-gradient-to-r ${currentTheme.primary} hover:opacity-90 text-white font-bold rounded-lg`}
+            >
+              Enviar Calificación
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CHAT PRIVADO */}
+      {showPrivateChat && privateChatRecipient && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-purple-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-purple-400">💬 Mensaje Privado</h3>
+              <button
+                onClick={() => {
+                  setShowPrivateChat(false);
+                  setPrivateChatRecipient(null);
+                  setPrivateMessage("");
+                }}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-white mb-4">
+              Para: <span className="font-bold">{participants.find(p => p.id === privateChatRecipient)?.name}</span>
+            </p>
+
+            <textarea
+              value={privateMessage}
+              onChange={(e) => setPrivateMessage(e.target.value)}
+              placeholder="Escribe tu mensaje privado..."
+              className="w-full h-32 p-3 bg-black/50 border-2 border-purple-500 text-white rounded-lg resize-none mb-4"
+            />
+
+            <Button
+              onClick={sendPrivateMessage}
+              disabled={!privateMessage.trim()}
+              className="w-full h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:opacity-90 text-white font-bold rounded-lg"
+            >
+              📤 Enviar Mensaje Privado
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL SELECCIONAR PRECIO */}
+      {selectedClientForPrice && userRole === "escort" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+          <div className={`w-full max-w-md ${currentTheme.cardBg} rounded-2xl shadow-2xl border-2 border-green-500 p-6`}>
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-xl font-bold text-green-400">💵 Cliente {selectedClientForPrice}</h3>
+              <button
+                onClick={() => setSelectedClientForPrice(null)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ✕
+              </button>
+            </div>
+
+            <p className="text-white mb-4 text-center">Selecciona el precio que pagó:</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              {roomSettings.prices.map((price) => (
+                <button
+                  key={price}
+                  onClick={() => markClientAttended(selectedClientForPrice, price)}
+                  className="h-20 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-2xl rounded-xl shadow-lg transition-transform hover:scale-105"
+                >
+                  ${price}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
