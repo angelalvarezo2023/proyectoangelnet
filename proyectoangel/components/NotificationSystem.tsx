@@ -110,35 +110,36 @@ export default function NotificationSystem() {
   }
   
   function handleNotification(data: { text?: string; from?: string; messageId?: string }) {
-    console.log('🔔 Notificación recibida:', data);
+    console.log('🔔 handleNotification llamado:', data);
+    console.log('   - isVisible:', isVisible);
+    console.log('   - permission:', permission);
     
-    // Solo notificar si la pestaña NO está visible
-    // (Si está visible, el usuario ya ve el mensaje)
-    if (isVisible) {
-      console.log('⏭️ Pestaña visible, omitiendo notificación');
-      return;
-    }
+    // ✅ NOTIFICAR SIEMPRE (incluso si la app está visible)
+    // Las notificaciones ayudan cuando hay múltiples conversaciones
     
-    // 1. SONIDO
+    console.log('🔊 1. Reproduciendo sonido...');
     playSound();
     
-    // 2. VIBRACIÓN
+    console.log('📳 2. Activando vibración...');
     vibrate();
     
-    // 3. TÍTULO PARPADEANTE
+    console.log('💫 3. Iniciando título parpadeante...');
     flashTitle(data.text || 'Nuevo mensaje');
     
-    // 4. NOTIFICACIÓN DEL SISTEMA
+    // 4. NOTIFICACIÓN DEL SISTEMA (solo si tiene permiso)
     if (permission === 'granted') {
+      console.log('📬 4. Mostrando notificación del sistema...');
       showNotification(data);
     } else {
-      console.log('⚠️ Sin permiso para notificaciones del sistema');
-      // Mostrar prompt si no tiene permiso
+      console.log('⚠️ 4. Sin permiso para notificaciones (permission:', permission, ')');
+      console.log('   Mostrando prompt para solicitar permiso...');
       setShowPrompt(true);
     }
     
-    // 5. BADGE (si es PWA instalada)
+    console.log('🎖️ 5. Actualizando badge...');
     updateBadge();
+    
+    console.log('✅ handleNotification COMPLETADO');
   }
   
   function playSound() {
