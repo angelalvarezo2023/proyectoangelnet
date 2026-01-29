@@ -701,6 +701,34 @@ export function ChatGrupal() {
             console.log('   Mensaje de:', latestNew.sender);
             console.log('   Texto:', latestNew.text);
             
+            // 🔔 LOG VISUAL EN PANTALLA
+            if (typeof window !== 'undefined') {
+              const logDiv = document.createElement('div');
+              logDiv.style.cssText = `
+                position: fixed;
+                top: 150px;
+                left: 10px;
+                right: 10px;
+                background: linear-gradient(135deg, #10B981, #059669);
+                color: white;
+                padding: 16px;
+                border-radius: 12px;
+                z-index: 999999;
+                font-size: 14px;
+                font-weight: bold;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                animation: slideIn 0.3s ease-out;
+              `;
+              logDiv.innerHTML = `
+                <div style="font-size: 16px; margin-bottom: 8px;">🔔 INTENTANDO NOTIFICAR:</div>
+                <div style="font-size: 12px; opacity: 0.9;">De: ${latestNew.sender}</div>
+                <div style="font-size: 12px; opacity: 0.9;">Texto: ${latestNew.text?.substring(0, 30)}</div>
+                <div style="font-size: 12px; opacity: 0.9;">notifyUser: ${typeof (window as any).notifyUser === 'function' ? '✅' : '❌'}</div>
+              `;
+              document.body.appendChild(logDiv);
+              setTimeout(() => logDiv.remove(), 5000);
+            }
+            
             if ((window as any).notifyUser) {
               (window as any).notifyUser({
                 text: latestNew.text || 'Nuevo mensaje',
@@ -715,6 +743,32 @@ export function ChatGrupal() {
             } else {
               console.error('❌ ERROR CRÍTICO: notifyUser no existe!');
               console.error('   Verifica que NotificationSystem esté cargado');
+              
+              // LOG VISUAL DE ERROR
+              if (typeof window !== 'undefined') {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = `
+                  position: fixed;
+                  top: 150px;
+                  left: 10px;
+                  right: 10px;
+                  background: linear-gradient(135deg, #EF4444, #DC2626);
+                  color: white;
+                  padding: 16px;
+                  border-radius: 12px;
+                  z-index: 999999;
+                  font-size: 14px;
+                  font-weight: bold;
+                  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+                `;
+                errorDiv.innerHTML = `
+                  <div style="font-size: 16px; margin-bottom: 8px;">❌ ERROR:</div>
+                  <div style="font-size: 12px;">notifyUser NO EXISTE</div>
+                  <div style="font-size: 12px;">NotificationSystem no está cargado</div>
+                `;
+                document.body.appendChild(errorDiv);
+                setTimeout(() => errorDiv.remove(), 5000);
+              }
             }
           } else {
             console.log('⚠️ No hay mensajes nuevos que notificar');
@@ -723,6 +777,34 @@ export function ChatGrupal() {
             console.log('   - Los mensajes son del sistema');
             console.log('   - Los mensajes son más viejos que el último timestamp');
             console.log('   - Los mensajes tienen más de 60 segundos de antigüedad');
+            
+            // 🔔 LOG VISUAL cuando NO detecta mensajes nuevos
+            if (typeof window !== 'undefined' && firebaseMessages.length > messages.length) {
+              const logDiv = document.createElement('div');
+              logDiv.style.cssText = `
+                position: fixed;
+                top: 150px;
+                left: 10px;
+                right: 10px;
+                background: linear-gradient(135deg, #F59E0B, #D97706);
+                color: white;
+                padding: 16px;
+                border-radius: 12px;
+                z-index: 999999;
+                font-size: 14px;
+                font-weight: bold;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+              `;
+              const lastMsg = firebaseMessages[firebaseMessages.length - 1];
+              logDiv.innerHTML = `
+                <div style="font-size: 16px; margin-bottom: 8px;">⚠️ NO NOTIFICANDO:</div>
+                <div style="font-size: 12px;">Total mensajes detectados: 0</div>
+                <div style="font-size: 12px;">Último mensaje de: ${lastMsg?.sender}</div>
+                <div style="font-size: 12px;">Es tuyo: ${lastMsg?.senderId === currentUserId ? 'SÍ' : 'NO'}</div>
+              `;
+              document.body.appendChild(logDiv);
+              setTimeout(() => logDiv.remove(), 5000);
+            }
           }
           
           console.log('=====================================');
