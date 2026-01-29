@@ -701,33 +701,6 @@ export function ChatGrupal() {
             console.log('   Mensaje de:', latestNew.sender);
             console.log('   Texto:', latestNew.text);
             
-            // 🔔 LOG VISUAL EN PANTALLA
-            if (typeof window !== 'undefined') {
-              const logDiv = document.createElement('div');
-              logDiv.style.cssText = `
-                position: fixed;
-                top: 150px;
-                left: 10px;
-                right: 10px;
-                background: linear-gradient(135deg, #10B981, #059669);
-                color: white;
-                padding: 16px;
-                border-radius: 12px;
-                z-index: 999999;
-                font-size: 14px;
-                font-weight: bold;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-                animation: slideIn 0.3s ease-out;
-              `;
-              logDiv.innerHTML = `
-                <div style="font-size: 16px; margin-bottom: 8px;">🔔 INTENTANDO NOTIFICAR:</div>
-                <div style="font-size: 12px; opacity: 0.9;">De: ${latestNew.sender}</div>
-                <div style="font-size: 12px; opacity: 0.9;">Texto: ${latestNew.text?.substring(0, 30)}</div>
-                <div style="font-size: 12px; opacity: 0.9;">notifyUser: ${typeof (window as any).notifyUser === 'function' ? '✅' : '❌'}</div>
-              `;
-              document.body.appendChild(logDiv);
-              setTimeout(() => logDiv.remove(), 5000);
-            }
             
             if ((window as any).notifyUser) {
               (window as any).notifyUser({
@@ -777,34 +750,6 @@ export function ChatGrupal() {
             console.log('   - Los mensajes son del sistema');
             console.log('   - Los mensajes son más viejos que el último timestamp');
             console.log('   - Los mensajes tienen más de 60 segundos de antigüedad');
-            
-            // 🔔 LOG VISUAL cuando NO detecta mensajes nuevos
-            if (typeof window !== 'undefined' && firebaseMessages.length > messages.length) {
-              const logDiv = document.createElement('div');
-              logDiv.style.cssText = `
-                position: fixed;
-                top: 150px;
-                left: 10px;
-                right: 10px;
-                background: linear-gradient(135deg, #F59E0B, #D97706);
-                color: white;
-                padding: 16px;
-                border-radius: 12px;
-                z-index: 999999;
-                font-size: 14px;
-                font-weight: bold;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-              `;
-              const lastMsg = firebaseMessages[firebaseMessages.length - 1];
-              logDiv.innerHTML = `
-                <div style="font-size: 16px; margin-bottom: 8px;">⚠️ NO NOTIFICANDO:</div>
-                <div style="font-size: 12px;">Total mensajes detectados: 0</div>
-                <div style="font-size: 12px;">Último mensaje de: ${lastMsg?.sender}</div>
-                <div style="font-size: 12px;">Es tuyo: ${lastMsg?.senderId === currentUserId ? 'SÍ' : 'NO'}</div>
-              `;
-              document.body.appendChild(logDiv);
-              setTimeout(() => logDiv.remove(), 5000);
-            }
           }
           
           console.log('=====================================');
@@ -2109,133 +2054,6 @@ export function ChatGrupal() {
   // CHAT PRINCIPAL - FULLSCREEN TIPO WHATSAPP
   return (
     <div className="h-screen flex flex-col bg-gray-900">
-      
-      {/* 🔧 PANEL DE DIAGNÓSTICO - TEMPORAL */}
-      {step === "chat" && (
-        <div
-          style={{
-            position: 'fixed',
-            top: '10px',
-            left: '10px',
-            right: '10px',
-            zIndex: 99999,
-            backgroundColor: 'rgba(0, 0, 0, 0.95)',
-            color: 'white',
-            padding: '12px',
-            borderRadius: '12px',
-            fontSize: '12px',
-            fontFamily: 'monospace',
-            border: '2px solid #EF4444',
-            maxWidth: '95%'
-          }}
-        >
-          <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#EF4444' }}>
-            🔧 DIAGNÓSTICO
-          </div>
-          
-          <div style={{ marginBottom: '4px' }}>
-            👤 Usuario: <span style={{ color: '#10B981', fontWeight: 'bold' }}>{userName}</span>
-          </div>
-          
-          <div style={{ marginBottom: '4px' }}>
-            🆔 ID: <span style={{ color: '#3B82F6', fontSize: '10px' }}>{currentUserId}</span>
-          </div>
-          
-          <div style={{ marginBottom: '4px' }}>
-            📋 Rol: <span style={{ color: '#F59E0B' }}>{userRole}</span>
-          </div>
-          
-          <div style={{ marginBottom: '8px' }}>
-            🔔 notifyUser: <span style={{ color: typeof (window as any).notifyUser === 'function' ? '#10B981' : '#EF4444' }}>
-              {typeof (window as any).notifyUser === 'function' ? '✅ Existe' : '❌ No existe'}
-            </span>
-          </div>
-          
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              onClick={() => {
-                if (confirm('¿Regenerar ID y recargar?\n\nEsto te dará un ID completamente nuevo.')) {
-                  localStorage.removeItem('chatSession');
-                  window.location.reload();
-                }
-              }}
-              style={{
-                backgroundColor: '#EF4444',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: 'none',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🔄 REGENERAR ID
-            </button>
-            
-            <button
-              onClick={() => {
-                if ((window as any).notifyUser) {
-                  (window as any).notifyUser({
-                    text: 'PRUEBA - Si escuchas/sientes esto, funciona!',
-                    from: 'Test',
-                    messageId: 'test-' + Date.now()
-                  });
-                } else {
-                  alert('❌ notifyUser no existe');
-                }
-              }}
-              style={{
-                backgroundColor: '#10B981',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: 'none',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              🧪 TEST
-            </button>
-            
-            <button
-              onClick={() => {
-                const info = `
-Usuario: ${userName}
-ID: ${currentUserId}
-Rol: ${userRole}
-notifyUser: ${typeof (window as any).notifyUser === 'function' ? 'Existe' : 'No existe'}
-Permiso: ${typeof Notification !== 'undefined' ? Notification.permission : 'N/A'}
-                `.trim();
-                
-                // Copiar al portapapeles
-                navigator.clipboard.writeText(info).then(() => {
-                  alert('✅ Info copiada al portapapeles');
-                }).catch(() => {
-                  alert(info);
-                });
-              }}
-              style={{
-                backgroundColor: '#3B82F6',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                border: 'none',
-                fontSize: '11px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-            >
-              📋 COPIAR INFO
-            </button>
-          </div>
-          
-          <div style={{ marginTop: '8px', fontSize: '10px', color: '#9CA3AF' }}>
-            Toca "🔄 REGENERAR ID" para obtener un ID nuevo
-          </div>
-        </div>
-      )}
       
       <div className={`relative w-full h-full flex flex-col`}>
         {/* Header compacto tipo WhatsApp */}
