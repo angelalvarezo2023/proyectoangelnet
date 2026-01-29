@@ -6,10 +6,15 @@ export default function NotificationSystem() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [showPrompt, setShowPrompt] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
+  const [isChromeiOS, setIsChromeiOS] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const titleIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
+    // Detectar Chrome iOS
+    const chromeiOS = /CriOS/i.test(navigator.userAgent);
+    setIsChromeiOS(chromeiOS);
+    
     // Verificar permiso actual
     checkPermission();
     
@@ -66,7 +71,14 @@ export default function NotificationSystem() {
   
   async function requestPermission() {
     if (!('Notification' in window)) {
-      alert('⚠️ Tu navegador no soporta notificaciones.\n\nSi estás en Chrome iOS, necesitas usar Safari para recibir notificaciones.');
+      // Detectar si realmente es Chrome iOS
+      const isChromeiOS = /CriOS/i.test(navigator.userAgent);
+      
+      if (isChromeiOS) {
+        alert('⚠️ Chrome iOS no soporta notificaciones.\n\nPor favor, abre esta app en Safari para recibir notificaciones.');
+      } else {
+        alert('⚠️ Tu navegador no soporta notificaciones.');
+      }
       return;
     }
     
@@ -331,7 +343,7 @@ export default function NotificationSystem() {
       />
       
       {/* Prompt para activar notificaciones */}
-      {showPrompt && permission === 'default' && (
+      {showPrompt && permission === 'default' && !isChromeiOS && (
         <div className="fixed bottom-20 right-4 left-4 md:left-auto md:w-80 z-[9999] bg-gradient-to-r from-amber-600 to-orange-600 text-white p-4 rounded-xl shadow-2xl animate-slide-up">
           <div className="flex items-start gap-3">
             <div className="text-3xl">🔔</div>
@@ -354,6 +366,21 @@ export default function NotificationSystem() {
                   Ahora no
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Banner de advertencia para Chrome iOS */}
+      {isChromeiOS && (
+        <div className="fixed bottom-20 right-4 left-4 md:left-auto md:w-80 z-[9999] bg-red-600 text-white p-4 rounded-xl shadow-2xl">
+          <div className="flex items-start gap-3">
+            <div className="text-2xl">⚠️</div>
+            <div className="flex-1">
+              <h3 className="font-bold mb-1">Chrome iOS no soporta notificaciones</h3>
+              <p className="text-sm text-white/90 mb-2">
+                Para recibir notificaciones, abre esta app en Safari
+              </p>
             </div>
           </div>
         </div>
