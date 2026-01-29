@@ -4,10 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 
 export default function NotificationSystem() {
   const [permission, setPermission] = useState<NotificationPermission>('default');
+  const [audioEnabled, setAudioEnabled] = useState(false); // 🔊 Control de audio para iOS
   const [showPrompt, setShowPrompt] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
   const [isChromeiOS, setIsChromeiOS] = useState(false);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const titleIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   useEffect(() => {
@@ -17,6 +20,64 @@ export default function NotificationSystem() {
     
     // Verificar permiso actual
     checkPermission();
+    
+    // 🔊 DESBLOQUEAR AUDIO CONTEXT al cargar
+    const unlockAudio = async () => {
+      try {
+        // Crear audio context
+        const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+        if (AudioContext && !audioContextRef.current) {
+          audioContextRef.current = new AudioContext();
+          
+          // Intentar reproducir un sonido silencioso para desbloquear
+          const oscillator = audioContextRef.current.createOscillator();
+          const gainNode = audioContextRef.current.createGain();
+          gainNode.gain.value = 0.001; // Muy bajo, casi silencioso
+          oscillator.connect(gainNode);
+          gainNode.connect(audioContextRef.current.destination);
+          oscillator.start(0);
+          oscillator.stop(0.01);
+          
+          console.log('🔓 Audio context desbloqueado');
+          setAudioUnlocked(true);
+        }
+        
+        // También intentar cargar el audio
+        if (audioRef.current) {
+          audioRef.current.load();
+          // Intentar play y pause inmediato
+          const playPromise = audioRef.current.play();
+          if (playPromise) {
+            playPromise.then(() => {
+              audioRef.current?.pause();
+              audioRef.current!.currentTime = 0;
+              console.log('🔓 Audio file desbloqueado');
+            }).catch(() => {
+              console.log('⚠️ Audio aún bloqueado, esperando interacción');
+            });
+          }
+        }
+      } catch (error) {
+        console.log('⚠️ No se pudo desbloquear audio automáticamente');
+      }
+    };
+    
+    unlockAudio();
+    
+    // Listener para primera interacción del usuario
+    const handleFirstInteraction = () => {
+      unlockAudio();
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('click', handleFirstInteraction);
+    };
+    
+    document.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+    document.addEventListener('click', handleFirstInteraction);
+    
+    return () => {
+      document.removeEventListener('touchstart', handleFirstInteraction);
+      document.removeEventListener('click', handleFirstInteraction);
+    };
     
     // Exponer función global para llamar desde cualquier parte del código
     (window as any).notifyUser = handleNotification;
@@ -114,10 +175,61 @@ export default function NotificationSystem() {
     console.log('   - isVisible:', isVisible);
     console.log('   - permission:', permission);
     
+    // 🔔 LOG VISUAL: Notificación recibida
+    if (typeof window !== 'undefined') {
+      const logDiv = document.createElement('div');
+      logDiv.style.cssText = `
+        position: fixed;
+        top: 250px;
+        left: 10px;
+        right: 10px;
+        background: linear-gradient(135deg, #8B5CF6, #6D28D9);
+        color: white;
+        padding: 16px;
+        border-radius: 12px;
+        z-index: 999999;
+        font-size: 13px;
+        font-weight: bold;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      `;
+      logDiv.innerHTML = `
+        <div style="font-size: 16px; margin-bottom: 8px;">📱 NotificationSystem recibió:</div>
+        <div style="font-size: 12px; opacity: 0.9;">De: ${data.from}</div>
+        <div style="font-size: 12px; opacity: 0.9;">Texto: ${data.text?.substring(0, 30)}</div>
+        <div style="font-size: 12px; opacity: 0.9;">isVisible: ${isVisible}</div>
+        <div style="font-size: 12px; opacity: 0.9;">permission: ${permission}</div>
+      `;
+      document.body.appendChild(logDiv);
+      setTimeout(() => logDiv.remove(), 5000);
+    }
+    
     // ✅ NOTIFICAR SIEMPRE (incluso si la app está visible)
     // Las notificaciones ayudan cuando hay múltiples conversaciones
     
     console.log('🔊 1. Reproduciendo sonido...');
+    
+    // 🔔 LOG VISUAL: Intentando sonido
+    if (typeof window !== 'undefined') {
+      const soundDiv = document.createElement('div');
+      soundDiv.style.cssText = `
+        position: fixed;
+        top: 350px;
+        left: 10px;
+        right: 10px;
+        background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+        color: white;
+        padding: 12px;
+        border-radius: 12px;
+        z-index: 999999;
+        font-size: 13px;
+        font-weight: bold;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      `;
+      soundDiv.innerHTML = `<div>🔊 Intentando reproducir sonido...</div>`;
+      document.body.appendChild(soundDiv);
+      setTimeout(() => soundDiv.remove(), 3000);
+    }
+    
     playSound();
     
     console.log('📳 2. Activando vibración...');
@@ -140,9 +252,39 @@ export default function NotificationSystem() {
     updateBadge();
     
     console.log('✅ handleNotification COMPLETADO');
+    
+    // 🔔 LOG VISUAL: Completado
+    if (typeof window !== 'undefined') {
+      setTimeout(() => {
+        const doneDiv = document.createElement('div');
+        doneDiv.style.cssText = `
+          position: fixed;
+          top: 420px;
+          left: 10px;
+          right: 10px;
+          background: linear-gradient(135deg, #10B981, #059669);
+          color: white;
+          padding: 12px;
+          border-radius: 12px;
+          z-index: 999999;
+          font-size: 13px;
+          font-weight: bold;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        `;
+        doneDiv.innerHTML = `<div>✅ NotificationSystem completado</div>`;
+        document.body.appendChild(doneDiv);
+        setTimeout(() => doneDiv.remove(), 3000);
+      }, 100);
+    }
   }
   
   function playSound() {
+    // 🔊 Verificar si el audio ha sido habilitado (necesario para iOS)
+    if (!audioEnabled) {
+      console.log('⚠️ Audio no habilitado todavía (iOS requiere interacción del usuario)');
+      return;
+    }
+    
     try {
       // Intentar reproducir archivo MP3
       if (audioRef.current) {
@@ -163,6 +305,33 @@ export default function NotificationSystem() {
     } catch (error) {
       console.error('❌ Error reproduciendo sonido:', error);
       generateBeep();
+    }
+  }
+  
+  // 🔊 Función para ACTIVAR el audio (requiere interacción del usuario en iOS)
+  function enableAudio() {
+    try {
+      // Reproducir el audio una vez para "desbloquearlo"
+      if (audioRef.current) {
+        audioRef.current.volume = 0.01; // Casi mudo
+        audioRef.current.play()
+          .then(() => {
+            audioRef.current!.pause();
+            audioRef.current!.currentTime = 0;
+            audioRef.current!.volume = 1.0;
+            setAudioEnabled(true);
+            console.log('✅ Audio habilitado correctamente para iOS');
+            
+            // Mostrar confirmación visual
+            alert('✅ Audio activado!\n\nAhora recibirás sonidos cuando lleguen mensajes.');
+          })
+          .catch((error) => {
+            console.error('❌ Error activando audio:', error);
+            alert('❌ No se pudo activar el audio.\n\nIntenta de nuevo.');
+          });
+      }
+    } catch (error) {
+      console.error('❌ Error en enableAudio:', error);
     }
   }
   
@@ -342,6 +511,57 @@ export default function NotificationSystem() {
         preload="auto"
         style={{ display: 'none' }}
       />
+      
+      {/* 🔊 BOTÓN PARA ACTIVAR AUDIO (iOS requiere interacción del usuario) */}
+      {!audioEnabled && (
+        <div 
+          className="fixed top-20 right-4 left-4 md:left-auto md:w-96 z-[99999]"
+          style={{
+            background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+            color: 'white',
+            padding: '20px',
+            borderRadius: '16px',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 2px rgba(245,158,11,0.3)',
+            animation: 'pulse 2s infinite'
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'start', gap: '12px' }}>
+            <div style={{ fontSize: '32px' }}>🔊</div>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontWeight: 'bold', fontSize: '18px', marginBottom: '8px' }}>
+                ⚠️ Audio Bloqueado
+              </h3>
+              <p style={{ fontSize: '14px', marginBottom: '16px', opacity: 0.95 }}>
+                iOS bloquea sonidos automáticos. Toca el botón para activar las notificaciones de audio.
+              </p>
+              <button
+                onClick={enableAudio}
+                style={{
+                  width: '100%',
+                  backgroundColor: 'white',
+                  color: '#D97706',
+                  fontWeight: 'bold',
+                  padding: '12px 24px',
+                  borderRadius: '12px',
+                  border: 'none',
+                  fontSize: '16px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                  transition: 'transform 0.2s, box-shadow 0.2s'
+                }}
+                onMouseDown={(e) => {
+                  e.currentTarget.style.transform = 'scale(0.95)';
+                }}
+                onMouseUp={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                }}
+              >
+                🔊 ACTIVAR AUDIO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       
       {/* Prompt para activar notificaciones */}
       {showPrompt && permission === 'default' && !isChromeiOS && (
