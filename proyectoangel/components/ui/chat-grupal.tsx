@@ -361,7 +361,7 @@ export function ChatGrupal() {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoScroll = useRef<boolean>(true);
   const previousMessageCount = useRef<number>(0);
-  const lastNotificationTimeRef = useRef<number>(Date.now()); // 🔔 Timestamp del último mensaje notificado
+  const lastNotificationTimeRef = useRef<number>(0); // 🔔 Inicializar en 0 para notificar todos los mensajes nuevos
 
   const currentTheme = THEMES[selectedTheme];
 
@@ -640,14 +640,25 @@ export function ChatGrupal() {
           console.log('- Total mensajes Firebase:', firebaseMessages.length);
           console.log('- Usuario actual:', currentUserId);
           console.log('- notifyUser existe?', typeof (window as any).notifyUser);
+          
+          // ✅ INICIALIZAR timestamp en la primera sincronización
+          if (lastNotificationTimeRef.current === 0 && firebaseMessages.length > 0) {
+            // Primera vez: inicializar con el timestamp del mensaje más reciente
+            const latestMessage = firebaseMessages[firebaseMessages.length - 1];
+            lastNotificationTimeRef.current = latestMessage.timestamp;
+            console.log('🔧 Primera sincronización: timestamp inicializado en', new Date(latestMessage.timestamp).toLocaleTimeString());
+            console.log('   (Solo notificará mensajes más nuevos que este)');
+          }
+          
           console.log('- Último timestamp notificado:', new Date(lastNotificationTimeRef.current).toLocaleTimeString());
           
           // Mostrar últimos 3 mensajes para diagnóstico
           console.log('📝 Últimos 3 mensajes:');
           firebaseMessages.slice(-3).forEach((msg, idx) => {
+            const age = Math.floor((Date.now() - msg.timestamp) / 1000);
             console.log(`  ${idx + 1}. ${msg.sender} (${msg.senderId.slice(-6)}): ${msg.text?.substring(0, 30)}`);
-            console.log(`     Timestamp: ${new Date(msg.timestamp).toLocaleTimeString()}`);
-            console.log(`     isSystem: ${msg.isSystem}, senderId: ${msg.senderId}`);
+            console.log(`     Timestamp: ${new Date(msg.timestamp).toLocaleTimeString()} (hace ${age}s)`);
+            console.log(`     isSystem: ${msg.isSystem}`);
           });
           
           // ✅ ESTRATEGIA SIMPLIFICADA: Detectar por TIMESTAMP
@@ -663,12 +674,14 @@ export function ChatGrupal() {
             const isNewerThanLast = msg.timestamp > lastNotificationTimeRef.current;
             const isFromOther = msg.senderId !== currentUserId;
             const isNotSystem = !msg.isSystem;
-            const isRecent = messageAge < 30000; // Últimos 30 segundos
+            const isRecent = messageAge < 60000; // Últimos 60 segundos (aumentado de 30)
             
             console.log(`  Mensaje de ${msg.sender}:`);
             console.log(`    - Edad: ${ageInSeconds}s`);
+            console.log(`    - Timestamp mensaje: ${new Date(msg.timestamp).toLocaleTimeString()}`);
+            console.log(`    - Timestamp último: ${new Date(lastNotificationTimeRef.current).toLocaleTimeString()}`);
             console.log(`    - Más nuevo que último? ${isNewerThanLast}`);
-            console.log(`    - De otro usuario? ${isFromOther}`);
+            console.log(`    - De otro usuario? ${isFromOther} (current: ${currentUserId.slice(-6)}, msg: ${msg.senderId.slice(-6)})`);
             console.log(`    - No es sistema? ${isNotSystem}`);
             console.log(`    - Es reciente? ${isRecent}`);
             
@@ -705,6 +718,11 @@ export function ChatGrupal() {
             }
           } else {
             console.log('⚠️ No hay mensajes nuevos que notificar');
+            console.log('   Razones posibles:');
+            console.log('   - Los mensajes son tuyos (no se notifican mensajes propios)');
+            console.log('   - Los mensajes son del sistema');
+            console.log('   - Los mensajes son más viejos que el último timestamp');
+            console.log('   - Los mensajes tienen más de 60 segundos de antigüedad');
           }
           
           console.log('=====================================');
