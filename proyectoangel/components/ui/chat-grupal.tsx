@@ -361,6 +361,7 @@ export function ChatGrupal() {
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const shouldAutoScroll = useRef<boolean>(true);
   const previousMessageCount = useRef<number>(0);
+  const previousMessageIdsRef = useRef<Set<string>>(new Set()); // 🔔 Para detectar mensajes nuevos
 
   const currentTheme = THEMES[selectedTheme];
 
@@ -633,31 +634,56 @@ export function ChatGrupal() {
           
           // ⬇️⬇️⬇️ 🔔 CÓDIGO DE NOTIFICACIONES AGREGADO ⬇️⬇️⬇️
           
-          // Detectar mensajes nuevos de otros usuarios
+          // 🔍 LOGS DE DEPURACIÓN
+          console.log('📊 Diagnóstico de notificaciones:');
+          console.log('- Total mensajes Firebase:', firebaseMessages.length);
+          console.log('- Total mensajes locales:', messages.length);
+          console.log('- Usuario actual:', currentUserId);
+          console.log('- notifyUser existe?', typeof (window as any).notifyUser);
+          console.log('- IDs previos rastreados:', previousMessageIdsRef.current.size);
+          
+          // Detectar mensajes nuevos de otros usuarios usando ref (no state)
           const newMessages = firebaseMessages.filter(msg => {
-            // Solo mensajes nuevos que no estaban antes
-            const wasNotInPrev = !messages.some(m => m.id === msg.id);
+            // ✅ USAR REF en lugar de state para evitar falsos positivos
+            const wasNotInPrev = !previousMessageIdsRef.current.has(msg.id);
             // Solo mensajes de OTROS usuarios (no míos)
             const isFromOther = msg.senderId !== currentUserId;
             // No notificar mensajes del sistema
             const isNotSystem = !msg.isSystem;
             
+            if (wasNotInPrev) {
+              console.log(`  🆕 Mensaje nuevo ID ${msg.id.slice(-6)}: deOtro=${isFromOther}, noSistema=${isNotSystem}`);
+            }
+            
             return wasNotInPrev && isFromOther && isNotSystem;
           });
 
+          console.log('🔔 Mensajes nuevos detectados:', newMessages.length);
+
           // Si hay mensajes nuevos, notificar
-          if (newMessages.length > 0 && (window as any).notifyUser) {
-            // Notificar solo el último mensaje nuevo
+          if (newMessages.length > 0) {
             const latestNew = newMessages[newMessages.length - 1];
             
-            console.log('🔔 Notificando mensaje nuevo de:', latestNew.sender);
+            console.log('📢 NOTIFICANDO mensaje de:', latestNew.sender);
+            console.log('   Texto:', latestNew.text?.substring(0, 50));
             
-            (window as any).notifyUser({
-              text: latestNew.text || 'Nuevo mensaje',
-              from: latestNew.sender || 'Usuario',
-              messageId: latestNew.id
-            });
+            if ((window as any).notifyUser) {
+              (window as any).notifyUser({
+                text: latestNew.text || 'Nuevo mensaje',
+                from: latestNew.sender || 'Usuario',
+                messageId: latestNew.id
+              });
+              console.log('✅ notifyUser() llamado correctamente');
+            } else {
+              console.error('❌ ERROR: notifyUser no existe!');
+            }
           }
+          
+          // ✅ ACTUALIZAR REF con todos los IDs actuales
+          firebaseMessages.forEach(msg => {
+            previousMessageIdsRef.current.add(msg.id);
+          });
+          console.log('📝 IDs actualizados. Total rastreados:', previousMessageIdsRef.current.size);
           
           // ⬆️⬆️⬆️ FIN CÓDIGO DE NOTIFICACIONES ⬆️⬆️⬆️
           
