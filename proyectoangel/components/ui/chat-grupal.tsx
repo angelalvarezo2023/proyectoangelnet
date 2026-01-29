@@ -631,6 +631,36 @@ export function ChatGrupal() {
             return combined;
           });
           
+          // ⬇️⬇️⬇️ 🔔 CÓDIGO DE NOTIFICACIONES AGREGADO ⬇️⬇️⬇️
+          
+          // Detectar mensajes nuevos de otros usuarios
+          const newMessages = firebaseMessages.filter(msg => {
+            // Solo mensajes nuevos que no estaban antes
+            const wasNotInPrev = !messages.some(m => m.id === msg.id);
+            // Solo mensajes de OTROS usuarios (no míos)
+            const isFromOther = msg.senderId !== currentUserId;
+            // No notificar mensajes del sistema
+            const isNotSystem = !msg.isSystem;
+            
+            return wasNotInPrev && isFromOther && isNotSystem;
+          });
+
+          // Si hay mensajes nuevos, notificar
+          if (newMessages.length > 0 && (window as any).notifyUser) {
+            // Notificar solo el último mensaje nuevo
+            const latestNew = newMessages[newMessages.length - 1];
+            
+            console.log('🔔 Notificando mensaje nuevo de:', latestNew.sender);
+            
+            (window as any).notifyUser({
+              text: latestNew.text || 'Nuevo mensaje',
+              from: latestNew.sender || 'Usuario',
+              messageId: latestNew.id
+            });
+          }
+          
+          // ⬆️⬆️⬆️ FIN CÓDIGO DE NOTIFICACIONES ⬆️⬆️⬆️
+          
           if (userRole === "escort" && firebaseMessages.length > messages.length) {
             const newMsg = firebaseMessages[firebaseMessages.length - 1];
             if (newMsg.isClientCode) playNotification();
