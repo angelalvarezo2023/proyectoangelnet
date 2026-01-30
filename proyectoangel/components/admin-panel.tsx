@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
+import { FirebaseAPI, type BrowserData, type PostData } from "@/lib/firebase";
 import {
   LockIcon,
   PlusIcon,
@@ -149,14 +149,42 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   const [deleteBrowser, setDeleteBrowser] = useState<BrowserData | null>(null);
   const [deleting, setDeleting] = useState(false);
   
-  // 🆕 Estados para pausa masiva
   const [pausingAll, setPausingAll] = useState(false);
   const [allPaused, setAllPaused] = useState(false);
+
+  // 🆕 ESTADOS PARA DUAL POST
+  const [allPosts, setAllPosts] = useState<Record<string, PostData>>({});
+  const [showModeModal, setShowModeModal] = useState(false);
+  const [modeBrowser, setModeBrowser] = useState<BrowserData | null>(null);
+  const [changingMode, setChangingMode] = useState(false);
+  const [showPostsModal, setShowPostsModal] = useState(false);
+  const [viewPostsBrowser, setViewPostsBrowser] = useState<BrowserData | null>(null);
+  const [browserPosts, setBrowserPosts] = useState<PostData[]>([]);
+  const [showEditPostModal, setShowEditPostModal] = useState(false);
+  const [editingPost, setEditingPost] = useState<PostData | null>(null);
+  const [postFormData, setPostFormData] = useState({
+    clientName: "",
+    postName: "",
+    age: "",
+    headline: "",
+    body: "",
+    city: "",
+    location: "",
+    phoneNumber: "",
+  });
+  const [savingPost, setSavingPost] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
       const unsubscribe = FirebaseAPI.listenToAllBrowsers(setBrowsers);
-      return () => unsubscribe();
+      
+      // 🆕 Escuchar posts
+      const unsubscribePosts = FirebaseAPI.listenToAllPosts(setAllPosts);
+      
+      return () => {
+        unsubscribe();
+        unsubscribePosts();
+      };
     }
   }, [isAuthenticated]);
 
@@ -335,21 +363,6 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     }
   };
 
-  // 🆕 CALCULAR SI TODOS ESTÁN PAUSADOS
-  useEffect(() => {
-    const totalActive = browserList.filter(b => 
-      getConnectionStatus(b).status !== "offline"
-    ).length;
-    
-    const totalPaused = browserList.filter(b => 
-      b.isPaused && getConnectionStatus(b).status !== "offline"
-    ).length;
-    
-    // Si todos los activos están pausados
-    setAllPaused(totalActive > 0 && totalActive === totalPaused);
-  }, [browsers]);
-
-  // 🆕 FUNCIÓN PAUSAR/REANUDAR TODAS
   const handlePauseAll = async () => {
     const activeBrowsers = browserList.filter(b => 
       getConnectionStatus(b).status !== "offline"
@@ -371,7 +384,6 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     try {
       const newState = !allPaused;
       
-      // Pausar/Reanudar todos los navegadores activos
       const promises = activeBrowsers.map(browser =>
         FirebaseAPI.togglePause(browser.browserName, newState)
       );
@@ -383,6 +395,134 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
       alert("Error al cambiar el estado de los navegadores");
     } finally {
       setPausingAll(false);
+    }
+  };
+
+  // 🆕 FUNCIONES AUXILIARES PARA DUAL POST
+  const getDisplayName = (browser: BrowserData): string => {
+    if (browser.mode !== "double") {
+      return browser.clientName || "Sin asignar";
+    }
+    
+    // Modo dual: combinar nombres de posts
+    const post1 = allPosts[browser.post1Id || ""];
+    const post2 = allPosts[browser.post2Id || ""];
+    
+    if (post1 && post2) {
+      return `${post1.clientName} / ${post2.clientName}`;
+    } else if (post1) {
+      return post1.clientName;
+    } else if (post2) {
+      return post2.clientName;
+    }
+    
+    return "Configurando...";
+  };
+
+  const getDisplayPhone = (browser: BrowserData): string => {
+    if (browser.mode !== "double") {
+      return browser.phoneNumber || "N/A";
+    }
+    
+    const post1 = allPosts[browser.post1Id || ""];
+    const post2 = allPosts[browser.post2Id || ""];
+    
+    if (post1 && post2) {
+      return `${post1.phoneNumber} / ${post2.phoneNumber}`;
+    } else if (post1) {
+      return post1.phoneNumber;
+    } else if (post2) {
+      return post2.phoneNumber;
+    }
+    
+    return "N/A";
+  };
+
+  // 🆕 HANDLERS PARA DUAL POST
+  const handleOpenModeModal = (browser: BrowserData) => {
+    setModeBrowser(browser);
+    setShowModeModal(true);
+  };
+
+  const handleToggleDualMode = async (enableDual: boolean) => {
+    if (!modeBrowser) return;
+
+    const confirmMsg = enableDual
+      ? `¿Activar MODO DUAL para ${modeBrowser.browserName}?\n\nPermitirá alternar entre 2 posts diferentes.`
+      : `¿Desactivar MODO DUAL para ${modeBrowser.browserName}?\n\nVolverá a modo de 1 solo post.`;
+
+    if (!confirm(confirmMsg)) return;
+
+    setChangingMode(true);
+    try {
+      const result = await FirebaseAPI.toggleDualMode(modeBrowser.browserName, enableDual);
+      
+      if (result.success) {
+        alert(result.message);
+        setShowModeModal(false);
+        setModeBrowser(null);
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert("Error cambiando modo");
+    } finally {
+      setChangingMode(false);
+    }
+  };
+
+  const handleViewPosts = async (browser: BrowserData) => {
+    if (browser.mode !== "double") return;
+    
+    setViewPostsBrowser(browser);
+    const posts = await FirebaseAPI.getBrowserPosts(browser.browserName);
+    setBrowserPosts(posts);
+    setShowPostsModal(true);
+  };
+
+  const handleEditPost = (post: PostData) => {
+    setEditingPost(post);
+    setPostFormData({
+      clientName: post.clientName || "",
+      postName: post.postName || "",
+      age: post.age || "",
+      headline: post.headline || "",
+      body: post.body || "",
+      city: post.city || "",
+      location: post.location || "",
+      phoneNumber: post.phoneNumber || "",
+    });
+    setShowEditPostModal(true);
+  };
+
+  const handleSavePost = async () => {
+    if (!editingPost) return;
+
+    setSavingPost(true);
+    try {
+      const result = await FirebaseAPI.editPost(
+        editingPost.browserName,
+        editingPost.postSlot,
+        postFormData
+      );
+
+      if (result.success) {
+        alert(`✅ Post ${editingPost.postSlot} actualizado. Cambios se aplicarán en próxima republicación.`);
+        setShowEditPostModal(false);
+        setEditingPost(null);
+        
+        // Recargar posts
+        if (viewPostsBrowser) {
+          const updatedPosts = await FirebaseAPI.getBrowserPosts(viewPostsBrowser.browserName);
+          setBrowserPosts(updatedPosts);
+        }
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert("Error guardando post");
+    } finally {
+      setSavingPost(false);
     }
   };
 
@@ -444,6 +584,19 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     return getRentalDays(a) - getRentalDays(b);
   });
 
+  // 🆕 Calcular allPaused
+  useEffect(() => {
+    const totalActive = browserList.filter(b => 
+      getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    const totalPaused = browserList.filter(b => 
+      b.isPaused && getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    setAllPaused(totalActive > 0 && totalActive === totalPaused);
+  }, [browsers]);
+
   const stats = {
     total: browserList.length,
     online: browserList.filter((b) => getConnectionStatus(b).status === "online").length,
@@ -454,6 +607,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
       const rental = b.rentalRemaining;
       return rental && (rental.days < 0 || (rental as any).isDebt === true);
     }).length,
+    dualMode: browserList.filter((b) => b.mode === "double").length, // 🆕 AGREGADO
   };
 
   return (
@@ -531,6 +685,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                   <h3 className="text-lg font-semibold text-foreground">Monitoreo en Tiempo Real</h3>
                   <p className="text-sm text-muted-foreground">
                     {stats.total} usuarios • {stats.online} activos • {stats.offline} desconectados • {stats.error} con errores
+                    {stats.dualMode > 0 && <span className="text-purple-500 font-bold"> • {stats.dualMode} 🔄 DUAL</span>}
                     {stats.debt > 0 && <span className="text-red-500 font-bold"> • {stats.debt} CON DEUDA 💀</span>}
                   </p>
                 </div>
@@ -559,13 +714,13 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                     Navegador
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cliente
+                    Cliente(s)
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Estado
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Teléfono
+                    Teléfono(s)
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     Renta
@@ -592,6 +747,8 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                                 (browser.rentalRemaining.days < 0 || 
                                  (browser.rentalRemaining as any).isDebt === true);
 
+                  const isDualMode = browser.mode === "double";
+
                   return (
                     <tr
                       key={idx}
@@ -599,7 +756,8 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                         "transition-colors hover:bg-secondary/20",
                         connectionStatus.status === "offline" && "bg-destructive/5",
                         connectionStatus.status === "error" && "bg-warning/5",
-                        isDebt && "bg-red-600/10"
+                        isDebt && "bg-red-600/10",
+                        isDualMode && "bg-purple-500/5"
                       )}
                     >
                       <td className="whitespace-nowrap px-6 py-4">
@@ -616,14 +774,31 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                               )}
                             />
                           </div>
-                          <span className="font-medium text-foreground">{browser.browserName || browser.name}</span>
+                          <div className="flex flex-col gap-1">
+                            <span className="font-medium text-foreground">{browser.browserName || browser.name}</span>
+                            {isDualMode && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 font-semibold inline-flex items-center gap-1 w-fit">
+                                🔄 DUAL {browser.currentPost && `(Post ${browser.currentPost})`}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
-                        <span className="text-sm font-medium text-primary">
-                          {browser.clientName || "Sin asignar"}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-medium text-primary">
+                            {getDisplayName(browser)}
+                          </span>
+                          {isDualMode && (
+                            <button
+                              onClick={() => handleViewPosts(browser)}
+                              className="text-xs text-purple-400 hover:text-purple-300 underline w-fit"
+                            >
+                              👁️ Ver posts
+                            </button>
+                          )}
+                        </div>
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
@@ -651,8 +826,8 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                         </div>
                       </td>
 
-                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground">
-                        {browser.phoneNumber || "N/A"}
+                      <td className="whitespace-nowrap px-6 py-4 text-muted-foreground text-xs">
+                        {getDisplayPhone(browser)}
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
@@ -721,7 +896,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                       </td>
 
                       <td className="whitespace-nowrap px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
+                        <div className="flex items-center justify-center gap-2 flex-wrap">
                           <Button size="sm" variant="outline" onClick={() => setSelectedBrowser(browser)}>
                             Ver
                           </Button>
@@ -740,6 +915,19 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                           >
                             <ClockIcon className="mr-1.5 h-3.5 w-3.5" />
                             Renta
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleOpenModeModal(browser)}
+                            className={cn(
+                              "text-xs",
+                              isDualMode
+                                ? "bg-purple-500/20 text-purple-400 hover:bg-purple-500/30"
+                                : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                            )}
+                            title={isDualMode ? "Modo Dual Activo" : "Activar Modo Dual"}
+                          >
+                            {isDualMode ? "🔄 Dual" : "📍 Single"}
                           </Button>
                           <Button
                             size="sm"
@@ -923,6 +1111,264 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
               >
                 Cancelar
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 MODAL DE MODO */}
+      {showModeModal && modeBrowser && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="text-xl font-bold">Cambiar Modo</h3>
+              <Button variant="ghost" size="icon" onClick={() => setShowModeModal(false)}>
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="mb-6 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Navegador: <strong>{modeBrowser.browserName}</strong>
+              </p>
+              <div className="rounded-lg border border-border bg-secondary/30 p-3">
+                <p className="text-xs text-muted-foreground mb-1">Modo actual:</p>
+                <p className={cn(
+                  "font-bold text-lg",
+                  modeBrowser.mode === "double" ? "text-purple-400" : "text-foreground"
+                )}>
+                  {modeBrowser.mode === "double" ? "🔄 DUAL POST" : "📍 SINGLE POST"}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {modeBrowser.mode !== "double" ? (
+                <Button
+                  onClick={() => handleToggleDualMode(true)}
+                  disabled={changingMode}
+                  className="w-full bg-purple-500 text-white hover:bg-purple-600"
+                >
+                  {changingMode ? "Activando..." : "🔄 Activar Modo DUAL"}
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => handleToggleDualMode(false)}
+                  disabled={changingMode}
+                  className="w-full bg-secondary text-foreground hover:bg-secondary/80"
+                >
+                  {changingMode ? "Desactivando..." : "📍 Cambiar a SINGLE"}
+                </Button>
+              )}
+
+              <Button
+                variant="outline"
+                onClick={() => setShowModeModal(false)}
+                disabled={changingMode}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 MODAL VER POSTS */}
+      {showPostsModal && viewPostsBrowser && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">Posts de {viewPostsBrowser.browserName}</h3>
+                <p className="text-sm text-muted-foreground">
+                  Próximo: <strong>Post {viewPostsBrowser.currentPost}</strong>
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowPostsModal(false)}>
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {browserPosts.map((post) => (
+                <div
+                  key={post.postId}
+                  className={cn(
+                    "rounded-xl border-2 p-4",
+                    post.postSlot === viewPostsBrowser.currentPost
+                      ? "border-green-500 bg-green-500/5"
+                      : "border-border"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-lg font-bold">📍 POST {post.postSlot}</h4>
+                    {post.postSlot === viewPostsBrowser.currentPost && (
+                      <span className="px-2 py-1 rounded-full bg-green-500 text-white text-xs font-bold">
+                        ACTIVO
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Cliente</p>
+                      <p className="font-semibold">{post.clientName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Post</p>
+                      <p className="text-primary font-medium">{post.postName}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Teléfono</p>
+                      <p className="text-sm">{post.phoneNumber}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Ciudad</p>
+                        <p className="text-sm">{post.city}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Edad</p>
+                        <p className="text-sm">{post.age || "N/A"}</p>
+                      </div>
+                    </div>
+                    {post.stats && (
+                      <div className="pt-3 border-t border-border">
+                        <p className="text-xs text-muted-foreground">Republicaciones</p>
+                        <p className="text-xl font-bold text-green-400">
+                          {post.stats.totalRepublishes || 0}
+                        </p>
+                      </div>
+                    )}
+                    <Button
+                      onClick={() => handleEditPost(post)}
+                      className="w-full bg-primary/10 text-primary hover:bg-primary/20"
+                    >
+                      ✏️ Editar Post {post.postSlot}
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🆕 MODAL EDITAR POST */}
+      {showEditPostModal && editingPost && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-background/90 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-2xl">
+            <div className="mb-6 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-bold">✏️ Editar Post {editingPost.postSlot}</h3>
+                <p className="text-sm text-muted-foreground">{editingPost.browserName}</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowEditPostModal(false)}>
+                <XIcon className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">Nombre del Cliente</label>
+                <Input
+                  value={postFormData.clientName}
+                  onChange={(e) => setPostFormData({ ...postFormData, clientName: e.target.value })}
+                  placeholder="Ej: Maria Lopez"
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">Nombre del Post</label>
+                <Input
+                  value={postFormData.postName}
+                  onChange={(e) => setPostFormData({ ...postFormData, postName: e.target.value })}
+                  placeholder="Ej: Morena latina"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Edad</label>
+                  <Input
+                    type="number"
+                    value={postFormData.age}
+                    onChange={(e) => setPostFormData({ ...postFormData, age: e.target.value })}
+                    placeholder="24"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Teléfono</label>
+                  <Input
+                    value={postFormData.phoneNumber}
+                    onChange={(e) => setPostFormData({ ...postFormData, phoneNumber: e.target.value })}
+                    placeholder="+1 234 567 8900"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Ciudad</label>
+                  <Input
+                    value={postFormData.city}
+                    onChange={(e) => setPostFormData({ ...postFormData, city: e.target.value })}
+                    placeholder="Las Vegas, NV"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium mb-1 block">Ubicación</label>
+                  <Input
+                    value={postFormData.location}
+                    onChange={(e) => setPostFormData({ ...postFormData, location: e.target.value })}
+                    placeholder="las Vegas"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">Headline</label>
+                <textarea
+                  className="w-full rounded-md border border-border bg-input p-2 text-foreground min-h-[60px]"
+                  value={postFormData.headline}
+                  onChange={(e) => setPostFormData({ ...postFormData, headline: e.target.value })}
+                  placeholder="Texto de headline..."
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium mb-1 block">Body / Descripción</label>
+                <textarea
+                  className="w-full rounded-md border border-border bg-input p-2 text-foreground min-h-[120px]"
+                  value={postFormData.body}
+                  onChange={(e) => setPostFormData({ ...postFormData, body: e.target.value })}
+                  placeholder="Descripción completa..."
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 space-y-3">
+              <Button
+                onClick={handleSavePost}
+                disabled={savingPost}
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                {savingPost ? "Guardando..." : "💾 Guardar Cambios"}
+              </Button>
+
+              <Button
+                variant="outline"
+                onClick={() => setShowEditPostModal(false)}
+                disabled={savingPost}
+                className="w-full"
+              >
+                Cancelar
+              </Button>
+            </div>
+
+            <div className="mt-4 rounded-lg bg-blue-500/10 border border-blue-500/20 p-3 text-xs text-blue-400">
+              ℹ️ Los cambios se aplicarán automáticamente cuando sea momento de republicar
             </div>
           </div>
         </div>
