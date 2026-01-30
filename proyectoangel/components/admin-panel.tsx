@@ -47,7 +47,7 @@ function getConnectionStatus(browser: BrowserData) {
   if (browser.consecutiveErrors && browser.consecutiveErrors > 3) {
     return {
       status: "error" as const,
-      label: \`Error (\${browser.consecutiveErrors})\`,
+      label: `Error (${browser.consecutiveErrors})`,
       color: "text-warning",
       bgColor: "bg-warning/10",
       borderColor: "border-warning/20",
@@ -99,17 +99,17 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   if (isDebt) {
     const absDays = Math.abs(rental.days);
     const parts = [];
-    if (absDays > 0) parts.push(\`\${absDays}d\`);
-    if (rental.hours > 0) parts.push(\`\${rental.hours}h\`);
-    if (rental.minutes > 0) parts.push(\`\${rental.minutes}m\`);
+    if (absDays > 0) parts.push(`${absDays}d`);
+    if (rental.hours > 0) parts.push(`${rental.hours}h`);
+    if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
     return parts.join(" ");
   }
   
   if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) return "Expirada";
   const parts = [];
-  if (rental.days > 0) parts.push(\`\${rental.days}d\`);
-  if (rental.hours > 0) parts.push(\`\${rental.hours}h\`);
-  if (rental.minutes > 0) parts.push(\`\${rental.minutes}m\`);
+  if (rental.days > 0) parts.push(`${rental.days}d`);
+  if (rental.hours > 0) parts.push(`${rental.hours}h`);
+  if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
   return parts.join(" ");
 }
 
@@ -179,13 +179,13 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
 
     if (result.success) {
       const baseUrl = window.location.origin + window.location.pathname;
-      const userLink = \`\${baseUrl}?id=\${result.uniqueId}\`;
+      const userLink = `${baseUrl}?id=${result.uniqueId}`;
       navigator.clipboard.writeText(userLink);
-      alert(\`Usuario "\${newUser.name}" creado\\n\\nLink copiado:\\n\${userLink}\`);
+      alert(`Usuario "${newUser.name}" creado\n\nLink copiado:\n${userLink}`);
       setNewUser({ name: "", days: "", hours: "" });
       setShowCreateForm(false);
     } else {
-      alert(\`Error: \${result.error}\`);
+      alert(`Error: ${result.error}`);
     }
 
     setCreating(false);
@@ -194,10 +194,10 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   const generateUserLink = (browser: BrowserData) => {
     const baseUrl = window.location.origin + window.location.pathname;
     if (browser.uniqueId) {
-      return \`\${baseUrl}?id=\${encodeURIComponent(browser.uniqueId)}\`;
+      return `${baseUrl}?id=${encodeURIComponent(browser.uniqueId)}`;
     }
     const browserName = browser.browserName;
-    return \`\${baseUrl}?user=\${encodeURIComponent(browserName)}\`;
+    return `${baseUrl}?user=${encodeURIComponent(browserName)}`;
   };
 
   const handleCopyLink = async (browser: BrowserData) => {
@@ -285,12 +285,12 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
       );
 
       if (result.success) {
-        alert(\`Renta \${action === "establecer" ? "establecida" : "agregada"} correctamente\`);
+        alert(`Renta ${action === "establecer" ? "establecida" : "agregada"} correctamente`);
         setShowRentalModal(false);
         setRentalDays("");
         setRentalHours("");
       } else {
-        alert(\`Error: \${result.error}\`);
+        alert(`Error: ${result.error}`);
       }
     } catch (error) {
       alert("Error al ajustar la renta");
@@ -313,11 +313,11 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
       const result = await FirebaseAPI.deleteBrowser(deleteBrowser.browserName);
 
       if (result.success) {
-        alert(\`Usuario "\${deleteBrowser.browserName}" eliminado correctamente\`);
+        alert(`Usuario "${deleteBrowser.browserName}" eliminado correctamente`);
         setShowDeleteModal(false);
         setDeleteBrowser(null);
       } else {
-        alert(\`Error al eliminar: \${result.error}\`);
+        alert(`Error al eliminar: ${result.error}`);
       }
     } catch (error) {
       alert("Error al eliminar el usuario");
@@ -638,7 +638,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                               lastHeartbeatTime >= 15 && "text-destructive"
                             )}
                           >
-                            {lastHeartbeatTime < 60 ? \`\${lastHeartbeatTime}s\` : \`\${Math.floor(lastHeartbeatTime / 60)}m\`}
+                            {lastHeartbeatTime < 60 ? `${lastHeartbeatTime}s` : `${Math.floor(lastHeartbeatTime / 60)}m`}
                           </span>
                         ) : (
                           <span className="text-xs text-muted-foreground">N/A</span>
