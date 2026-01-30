@@ -76,11 +76,17 @@ export function StatsPanel() {
 
   if (!currentWeek) return null;
 
-  // Calcular comparativas con semana anterior
-  const previousWeek = weeksHistory[1];
-  const bannedChange = previousWeek ? currentWeek.bannedAccounts.length - previousWeek.bannedAccounts.length : 0;
-  const renewalsChange = previousWeek ? currentWeek.renewals - previousWeek.renewals : 0;
-  const newClientsChange = previousWeek ? currentWeek.newClients.length - previousWeek.newClients.length : 0;
+  // Calcular comparativas con semana anterior (con validaciones)
+  const previousWeek = weeksHistory?.[1] || null;
+  const bannedChange = previousWeek 
+    ? (currentWeek.bannedAccounts?.length || 0) - (previousWeek.bannedAccounts?.length || 0) 
+    : 0;
+  const renewalsChange = previousWeek 
+    ? (currentWeek.renewals || 0) - (previousWeek.renewals || 0) 
+    : 0;
+  const newClientsChange = previousWeek 
+    ? (currentWeek.newClients?.length || 0) - (previousWeek.newClients?.length || 0) 
+    : 0;
 
   return (
     <div className="space-y-8 p-6">
@@ -112,7 +118,7 @@ export function StatsPanel() {
               )}
             </div>
             <div className="text-3xl font-bold text-foreground mb-2">
-              {currentWeek.bannedAccounts.length}
+              {currentWeek.bannedAccounts?.length || 0}
             </div>
             <div className="text-sm text-muted-foreground">Cuentas Bloqueadas</div>
             <div className="mt-3 pt-3 border-t border-red-500/20">
@@ -137,7 +143,7 @@ export function StatsPanel() {
               )}
             </div>
             <div className="text-3xl font-bold text-foreground mb-2">
-              {currentWeek.renewals}
+              {currentWeek.renewals || 0}
             </div>
             <div className="text-sm text-muted-foreground">Renovaciones (7d+)</div>
             <div className="mt-3 pt-3 border-t border-green-500/20">
@@ -162,7 +168,7 @@ export function StatsPanel() {
               )}
             </div>
             <div className="text-3xl font-bold text-foreground mb-2">
-              {currentWeek.newClients.length}
+              {currentWeek.newClients?.length || 0}
             </div>
             <div className="text-sm text-muted-foreground">Clientes Nuevos</div>
             <div className="mt-3 pt-3 border-t border-blue-500/20">
@@ -217,35 +223,36 @@ export function StatsPanel() {
 
           {/* Gráfico Simple */}
           <div className="relative h-64 flex items-end gap-2">
-            {weeksHistory.slice(0, 12).reverse().map((week, idx) => {
+            {(weeksHistory || []).slice(0, 12).reverse().map((week, idx) => {
               const maxValue = Math.max(
-                ...weeksHistory.map(w => Math.max(
-                  w.bannedAccounts.length,
-                  w.renewals,
-                  w.newClients.length
-                ))
+                ...(weeksHistory || []).map(w => Math.max(
+                  w.bannedAccounts?.length || 0,
+                  w.renewals || 0,
+                  w.newClients?.length || 0
+                )),
+                1 // Evitar división por 0
               );
               
-              const bannedHeight = (week.bannedAccounts.length / maxValue) * 100;
-              const renewalsHeight = (week.renewals / maxValue) * 100;
-              const newClientsHeight = (week.newClients.length / maxValue) * 100;
+              const bannedHeight = ((week.bannedAccounts?.length || 0) / maxValue) * 100;
+              const renewalsHeight = ((week.renewals || 0) / maxValue) * 100;
+              const newClientsHeight = ((week.newClients?.length || 0) / maxValue) * 100;
 
               return (
                 <div key={week.weekId} className="flex-1 flex items-end gap-1">
                   <div 
                     className="flex-1 bg-gradient-to-t from-red-500 to-red-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
                     style={{ height: `${bannedHeight}%`, minHeight: '4px' }}
-                    title={`Bans: ${week.bannedAccounts.length}`}
+                    title={`Bans: ${week.bannedAccounts?.length || 0}`}
                   />
                   <div 
                     className="flex-1 bg-gradient-to-t from-green-500 to-green-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
                     style={{ height: `${renewalsHeight}%`, minHeight: '4px' }}
-                    title={`Renovaciones: ${week.renewals}`}
+                    title={`Renovaciones: ${week.renewals || 0}`}
                   />
                   <div 
                     className="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
                     style={{ height: `${newClientsHeight}%`, minHeight: '4px' }}
-                    title={`Nuevos: ${week.newClients.length}`}
+                    title={`Nuevos: ${week.newClients?.length || 0}`}
                   />
                 </div>
               );
@@ -254,9 +261,9 @@ export function StatsPanel() {
 
           {/* Etiquetas de semanas */}
           <div className="flex gap-2 text-xs text-muted-foreground">
-            {weeksHistory.slice(0, 12).reverse().map((week) => (
+            {(weeksHistory || []).slice(0, 12).reverse().map((week) => (
               <div key={week.weekId} className="flex-1 text-center truncate">
-                {week.weekId.split('-W')[1]}
+                {week.weekId?.split('-W')[1] || ''}
               </div>
             ))}
           </div>
@@ -264,7 +271,7 @@ export function StatsPanel() {
       </div>
 
       {/* Clientes Nuevos Esta Semana */}
-      {currentWeek.newClients.length > 0 && (
+      {currentWeek.newClients && currentWeek.newClients.length > 0 && (
         <div className="rounded-2xl border border-border bg-card p-6">
           <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
             ✨ Clientes Nuevos Esta Semana
@@ -305,7 +312,7 @@ export function StatsPanel() {
       )}
 
       {/* Cuentas Bloqueadas Esta Semana */}
-      {currentWeek.bannedAccounts.length > 0 && (
+      {currentWeek.bannedAccounts && currentWeek.bannedAccounts.length > 0 && (
         <div className="rounded-2xl border border-red-500/20 bg-card p-6">
           <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
             🚫 Cuentas Bloqueadas Esta Semana
@@ -348,7 +355,7 @@ export function StatsPanel() {
         <h2 className="text-xl font-bold text-foreground mb-6">📅 Historial de Semanas</h2>
         
         <div className="space-y-3">
-          {weeksHistory.slice(0, 8).map((week) => {
+          {(weeksHistory || []).slice(0, 8).map((week) => {
             const isCurrentWeek = week.weekId === currentWeek.weekId;
             
             return (
@@ -377,19 +384,19 @@ export function StatsPanel() {
                   
                   <div className="flex items-center gap-6 text-sm">
                     <div className="text-center">
-                      <div className="font-bold text-red-400">{week.bannedAccounts.length}</div>
+                      <div className="font-bold text-red-400">{week.bannedAccounts?.length || 0}</div>
                       <div className="text-xs text-muted-foreground">Bans</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-green-400">{week.renewals}</div>
+                      <div className="font-bold text-green-400">{week.renewals || 0}</div>
                       <div className="text-xs text-muted-foreground">Renew</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-blue-400">{week.newClients.length}</div>
+                      <div className="font-bold text-blue-400">{week.newClients?.length || 0}</div>
                       <div className="text-xs text-muted-foreground">Nuevos</div>
                     </div>
                     <div className="text-center">
-                      <div className="font-bold text-purple-400">{week.totalClients}</div>
+                      <div className="font-bold text-purple-400">{week.totalClients || 0}</div>
                       <div className="text-xs text-muted-foreground">Total</div>
                     </div>
                   </div>
@@ -398,7 +405,7 @@ export function StatsPanel() {
                 {/* Detalles expandibles */}
                 {selectedWeek === week.weekId && (
                   <div className="mt-4 pt-4 border-t border-border space-y-2 animate-in fade-in duration-200">
-                    {week.bannedAccounts.length > 0 && (
+                    {week.bannedAccounts && week.bannedAccounts.length > 0 && (
                       <div>
                         <div className="text-xs font-semibold text-red-400 mb-1">Bloqueados:</div>
                         <div className="flex flex-wrap gap-2">
@@ -410,7 +417,7 @@ export function StatsPanel() {
                         </div>
                       </div>
                     )}
-                    {week.newClients.length > 0 && (
+                    {week.newClients && week.newClients.length > 0 && (
                       <div>
                         <div className="text-xs font-semibold text-blue-400 mb-1">Nuevos Clientes:</div>
                         <div className="flex flex-wrap gap-2">
@@ -433,8 +440,9 @@ export function StatsPanel() {
       {/* Insights y Recomendaciones */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Mejor Semana */}
-        {weeksHistory.length > 0 && (() => {
-          const bestWeek = [...weeksHistory].sort((a, b) => b.renewals - a.renewals)[0];
+        {weeksHistory && weeksHistory.length > 0 && (() => {
+          const bestWeek = [...weeksHistory].sort((a, b) => (b.renewals || 0) - (a.renewals || 0))[0];
+          if (!bestWeek) return null;
           return (
             <div className="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -447,15 +455,15 @@ export function StatsPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Renovaciones</span>
-                  <span className="font-bold text-green-400">{bestWeek.renewals}</span>
+                  <span className="font-bold text-green-400">{bestWeek.renewals || 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Nuevos Clientes</span>
-                  <span className="font-bold text-blue-400">{bestWeek.newClients.length}</span>
+                  <span className="font-bold text-blue-400">{bestWeek.newClients?.length || 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Bloqueos</span>
-                  <span className="font-bold text-red-400">{bestWeek.bannedAccounts.length}</span>
+                  <span className="font-bold text-red-400">{bestWeek.bannedAccounts?.length || 0}</span>
                 </div>
               </div>
             </div>
@@ -463,8 +471,9 @@ export function StatsPanel() {
         })()}
 
         {/* Peor Semana */}
-        {weeksHistory.length > 0 && (() => {
-          const worstWeek = [...weeksHistory].sort((a, b) => b.bannedAccounts.length - a.bannedAccounts.length)[0];
+        {weeksHistory && weeksHistory.length > 0 && (() => {
+          const worstWeek = [...weeksHistory].sort((a, b) => (b.bannedAccounts?.length || 0) - (a.bannedAccounts?.length || 0))[0];
+          if (!worstWeek) return null;
           return (
             <div className="rounded-2xl border border-red-500/20 bg-gradient-to-br from-red-500/10 to-transparent p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -477,15 +486,15 @@ export function StatsPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Cuentas Bloqueadas</span>
-                  <span className="font-bold text-red-400">{worstWeek.bannedAccounts.length}</span>
+                  <span className="font-bold text-red-400">{worstWeek.bannedAccounts?.length || 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Renovaciones</span>
-                  <span className="font-bold text-green-400">{worstWeek.renewals}</span>
+                  <span className="font-bold text-green-400">{worstWeek.renewals || 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Nuevos Clientes</span>
-                  <span className="font-bold text-blue-400">{worstWeek.newClients.length}</span>
+                  <span className="font-bold text-blue-400">{worstWeek.newClients?.length || 0}</span>
                 </div>
               </div>
             </div>
@@ -494,10 +503,10 @@ export function StatsPanel() {
       </div>
 
       {/* Promedios Generales */}
-      {weeksHistory.length > 0 && (() => {
-        const avgBans = Math.round(weeksHistory.reduce((sum, w) => sum + w.bannedAccounts.length, 0) / weeksHistory.length);
-        const avgRenewals = Math.round(weeksHistory.reduce((sum, w) => sum + w.renewals, 0) / weeksHistory.length);
-        const avgNewClients = Math.round(weeksHistory.reduce((sum, w) => sum + w.newClients.length, 0) / weeksHistory.length);
+      {weeksHistory && weeksHistory.length > 0 && (() => {
+        const avgBans = Math.round(weeksHistory.reduce((sum, w) => sum + (w.bannedAccounts?.length || 0), 0) / weeksHistory.length);
+        const avgRenewals = Math.round(weeksHistory.reduce((sum, w) => sum + (w.renewals || 0), 0) / weeksHistory.length);
+        const avgNewClients = Math.round(weeksHistory.reduce((sum, w) => sum + (w.newClients?.length || 0), 0) / weeksHistory.length);
 
         return (
           <div className="rounded-2xl border border-border bg-card p-6">
