@@ -60,28 +60,28 @@ export interface NotificationConfig {
   };
 }
 
-// 🆕 INTERFACE PARA POSTS INDEPENDIENTES (DUAL MODE)
+// 🆕 INTERFACE PARA POST INDIVIDUAL
 export interface PostData {
-  postId: string; // Ej: "Angel_17_Post1"
+  postId: string;
   browserName: string;
   postSlot: 1 | 2; // Indica si es Post 1 o Post 2
   
   // Datos del cliente/post
   clientName: string;
   postName: string;
-  age: string;
-  headline: string;
-  body: string;
+  age?: string;
+  headline?: string;
+  body?: string;
   city: string;
   location: string;
   phoneNumber: string;
   
-  // ID del post en Megapersonals
+  // Megapersonals info
   megaPostId?: string;
   megaPostUrl?: string;
   postIdCapturedAt?: number;
   
-  // Estadísticas individuales
+  // Estadísticas
   stats?: {
     totalRepublishes: number;
     lastRepublishAt: string;
@@ -95,11 +95,27 @@ export interface PostData {
 
 export interface BrowserData {
   browserName: string;
+  
+  // 🆕 MODO (single o double)
+  mode?: "single" | "double";
+  currentPost?: 1 | 2; // En modo double, indica cuál post publicará ahora
+  
+  // 🆕 REFERENCIAS A POSTS (modo double)
+  post1Id?: string; // "BrowserName_Post1"
+  post2Id?: string; // "BrowserName_Post2"
+  
+  // DATOS LEGACY (modo single) - mantener compatibilidad
   clientName?: string;
+  phoneNumber?: string;
+  city?: string;
+  location?: string;
+  postName?: string;
+  postId?: string;
+  postUrl?: string;
+  postIdCapturedAt?: number;
+  
+  // Datos comunes (ambos modos)
   uniqueId?: string;
-  phoneNumber: string;
-  city: string;
-  location: string;
   isPaused: boolean;
   rentalExpiration: string;
   rentalRemaining: RentalRemaining;
@@ -113,10 +129,6 @@ export interface BrowserData {
   captchaImage?: string;
   notificationConfig?: NotificationConfig;
   lastScreenshot?: string;
-  postName?: string;
-  postId?: string;
-  postUrl?: string;
-  postIdCapturedAt?: number;
   connectionStatus?: "online" | "offline" | "error";
   lastHeartbeat?: string;
   lastError?: {
@@ -129,16 +141,10 @@ export interface BrowserData {
   currentUrl?: string;
   pageTitle?: string;
   
-  // Campos para estadísticas
+  // Estadísticas
   createdAt?: string;
   isBanned?: boolean;
   bannedAt?: string;
-  
-  // 🆕 CAMPOS PARA DUAL POST
-  mode?: "single" | "double"; // Modo del navegador
-  currentPost?: 1 | 2; // Indica qué post republicará ahora
-  post1Id?: string; // Referencia a "Angel_17_Post1"
-  post2Id?: string; // Referencia a "Angel_17_Post2"
 }
 
 export interface WeeklyStats {
@@ -159,23 +165,6 @@ export interface StatsEvent {
   timestamp: string;
   weekId: string;
   details?: any;
-}
-
-// 🆕 RESULTADO DE BÚSQUEDA
-export interface SearchResult {
-  type: "single" | "dual";
-  browserName: string;
-  clientName: string;
-  postName?: string;
-  phoneNumber?: string;
-  city?: string;
-  
-  // Si es dual, incluir info del post
-  postId?: string;
-  postSlot?: 1 | 2;
-  
-  // Data completa
-  data: BrowserData | PostData;
 }
 
 export const FirebaseAPI = {
@@ -201,6 +190,7 @@ export const FirebaseAPI = {
       const userData: BrowserData = {
         browserName: browserName,
         uniqueId: uniqueId,
+        mode: "single", // 🆕 Por defecto modo single
         phoneNumber: "Manual",
         city: "Manual",
         location: "Manual",
@@ -220,8 +210,6 @@ export const FirebaseAPI = {
         consecutiveErrors: 0,
         createdAt: now.toISOString(),
         isBanned: false,
-        mode: "single", // 🆕 Por defecto en modo single
-        currentPost: 1,
       };
 
       await set(ref(database, `browsers/${browserName}`), userData);
@@ -288,156 +276,49 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 OBTENER TODOS LOS POSTS
-  async getAllPosts(): Promise<Record<string, PostData>> {
+  // 🆕 BUSCAR POR NOMBRE DE CLIENTE (incluye posts dual)
+  async findAllBrowsersByClientName(clientName: string): Promise<Array<{browser: BrowserData, post?: PostData}>> {
     try {
-      const snapshot = await get(ref(database, "posts"));
-      return snapshot.val() || {};
-    } catch {
-      return {};
-    }
-  },
+      const cleanSearch = clientName.trim().toLowerCase();
+      const results: Array<{browser: BrowserData, post?: PostData}> = [];
 
-  // 🆕 OBTENER POST POR ID
-  async getPostById(postId: string): Promise<PostData | null> {
-    try {
-      const snapshot = await get(ref(database, `posts/${postId}`));
-      return snapshot.val();
-    } catch {
-      return null;
-    }
-  },
-
-  // 🆕 OBTENER POSTS DE UN NAVEGADOR
-  async getBrowserPosts(browserName: string): Promise<{ post1: PostData | null; post2: PostData | null }> {
-    try {
-      const browser = await this.findBrowserByName(browserName);
-      if (!browser || browser.mode !== "double") {
-        return { post1: null, post2: null };
-      }
-
-      const [post1, post2] = await Promise.all([
-        browser.post1Id ? this.getPostById(browser.post1Id) : null,
-        browser.post2Id ? this.getPostById(browser.post2Id) : null,
-      ]);
-
-      return { post1, post2 };
-    } catch {
-      return { post1: null, post2: null };
-    }
-  },
-
-  // 🆕 ESCUCHAR POSTS DE UN NAVEGADOR
-  listenToBrowserPosts(
-    browserName: string,
-    callback: (posts: { post1: PostData | null; post2: PostData | null }) => void
-  ) {
-    const browserRef = ref(database, `browsers/${browserName}`);
-    
-    const unsubscribe = onValue(browserRef, async (snapshot) => {
-      const browser = snapshot.val() as BrowserData;
-      
-      if (!browser || browser.mode !== "double") {
-        callback({ post1: null, post2: null });
-        return;
-      }
-
-      const posts = await this.getBrowserPosts(browserName);
-      callback(posts);
-    });
-
-    return unsubscribe;
-  },
-
-  // 🆕 BÚSQUEDA UNIFICADA (INCLUYE POSTS)
-  async searchClients(query: string): Promise<SearchResult[]> {
-    if (!query || query.length < 2) return [];
-
-    try {
-      const [browsersSnapshot, postsSnapshot] = await Promise.all([
-        get(ref(database, "browsers")),
-        get(ref(database, "posts")),
-      ]);
-
+      // Buscar en navegadores
+      const browsersSnapshot = await get(ref(database, "browsers"));
       const browsers = browsersSnapshot.val() || {};
+
+      // Buscar en posts independientes
+      const postsSnapshot = await get(ref(database, "posts"));
       const posts = postsSnapshot.val() || {};
-      const results: SearchResult[] = [];
-      const queryLower = query.toLowerCase();
 
       // Buscar en navegadores modo single
-      for (const [, browser] of Object.entries(browsers)) {
-        const b = browser as BrowserData;
-        if (b.mode === "single" || !b.mode) {
-          const matches =
-            b.clientName?.toLowerCase().includes(queryLower) ||
-            b.postName?.toLowerCase().includes(queryLower) ||
-            b.phoneNumber?.includes(query) ||
-            b.browserName.toLowerCase().includes(queryLower);
-
-          if (matches) {
-            results.push({
-              type: "single",
-              browserName: b.browserName,
-              clientName: b.clientName || "Sin asignar",
-              postName: b.postName,
-              phoneNumber: b.phoneNumber,
-              city: b.city,
-              data: b,
-            });
+      for (const [, browserData] of Object.entries(browsers)) {
+        const browser = browserData as BrowserData;
+        
+        if (browser.mode === "single" || !browser.mode) {
+          const browserClientName = (browser.clientName || "").trim().toLowerCase();
+          
+          if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
+            results.push({ browser });
           }
         }
       }
 
-      // Buscar en posts independientes (dual mode)
-      for (const [, post] of Object.entries(posts)) {
-        const p = post as PostData;
-        const matches =
-          p.clientName?.toLowerCase().includes(queryLower) ||
-          p.postName?.toLowerCase().includes(queryLower) ||
-          p.phoneNumber?.includes(query);
-
-        if (matches) {
-          results.push({
-            type: "dual",
-            browserName: p.browserName,
-            clientName: p.clientName,
-            postName: p.postName,
-            phoneNumber: p.phoneNumber,
-            city: p.city,
-            postId: p.postId,
-            postSlot: p.postSlot,
-            data: p,
-          });
+      // Buscar en posts independientes (modo dual)
+      for (const [, postData] of Object.entries(posts)) {
+        const post = postData as PostData;
+        const postClientName = (post.clientName || "").trim().toLowerCase();
+        
+        if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
+          const browser = browsers[post.browserName] as BrowserData;
+          if (browser) {
+            results.push({ browser, post });
+          }
         }
       }
 
       return results;
     } catch (error) {
       console.error("Error en búsqueda:", error);
-      return [];
-    }
-  },
-
-  async findAllBrowsersByClientName(clientName: string): Promise<BrowserData[]> {
-    try {
-      const snapshot = await get(ref(database, "browsers"));
-      const browsers = snapshot.val();
-      
-      if (!browsers) return [];
-
-      const cleanSearch = clientName.trim().toLowerCase();
-      const results: BrowserData[] = [];
-
-      for (const [, data] of Object.entries(browsers)) {
-        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
-        
-        if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
-          results.push(data as BrowserData);
-        }
-      }
-
-      return results;
-    } catch {
       return [];
     }
   },
@@ -516,68 +397,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 CAMBIAR MODO (SINGLE/DOUBLE)
-  async setMode(browserName: string, mode: "single" | "double") {
-    try {
-      const updates: Partial<BrowserData> = {
-        mode: mode,
-        currentPost: 1,
-        lastUpdate: new Date().toISOString(),
-      };
-
-      // Si se activa modo dual, crear IDs de posts
-      if (mode === "double") {
-        updates.post1Id = `${browserName}_Post1`;
-        updates.post2Id = `${browserName}_Post2`;
-      }
-
-      await update(ref(database, `browsers/${browserName}`), updates);
-
-      // Enviar comando a la extensión
-      await this.sendCommand(browserName, "set_mode", { mode });
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 ALTERNAR POST MANUALMENTE
-  async switchPost(browserName: string) {
-    try {
-      await this.sendCommand(browserName, "switch_post");
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 EDITAR POST ESPECÍFICO
-  async editPost(browserName: string, postNumber: 1 | 2, changes: Partial<PostData>) {
-    try {
-      await this.sendCommand(browserName, "edit_post", {
-        postNumber,
-        changes,
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 ACTUALIZAR POST EN FIREBASE
-  async updatePost(postId: string, updates: Partial<PostData>) {
-    try {
-      await update(ref(database, `posts/${postId}`), {
-        ...updates,
-        lastUpdate: new Date().toISOString(),
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
   async togglePause(browserName: string, newState: boolean) {
     try {
       await update(ref(database, `browsers/${browserName}`), {
@@ -640,9 +459,10 @@ export const FirebaseAPI = {
 
   async deleteBrowser(browserName: string) {
     try {
+      // Obtener info del browser antes de eliminar
       const browser = await this.findBrowserByName(browserName);
       
-      // Si es modo dual, eliminar posts también
+      // Si es modo dual, eliminar los posts también
       if (browser && browser.mode === "double") {
         if (browser.post1Id) {
           await remove(ref(database, `posts/${browser.post1Id}`));
@@ -652,11 +472,11 @@ export const FirebaseAPI = {
         }
       }
       
-      // Eliminar navegador y datos relacionados
-      await set(ref(database, `browsers/${browserName}`), null);
-      await set(ref(database, `commands/${browserName}`), null);
-      await set(ref(database, `notifications/${browserName}`), null);
-      await set(ref(database, `lastNotified/${browserName}`), null);
+      // Eliminar browser y datos relacionados
+      await remove(ref(database, `browsers/${browserName}`));
+      await remove(ref(database, `commands/${browserName}`));
+      await remove(ref(database, `notifications/${browserName}`));
+      await remove(ref(database, `lastNotified/${browserName}`));
       
       return { success: true };
     } catch (error) {
@@ -723,6 +543,203 @@ export const FirebaseAPI = {
 
       const result = await response.json();
       return result;
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 API PARA POSTS INDIVIDUALES
+  
+  // Obtener un post por ID
+  async getPost(postId: string): Promise<PostData | null> {
+    try {
+      const snapshot = await get(ref(database, `posts/${postId}`));
+      return snapshot.exists() ? snapshot.val() as PostData : null;
+    } catch (error) {
+      console.error("Error obteniendo post:", error);
+      return null;
+    }
+  },
+
+  // Obtener todos los posts de un navegador
+  async getBrowserPosts(browserName: string): Promise<PostData[]> {
+    try {
+      const postsSnapshot = await get(ref(database, "posts"));
+      const posts = postsSnapshot.val() || {};
+      
+      const browserPosts: PostData[] = [];
+      for (const [, postData] of Object.entries(posts)) {
+        const post = postData as PostData;
+        if (post.browserName === browserName) {
+          browserPosts.push(post);
+        }
+      }
+      
+      // Ordenar por postSlot
+      browserPosts.sort((a, b) => a.postSlot - b.postSlot);
+      return browserPosts;
+    } catch (error) {
+      console.error("Error obteniendo posts del navegador:", error);
+      return [];
+    }
+  },
+
+  // Escuchar cambios en un post
+  listenToPost(postId: string, callback: (data: PostData | null) => void) {
+    const postRef = ref(database, `posts/${postId}`);
+    const unsubscribe = onValue(postRef, (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() as PostData : null);
+    });
+    return unsubscribe;
+  },
+
+  // Escuchar todos los posts
+  listenToAllPosts(callback: (posts: Record<string, PostData>) => void) {
+    const postsRef = ref(database, "posts");
+    const unsubscribe = onValue(postsRef, (snapshot) => {
+      callback(snapshot.val() || {});
+    });
+    return unsubscribe;
+  },
+
+  // 🆕 Activar/Desactivar modo dual
+  async toggleDualMode(browserName: string, enableDual: boolean) {
+    try {
+      const browser = await this.findBrowserByName(browserName);
+      if (!browser) {
+        return { success: false, error: "Navegador no encontrado" };
+      }
+
+      if (enableDual) {
+        // Activar modo dual
+        const post1Id = `${browserName}_Post1`;
+        const post2Id = `${browserName}_Post2`;
+
+        // Crear posts si no existen
+        const post1Exists = await get(ref(database, `posts/${post1Id}`));
+        if (!post1Exists.exists()) {
+          const post1: PostData = {
+            postId: post1Id,
+            browserName: browserName,
+            postSlot: 1,
+            clientName: browser.clientName || "Cliente 1",
+            postName: browser.postName || "Post 1",
+            city: browser.city || "",
+            location: browser.location || "",
+            phoneNumber: browser.phoneNumber || "",
+            isActive: true,
+            lastUpdate: new Date().toISOString(),
+            stats: {
+              totalRepublishes: 0,
+              lastRepublishAt: new Date().toISOString(),
+            },
+          };
+          await set(ref(database, `posts/${post1Id}`), post1);
+        }
+
+        const post2Exists = await get(ref(database, `posts/${post2Id}`));
+        if (!post2Exists.exists()) {
+          const post2: PostData = {
+            postId: post2Id,
+            browserName: browserName,
+            postSlot: 2,
+            clientName: "Cliente 2",
+            postName: "Post 2",
+            city: browser.city || "",
+            location: browser.location || "",
+            phoneNumber: "",
+            isActive: false,
+            lastUpdate: new Date().toISOString(),
+            stats: {
+              totalRepublishes: 0,
+              lastRepublishAt: new Date().toISOString(),
+            },
+          };
+          await set(ref(database, `posts/${post2Id}`), post2);
+        }
+
+        // Actualizar browser
+        await update(ref(database, `browsers/${browserName}`), {
+          mode: "double",
+          currentPost: 1,
+          post1Id: post1Id,
+          post2Id: post2Id,
+          lastUpdate: new Date().toISOString(),
+        });
+
+        // Enviar comando a la extensión
+        await this.sendCommand(browserName, "set_mode", { mode: "double" });
+
+        return { success: true, message: "Modo dual activado" };
+      } else {
+        // Desactivar modo dual
+        await update(ref(database, `browsers/${browserName}`), {
+          mode: "single",
+          currentPost: null,
+          post1Id: null,
+          post2Id: null,
+          lastUpdate: new Date().toISOString(),
+        });
+
+        // Enviar comando a la extensión
+        await this.sendCommand(browserName, "set_mode", { mode: "single" });
+
+        return { success: true, message: "Modo dual desactivado" };
+      }
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Cambiar manualmente al otro post
+  async switchPost(browserName: string) {
+    try {
+      const browser = await this.findBrowserByName(browserName);
+      if (!browser || browser.mode !== "double") {
+        return { success: false, error: "El navegador no está en modo dual" };
+      }
+
+      const newPost = browser.currentPost === 1 ? 2 : 1;
+      
+      await update(ref(database, `browsers/${browserName}`), {
+        currentPost: newPost,
+        lastUpdate: new Date().toISOString(),
+      });
+
+      await this.sendCommand(browserName, "switch_post", {});
+
+      return { success: true, newPost };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Editar un post específico
+  async editPost(browserName: string, postNumber: 1 | 2, changes: Partial<PostData>) {
+    try {
+      const browser = await this.findBrowserByName(browserName);
+      if (!browser || browser.mode !== "double") {
+        return { success: false, error: "El navegador no está en modo dual" };
+      }
+
+      const postId = postNumber === 1 ? browser.post1Id : browser.post2Id;
+      if (!postId) {
+        return { success: false, error: "Post no encontrado" };
+      }
+
+      // Actualizar post en Firebase
+      await update(ref(database, `posts/${postId}`), {
+        ...changes,
+        lastUpdate: new Date().toISOString(),
+      });
+
+      // Enviar comando a la extensión
+      await this.sendCommand(browserName, "edit_post", {
+        postNumber,
+        changes,
+      });
+
+      return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
