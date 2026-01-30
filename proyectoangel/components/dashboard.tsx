@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
+import { FirebaseAPI, type PostData } from "@/lib/firebase";
 import {
   XIcon,
   PauseIcon,
@@ -17,7 +17,7 @@ import { NotificationSettings } from "@/components/notification-settings";
 import { CitySelector } from "@/components/CitySelector";
 
 interface DashboardProps {
-  browserData: BrowserData;
+  postId: string;  // 🆕 Ahora recibe postId en lugar de browserData
   onClose: () => void;
 }
 
@@ -30,10 +30,9 @@ function formatTime(seconds: number) {
   return `${secs}s`;
 }
 
-function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
+function formatRentalTime(rental: PostData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "Sin renta";
   
-  // 🆕 Si days es negativo, es tiempo de DEUDA
   if (rental.days < 0 || (rental as any).isDebt) {
     const absDays = Math.abs(rental.days);
     const parts = [];
@@ -51,20 +50,17 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
-function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
+function getRentalStatus(rental: PostData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "neutral";
-  
-  // 🆕 Si está en deuda (days negativo), status especial
   if (rental.days < 0 || (rental as any).isDebt) return "debt";
-  
   if (rental.days === 0 && rental.hours === 0) return "critical";
   if (rental.days === 0) return "warning";
   if (rental.days < 2) return "caution";
   return "healthy";
 }
 
-export function Dashboard({ browserData, onClose }: DashboardProps) {
-  const [liveData, setLiveData] = useState(browserData);
+export function Dashboard({ postId, onClose }: DashboardProps) {
+  const [liveData, setLiveData] = useState<PostData | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [showCaptchaForm, setShowCaptchaForm] = useState(false);
@@ -77,7 +73,8 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   const [showCitySelector, setShowCitySelector] = useState(false);
 
   const [editForm, setEditForm] = useState({
-    name: "",
+    clientName: "",
+    postName: "",
     age: "",
     headline: "",
     body: "",
@@ -87,20 +84,30 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
   const modalManuallyControlledRef = useRef(false);
   const commandInProgressRef = useRef(false);
-  const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
+  const previousRepublishRef = useRef<PostData["republishStatus"] | null>(null);
   const previousEditInProgressRef = useRef<boolean>(false);
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const userIsEditingRef = useRef(false);
 
+  // 🆕 Cargar post inicial
   useEffect(() => {
-    if (!liveData.republishStatus || liveData.isPaused) return;
+    async function loadPost() {
+      const post = await FirebaseAPI.findPostById(postId);
+      if (post) {
+        setLiveData(post);
+      }
+    }
+    loadPost();
+  }, [postId]);
 
-    const baseRemaining = liveData.republishStatus.remainingSeconds;
+  // 🆕 Timer para countdown
+  useEffect(() => {
+    if (!liveData?.republishStatus || liveData.isPaused) return;
 
     const interval = setInterval(() => {
       setLiveData(prev => {
-        if (!prev.republishStatus) return prev;
+        if (!prev?.republishStatus) return prev;
         
         const newRemaining = Math.max(0, prev.republishStatus.remainingSeconds - 1);
         const newElapsed = Math.min(
@@ -120,50 +127,50 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [liveData.republishStatus?.remainingSeconds, liveData.isPaused]);
+  }, [liveData?.republishStatus?.remainingSeconds, liveData?.isPaused]);
 
+  // 🆕 Listener del post
   useEffect(() => {
-    const unsubscribe = FirebaseAPI.listenToBrowser(
-      browserData.browserName || (browserData as BrowserData & { name?: string }).name || "",
-      (newData) => {
-        if (previousRepublishRef.current && newData.republishStatus) {
-          const wasInProgress = previousRepublishRef.current.elapsedSeconds > 800;
-          const justCompleted = newData.republishStatus.elapsedSeconds < 10;
-          
-          if (wasInProgress && justCompleted) {
-            const now = Date.now();
-            if (now - lastSuccessMessageTimeRef.current > 15000) {
-              lastSuccessMessageTimeRef.current = now;
-              setShowSuccessMessage(true);
-            }
+    const unsubscribe = FirebaseAPI.listenToPost(postId, (newData) => {
+      if (!newData) return;
+
+      if (previousRepublishRef.current && newData.republishStatus) {
+        const wasInProgress = previousRepublishRef.current.elapsedSeconds > 800;
+        const justCompleted = newData.republishStatus.elapsedSeconds < 10;
+        
+        if (wasInProgress && justCompleted) {
+          const now = Date.now();
+          if (now - lastSuccessMessageTimeRef.current > 15000) {
+            lastSuccessMessageTimeRef.current = now;
+            setShowSuccessMessage(true);
           }
         }
-        
-        if (newData.republishStatus) {
-          previousRepublishRef.current = newData.republishStatus;
-        }
-
-        if (!newData.captchaWaiting && showCaptchaForm) {
-          setShowCaptchaForm(false);
-          setCaptchaCode("");
-          modalManuallyControlledRef.current = false;
-        }
-
-        if (modalManuallyControlledRef.current) {
-          return;
-        }
-
-        if (newData.captchaWaiting && !showCaptchaForm) {
-          setShowCaptchaForm(true);
-          modalManuallyControlledRef.current = true;
-        }
-
-        setLiveData(newData);
       }
-    );
+      
+      if (newData.republishStatus) {
+        previousRepublishRef.current = newData.republishStatus;
+      }
+
+      if (!newData.captchaWaiting && showCaptchaForm) {
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
+      }
+
+      if (modalManuallyControlledRef.current) {
+        return;
+      }
+
+      if (newData.captchaWaiting && !showCaptchaForm) {
+        setShowCaptchaForm(true);
+        modalManuallyControlledRef.current = true;
+      }
+
+      setLiveData(newData);
+    });
 
     return () => unsubscribe();
-  }, [browserData, showCaptchaForm]);
+  }, [postId, showCaptchaForm]);
 
   useEffect(() => {
     if (showSuccessMessage) {
@@ -177,24 +184,19 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
   useEffect(() => {
     const wasEditing = previousEditInProgressRef.current;
-    const isEditingNow = liveData.editInProgress;
+    const isEditingNow = liveData?.editInProgress;
 
     if (wasEditing && !isEditingNow) {
-      console.log('[Dashboard]: Edición completada, mostrando mensaje de guardado');
       setShowSavedMessage(true);
-      
-      setTimeout(() => {
-        setShowSavedMessage(false);
-      }, 5000);
+      setTimeout(() => setShowSavedMessage(false), 5000);
     }
 
-    previousEditInProgressRef.current = isEditingNow;
-  }, [liveData.editInProgress]);
+    previousEditInProgressRef.current = isEditingNow || false;
+  }, [liveData?.editInProgress]);
 
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
     const now = Date.now();
     if (now - lastActionTimeRef.current < delay) {
-      console.log('[Dashboard] Acción bloqueada por debounce');
       return false;
     }
     lastActionTimeRef.current = now;
@@ -203,50 +205,41 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   }, []);
 
   const handleTogglePause = useCallback(async () => {
-    if (commandInProgressRef.current || actionLoading) {
-      return;
-    }
+    if (!liveData || commandInProgressRef.current || actionLoading) return;
 
     debounce(async () => {
       const newPauseState = !liveData.isPaused;
       
-      setLiveData(prev => ({ ...prev, isPaused: newPauseState }));
+      setLiveData(prev => prev ? { ...prev, isPaused: newPauseState } : null);
       setActionLoading(true);
       commandInProgressRef.current = true;
 
       try {
-        const result = await FirebaseAPI.togglePause(
-          liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-          newPauseState
-        );
+        const result = await FirebaseAPI.togglePostPause(postId, newPauseState);
 
         if (!result.success) {
-          setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
+          setLiveData(prev => prev ? { ...prev, isPaused: !newPauseState } : null);
           alert(`Error: ${result.error}`);
         }
       } catch (error) {
-        setLiveData(prev => ({ ...prev, isPaused: !newPauseState }));
+        setLiveData(prev => prev ? { ...prev, isPaused: !newPauseState } : null);
         alert('Error al cambiar estado de pausa');
       } finally {
         setActionLoading(false);
         commandInProgressRef.current = false;
       }
     });
-  }, [liveData, debounce, actionLoading]);
+  }, [liveData, debounce, actionLoading, postId]);
 
   const handleRepublish = useCallback(async () => {
-    if (commandInProgressRef.current || actionLoading || liveData.isPaused) {
-      return;
-    }
+    if (!liveData || commandInProgressRef.current || actionLoading || liveData.isPaused) return;
 
     debounce(async () => {
       setActionLoading(true);
       commandInProgressRef.current = true;
 
       try {
-        const result = await FirebaseAPI.forceRepublish(
-          liveData.browserName || (liveData as BrowserData & { name?: string }).name || ""
-        );
+        const result = await FirebaseAPI.forceRepublishPost(postId);
 
         if (result.success) {
           alert("Republicación iniciada");
@@ -262,13 +255,16 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         }, 1000);
       }
     });
-  }, [liveData, debounce, actionLoading]);
+  }, [liveData, debounce, actionLoading, postId]);
 
   const handleOpenEditor = () => {
+    if (!liveData) return;
+    
     userIsEditingRef.current = false;
     
     setEditForm({
-      name: liveData.name || "",
+      clientName: liveData.clientName || "",
+      postName: liveData.postName || "",
       age: liveData.age ? String(liveData.age) : "",
       headline: liveData.headline || "",
       body: liveData.body || "",
@@ -290,14 +286,15 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   };
 
   const handleSaveAllEdits = async () => {
-    if (commandInProgressRef.current || actionLoading) {
-      return;
-    }
+    if (!liveData || commandInProgressRef.current || actionLoading) return;
 
     const changes: Record<string, string> = {};
     
-    if (editForm.name.trim() && editForm.name.trim() !== (liveData.name || "")) {
-      changes.name = editForm.name.trim();
+    if (editForm.clientName.trim() && editForm.clientName.trim() !== (liveData.clientName || "")) {
+      changes.clientName = editForm.clientName.trim();
+    }
+    if (editForm.postName.trim() && editForm.postName.trim() !== (liveData.postName || "")) {
+      changes.postName = editForm.postName.trim();
     }
     if (editForm.age.trim() && editForm.age.trim() !== String(liveData.age || "")) {
       changes.age = editForm.age.trim();
@@ -316,25 +313,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     }
 
     if (Object.keys(changes).length === 0) {
-      alert("No has realizado ningún cambio. Modifica los campos que quieras actualizar.");
-      return;
-    }
-
-    if (changes.age) {
-      const age = Number.parseInt(changes.age);
-      if (Number.isNaN(age) || age < 18 || age > 99) {
-        alert("Edad debe ser 18-99");
-        return;
-      }
-    }
-
-    if (changes.headline && changes.headline.length > 250) {
-      alert(`Encabezado muy largo (${changes.headline.length}/250)`);
-      return;
-    }
-
-    if (changes.body && changes.body.length > 2000) {
-      alert(`Cuerpo muy largo (${changes.body.length}/2000)`);
+      alert("No has realizado ningún cambio");
       return;
     }
 
@@ -342,17 +321,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
     setActionLoading(true);
 
     try {
+      // 🆕 Enviar comando al navegador que maneja este post
       const result = await FirebaseAPI.sendCommand(
-        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-        "edit_multiple_fields",
-        { changes }
+        liveData.browserName,
+        "edit_post",
+        { postId, changes }
       );
 
       if (result.success) {
         alert("Edición iniciada. El sistema procesará los cambios automáticamente.");
         userIsEditingRef.current = false;
         setShowEditForm(false);
-        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        setEditForm({ clientName: "", postName: "", age: "", headline: "", body: "", city: "", location: "" });
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -363,15 +343,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   };
 
   const handleCaptchaSubmit = async () => {
-    if (!captchaCode.trim()) {
-      alert("Escribe el código de seguridad");
-      return;
-    }
-
-    if (captchaSubmitting || commandInProgressRef.current || actionLoading) {
-      console.log('[CaptchaSubmit]: Bloqueado - ya hay un envío en progreso');
-      return;
-    }
+    if (!liveData || !captchaCode.trim() || captchaSubmitting || commandInProgressRef.current || actionLoading) return;
 
     setCaptchaSubmitting(true);
     commandInProgressRef.current = true;
@@ -379,13 +351,12 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
     try {
       const result = await FirebaseAPI.sendCommand(
-        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
+        liveData.browserName,
         "submit_captcha",
-        { code: captchaCode.trim() }
+        { code: captchaCode.trim(), postId }
       );
 
       if (result.success) {
-        console.log('[CaptchaSubmit]: ✅ Código enviado correctamente');
         setShowCaptchaForm(false);
         setCaptchaCode("");
         modalManuallyControlledRef.current = false;
@@ -406,19 +377,13 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
   };
 
   const handleCaptchaRefresh = async () => {
-    if (captchaRefreshing || actionLoading || commandInProgressRef.current) {
-      return;
-    }
+    if (!liveData || captchaRefreshing || actionLoading || commandInProgressRef.current) return;
 
     try {
       setCaptchaRefreshing(true);
       commandInProgressRef.current = true;
 
-      await FirebaseAPI.sendCommand(liveData.browserName || (liveData as any).name, {
-        type: 'refresh_captcha'
-      });
-
-      console.log('[Dashboard]: Comando de refresh enviado al bot');
+      await FirebaseAPI.sendCommand(liveData.browserName, "refresh_captcha", { postId });
 
       setTimeout(() => {
         setCaptchaRefreshing(false);
@@ -426,11 +391,18 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
       }, 5000);
 
     } catch (error) {
-      console.error('[Dashboard]: Error refrescando captcha:', error);
       setCaptchaRefreshing(false);
       commandInProgressRef.current = false;
     }
   };
+
+  if (!liveData) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 backdrop-blur-md">
+        <div className="text-white text-xl">Cargando...</div>
+      </div>
+    );
+  }
 
   const progressPercent = liveData.republishStatus
     ? (liveData.republishStatus.elapsedSeconds / liveData.republishStatus.totalSeconds) * 100
@@ -470,7 +442,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
               <div>
                 <h2 className="text-2xl sm:text-xl font-bold text-foreground">
-                  {liveData.browserName || (liveData as BrowserData & { name?: string }).name}
+                  {liveData.clientName}
                 </h2>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <span
@@ -503,7 +475,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
 
           <div className="space-y-6 p-6">
             
-            {/* 🆕 BANNER DE DEUDA */}
+            {/* BANNER DE DEUDA */}
             {(() => {
               const isDebt = liveData.rentalRemaining && 
                            (liveData.rentalRemaining.days < 0 || 
@@ -535,11 +507,10 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                     
                     <a 
                       href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                        `🚨 URGENTE: Renovar ${liveData.browserName} - Tengo ${debtTime} de deuda`
+                        `🚨 URGENTE: Renovar ${liveData.clientName} - Tengo ${debtTime} de deuda`
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
                       className="w-full sm:w-auto px-8 py-4 rounded-xl font-black text-lg bg-gradient-to-r from-red-600 to-red-700 text-white hover:scale-105 transition-all duration-200 shadow-2xl shadow-red-600/50 border-2 border-red-400 whitespace-nowrap"
                     >
                       💀 RENOVAR AHORA 💀
@@ -561,37 +532,38 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   "rounded-xl border p-4",
                   liveData.editLogType === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
                   liveData.editLogType === "success" && "border-accent/30 bg-accent/10 text-accent",
-                  liveData.editLogType === "info" && "border-primary/30 bg-primary/10 text-primary",
-                  liveData.editLogType === "warning" && "border-orange-500/30 bg-orange-500/10 text-orange-400"
+                  liveData.editLogType === "info" && "border-primary/30 bg-primary/10 text-primary"
                 )}
               >
                 <p className="text-center text-base sm:text-sm font-medium">{liveData.editLog}</p>
               </div>
             )}
 
-            {!liveData.manuallyCreated && (
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Información
-                </h3>
-                <div className="grid gap-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Teléfono</span>
-                    <span className="font-medium text-foreground">{liveData.phoneNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ciudad</span>
-                    <span className="font-medium text-foreground">{liveData.city}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Ubicación</span>
-                    <span className="font-medium text-foreground">{liveData.location}</span>
-                  </div>
+            <div className="rounded-xl border border-border bg-secondary/30 p-4">
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                Información
+              </h3>
+              <div className="grid gap-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Post</span>
+                  <span className="font-medium text-foreground">{liveData.postName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Teléfono</span>
+                  <span className="font-medium text-foreground">{liveData.phoneNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Ciudad</span>
+                  <span className="font-medium text-foreground">{liveData.city}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Ubicación</span>
+                  <span className="font-medium text-foreground">{liveData.location}</span>
                 </div>
               </div>
-            )}
+            </div>
 
-            {liveData.postId && liveData.postUrl ? (
+            {liveData.megaPostUrl ? (
               <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
                 
@@ -607,10 +579,9 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                   </div>
                   
                   <a
-                    href={liveData.postUrl}
+                    href={liveData.megaPostUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
                     className="block w-full bg-gradient-to-r from-primary via-purple-500 to-pink-500 text-white py-4 rounded-xl font-bold text-center hover:scale-105 transition-all duration-200 shadow-lg shadow-primary/50 text-lg"
                   >
                     🔗 Ver Mi Anuncio Ahora
@@ -625,7 +596,7 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
               </div>
             ) : (
               <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-5 backdrop-blur-sm">
-                <div className="flex items-center gap-3 mb-3">
+                <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
                     <span className="text-xl">⚠️</span>
                   </div>
@@ -773,535 +744,118 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* MODAL DE EDICIÓN - TUTORIAL PASO A PASO */}
+      {/* MODAL DE EDICIÓN */}
       {showEditForm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
-          <div 
-            className="my-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto relative"
-            style={{
-              background: 'linear-gradient(180deg, #E6C9E6 0%, #D4A5D4 20%, #C28AC2 40%, #B06FB0 60%, #9E549E 80%, #8C398C 100%)',
-              borderRadius: '0 0 20px 20px',
-              border: 'none'
-            }}
-          >
-            <div 
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '20px',
-                background: 'linear-gradient(90deg, #FF69B4 0%, #FF1493 50%, #FF69B4 100%)',
-                borderRadius: '20px 20px 0 0',
-              }}
-            >
-              <svg
-                width="100%"
-                height="20"
-                viewBox="0 0 100 20"
-                preserveAspectRatio="none"
-                style={{ position: 'absolute', top: 0, left: 0 }}
-              >
-                <path
-                  d="M0,20 Q2.5,0 5,0 T10,0 T15,0 T20,0 T25,0 T30,0 T35,0 T40,0 T45,0 T50,0 T55,0 T60,0 T65,0 T70,0 T75,0 T80,0 T85,0 T90,0 T95,0 T100,0 L100,20 Z"
-                  fill="#FF69B4"
-                />
-              </svg>
-            </div>
+          <div className="my-8 w-full max-w-2xl rounded-2xl border border-border bg-card p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h2 className="text-2xl font-bold text-foreground mb-6">Editar Post</h2>
 
-            <div 
-              className="text-center pt-6 pb-2"
-              style={{
-                background: 'linear-gradient(180deg, rgba(255,105,180,0.3) 0%, transparent 100%)',
-                marginTop: '20px'
-              }}
-            >
-              <h1 
-                style={{
-                  fontSize: '32px',
-                  fontWeight: 'bold',
-                  color: '#E8E8E8',
-                  textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                  letterSpacing: '2px',
-                  fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                }}
-              >
-                Mega<span style={{ color: '#87CEEB' }}>Personals</span>
-              </h1>
-              <p 
-                style={{
-                  fontSize: '11px',
-                  color: '#E8E8E8',
-                  marginTop: '-5px',
-                  letterSpacing: '3px'
-                }}
-              >
-                personals classifieds
-              </p>
-            </div>
-
-            <div className="relative" style={{ padding: '20px 30px 30px 30px' }}>
-              
-              <div 
-                className="absolute pointer-events-none"
-                style={{
-                  top: '-60px',
-                  left: '20px',
-                  width: '400px',
-                  height: '300px',
-                  zIndex: 20
-                }}
-              >
-                <img
-                  src="https://megapersonals.eu/resources/img/writepost1_devilgirl.png?v=1768750586"
-                  alt="Create Post"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'contain',
-                    filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))'
-                  }}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
+            <div className="space-y-4">
+              <div>
+                <label className="block mb-2 text-sm font-medium">Nombre Cliente</label>
+                <Input
+                  value={editForm.clientName}
+                  onChange={(e) => handleFieldChange('clientName', e.target.value)}
+                  maxLength={50}
                 />
               </div>
 
-              <div className="text-center mb-6 relative z-20">
-                <h2 
-                  style={{
-                    fontSize: '36px',
-                    fontWeight: 900,
-                    color: '#FFFF00',
-                    textShadow: '3px 3px 6px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.5)',
-                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
-                    letterSpacing: '1px'
-                  }}
-                >
-                  📚 Tutorial de Edición
-                </h2>
-                <p 
-                  style={{
-                    fontSize: '16px',
-                    color: '#FFFFFF',
-                    marginTop: '10px',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                  }}
-                >
-                  ✨ Sigue estos pasos para editar tu anuncio
-                </p>
+              <div>
+                <label className="block mb-2 text-sm font-medium">Nombre Post</label>
+                <Input
+                  value={editForm.postName}
+                  onChange={(e) => handleFieldChange('postName', e.target.value)}
+                  maxLength={100}
+                />
               </div>
 
-              <div 
-                className="mb-6 p-5 relative z-20"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '15px',
-                  border: '3px solid #FF69B4',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
-                }}
-              >
-                <h3 
-                  style={{
-                    fontSize: '20px',
-                    fontWeight: 'bold',
-                    color: '#8C398C',
-                    marginBottom: '15px',
-                    textAlign: 'center',
-                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                  }}
+              <div>
+                <label className="block mb-2 text-sm font-medium">Edad</label>
+                <select
+                  value={editForm.age}
+                  onChange={(e) => handleFieldChange('age', e.target.value)}
+                  className="w-full h-10 rounded-md border border-border bg-input px-3"
                 >
-                  📋 Instrucciones
-                </h3>
-                <ol 
-                  style={{
-                    fontSize: '15px',
-                    color: '#333333',
-                    lineHeight: '1.8',
-                    paddingLeft: '25px',
-                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                  }}
-                >
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 1:</strong> Cambia <u>SOLO</u> los campos que quieras actualizar
-                  </li>
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 2:</strong> Si NO quieres cambiar un campo, <u>déjalo como está</u>
-                  </li>
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 3:</strong> Haz click en "✅ Guardar Cambios"
-                  </li>
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 4:</strong> El sistema procesará automáticamente
-                  </li>
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 5:</strong> Aparecerá una ventana con código de seguridad
-                  </li>
-                  <li style={{ marginBottom: '10px' }}>
-                    <strong style={{ color: '#8C398C' }}>Paso 6:</strong> Escribe el código y presiona "Enviar" <u>UNA SOLA VEZ</u>
-                  </li>
-                  <li>
-                    <strong style={{ color: '#8C398C' }}>Paso 7:</strong> ¡Listo! La ventana se cerrará automáticamente
-                  </li>
-                </ol>
-                
-                <div 
-                  style={{
-                    marginTop: '20px',
-                    padding: '15px',
-                    background: '#FFF3CD',
-                    border: '2px solid #FFC107',
-                    borderRadius: '10px'
-                  }}
-                >
-                  <p 
-                    style={{
-                      fontSize: '14px',
-                      color: '#856404',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                      margin: 0,
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    ⚠️ <u>MUY IMPORTANTE</u> ⚠️<br />
-                    Cuando aparezca el captcha, presiona "Enviar" <u>UNA SOLA VEZ</u>.<br />
-                    La ventana se cerrará automáticamente en segundos.<br />
-                    NO hagas click múltiples veces. ¡Ten paciencia!
-                  </p>
-                </div>
+                  <option value="">-- No cambiar --</option>
+                  {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
+                    <option key={age} value={age}>{age}</option>
+                  ))}
+                </select>
               </div>
 
-              <div className="space-y-4 relative z-20" style={{ marginTop: '20px' }}>
-                
-                <div>
-                  <label 
-                    style={{
-                      display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
-                      fontWeight: 'bold',
-                      color: '#FFFF00',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    <span style={{ color: '#87CEEB' }}>1️⃣</span> Name/Alias:
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.name}
-                    onChange={(e) => handleFieldChange('name', e.target.value)}
-                    maxLength={50}
-                    placeholder="Ejemplo: Sofia"
-                    style={{
-                      width: '100%',
-                      height: '45px',
-                      backgroundColor: '#FFFFFF',
-                      border: '2px solid #888888',
-                      borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
-                      color: '#555555',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  />
-                  {editForm.name && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.name.length}/50 caracteres
-                    </p>
-                  )}
-                </div>
+              <div>
+                <label className="block mb-2 text-sm font-medium">Headline</label>
+                <Input
+                  value={editForm.headline}
+                  onChange={(e) => handleFieldChange('headline', e.target.value)}
+                  maxLength={250}
+                />
+              </div>
 
-                <div>
-                  <label 
-                    style={{
-                      display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
-                      fontWeight: 'bold',
-                      color: '#FFFF00',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    <span style={{ color: '#87CEEB' }}>2️⃣</span> Age:
-                  </label>
-                  <select
-                    value={editForm.age}
-                    onChange={(e) => handleFieldChange('age', e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '45px',
-                      backgroundColor: '#FFFFFF',
-                      border: '2px solid #888888',
-                      borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
-                      color: '#555555',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    <option value="">-- No cambiar --</option>
-                    {Array.from({ length: 82 }, (_, i) => i + 18).map((age) => (
-                      <option key={age} value={age}>
-                        {age}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block mb-2 text-sm font-medium">Body</label>
+                <textarea
+                  value={editForm.body}
+                  onChange={(e) => handleFieldChange('body', e.target.value)}
+                  rows={6}
+                  maxLength={2000}
+                  className="w-full rounded-md border border-border bg-input p-3"
+                />
+              </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label 
-                    style={{
-                      display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
-                      fontWeight: 'bold',
-                      color: '#FFFF00',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    <span style={{ color: '#87CEEB' }}>3️⃣</span> Headline:
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.headline}
-                    onChange={(e) => handleFieldChange('headline', e.target.value)}
-                    maxLength={250}
-                    placeholder="Ejemplo: SEXY COLOMBIANA 🔥💋"
-                    style={{
-                      width: '100%',
-                      height: '45px',
-                      backgroundColor: '#FFFFFF',
-                      border: '2px solid #888888',
-                      borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
-                      color: '#555555',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  />
-                  {editForm.headline && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.headline.length}/250 caracteres
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label 
-                    style={{
-                      display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
-                      fontWeight: 'bold',
-                      color: '#FFFF00',
-                      textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                    }}
-                  >
-                    <span style={{ color: '#87CEEB' }}>4️⃣</span> Body:
-                  </label>
-                  <textarea
-                    value={editForm.body}
-                    onChange={(e) => handleFieldChange('body', e.target.value)}
-                    rows={6}
-                    maxLength={2000}
-                    placeholder="Ejemplo: Hola 💕 soy muy caliente 🔥..."
-                    style={{
-                      width: '100%',
-                      backgroundColor: '#FFFFFF',
-                      border: '2px solid #888888',
-                      borderRadius: '5px',
-                      padding: '12px 15px',
-                      fontSize: '15px',
-                      color: '#555555',
-                      fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
-                      resize: 'none'
-                    }}
-                  />
-                  {editForm.body && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
-                      {editForm.body.length}/2000 caracteres
-                    </p>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label 
-                      style={{
-                        display: 'block',
-                        marginBottom: '8px',
-                        fontSize: '15px',
-                        fontWeight: 'bold',
-                        color: '#FFFF00',
-                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                      }}
-                    >
-                      <span style={{ color: '#87CEEB' }}>5️⃣</span> City:
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={editForm.city}
-                        readOnly
-                        style={{
-                          flex: 1,
-                          height: '45px',
-                          backgroundColor: '#FFFFFF',
-                          border: '2px solid #888888',
-                          borderRadius: '5px',
-                          padding: '10px 15px',
-                          fontSize: '15px',
-                          color: '#555555',
-                          fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                        }}
-                      />
-                      <Button
-                        type="button"
-                        onClick={() => setShowCitySelector(true)}
-                        style={{
-                          height: '45px',
-                          background: 'linear-gradient(135deg, #FF8C00 0%, #FFA500 100%)',
-                          border: '2px solid #FF8C00',
-                          borderRadius: '5px',
-                          color: '#FFFFFF',
-                          fontWeight: 'bold',
-                          padding: '0 20px',
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                          fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                        }}
-                      >
-                        🗺️ Cambiar
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <label 
-                      style={{
-                        display: 'block',
-                        marginBottom: '8px',
-                        fontSize: '15px',
-                        fontWeight: 'bold',
-                        color: '#FFFF00',
-                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
-                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                      }}
-                    >
-                      <span style={{ color: '#87CEEB' }}>6️⃣</span> Location/Area:
-                    </label>
-                    <input
-                      type="text"
-                      value={editForm.location}
-                      onChange={(e) => handleFieldChange('location', e.target.value)}
-                      maxLength={100}
-                      placeholder="Ejemplo: Downtown"
-                      style={{
-                        width: '100%',
-                        height: '45px',
-                        backgroundColor: '#FFFFFF',
-                        border: '2px solid #888888',
-                        borderRadius: '5px',
-                        padding: '10px 15px',
-                        fontSize: '15px',
-                        color: '#555555',
-                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                      }}
+                  <label className="block mb-2 text-sm font-medium">City</label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={editForm.city}
+                      readOnly
                     />
+                    <Button
+                      type="button"
+                      onClick={() => setShowCitySelector(true)}
+                    >
+                      Cambiar
+                    </Button>
                   </div>
                 </div>
+                <div>
+                  <label className="block mb-2 text-sm font-medium">Location</label>
+                  <Input
+                    value={editForm.location}
+                    onChange={(e) => handleFieldChange('location', e.target.value)}
+                    maxLength={100}
+                  />
+                </div>
               </div>
+            </div>
 
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 relative z-20">
-                <Button
-                  onClick={handleSaveAllEdits}
-                  disabled={actionLoading || commandInProgressRef.current}
-                  style={{
-                    flex: 1,
-                    height: '55px',
-                    background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
-                    border: '3px solid #00C853',
-                    borderRadius: '10px',
-                    color: '#FFFFFF',
-                    fontWeight: 'bold',
-                    fontSize: '18px',
-                    textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
-                </Button>
-                <Button
-                  onClick={async () => {
-                    try {
-                      await FirebaseAPI.sendCommand(
-                        liveData.browserName || (liveData as BrowserData & { name?: string }).name || "",
-                        "cancel_edit",
-                        {}
-                      );
-                    } catch (error) {
-                      console.error('Error sending cancel command:', error);
-                    }
-                    
-                    userIsEditingRef.current = false;
-                    setShowEditForm(false);
-                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-                  }}
-                  disabled={actionLoading || commandInProgressRef.current}
-                  style={{
-                    flex: 1,
-                    height: '55px',
-                    background: '#666666',
-                    border: '3px solid #555555',
-                    borderRadius: '10px',
-                    color: '#FFFFFF',
-                    fontWeight: 'bold',
-                    fontSize: '18px',
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
-                    fontFamily: 'Arial Black, system-ui, -apple-system, "Segoe UI", "Apple Color Emoji", "Segoe UI Emoji", sans-serif',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                  }}
-                >
-                  Cancelar
-                </Button>
-              </div>
-
-              <div 
-                className="mt-6 p-4 relative z-20"
-                style={{
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '12px',
-                  border: '2px solid #00E676',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-                }}
+            <div className="mt-6 flex gap-4">
+              <Button
+                onClick={handleSaveAllEdits}
+                disabled={actionLoading}
+                className="flex-1"
               >
-                <p 
-                  style={{
-                    fontSize: '14px',
-                    color: '#333333',
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    margin: 0,
-                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif'
-                  }}
-                >
-                  ✅ Recuerda: Solo cambia los campos que quieras actualizar
-                </p>
-              </div>
+                {actionLoading ? "Guardando..." : "✅ Guardar Cambios"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  userIsEditingRef.current = false;
+                  setShowEditForm(false);
+                  setEditForm({ clientName: "", postName: "", age: "", headline: "", body: "", city: "", location: "" });
+                }}
+                disabled={actionLoading}
+                className="flex-1"
+              >
+                Cancelar
+              </Button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL DE CAPTCHA - MEJORADO PARA MÓVILES */}
+      {/* MODAL DE CAPTCHA */}
       {showCaptchaForm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
@@ -1317,81 +871,52 @@ export function Dashboard({ browserData, onClose }: DashboardProps) {
                 
                 <Button
                   onClick={handleCaptchaRefresh}
-                  disabled={captchaRefreshing || actionLoading || commandInProgressRef.current}
+                  disabled={captchaRefreshing || actionLoading}
                   variant="ghost"
-                  className="mt-3 text-muted-foreground hover:text-foreground"
+                  className="mt-3"
                 >
-                  {captchaRefreshing ? (
-                    <>
-                      <svg className="mr-2 h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Refrescando...
-                    </>
-                  ) : (
-                    <>
-                      🔄 Cambiar Captcha
-                    </>
-                  )}
+                  {captchaRefreshing ? "Refrescando..." : "🔄 Cambiar Captcha"}
                 </Button>
-                
-                {captchaRefreshing && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Espera 5 segundos antes de refrescar nuevamente
-                  </p>
-                )}
               </div>
             )}
 
             <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-center text-base sm:text-sm font-medium text-muted-foreground">
-                  Escribe los caracteres:
-                </label>
-                <Input
-                  type="text"
-                  value={captchaCode}
-                  onChange={(e) => setCaptchaCode(e.target.value)}
-                  onKeyDown={(e) =>
-                    e.key === "Enter" && !captchaSubmitting && !actionLoading && !commandInProgressRef.current && handleCaptchaSubmit()
-                  }
-                  placeholder="Ejemplo: 3uK>"
-                  className="bg-input text-center font-mono text-xl sm:text-lg text-foreground h-16 sm:h-14"
-                  autoFocus
-                  disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
-                />
-              </div>
+              <Input
+                type="text"
+                value={captchaCode}
+                onChange={(e) => setCaptchaCode(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !captchaSubmitting && handleCaptchaSubmit()}
+                placeholder="Escribe el código"
+                className="text-center font-mono text-xl h-14"
+                autoFocus
+                disabled={captchaSubmitting}
+              />
             </div>
 
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <div className="mt-6 flex gap-3">
               <Button
                 onClick={handleCaptchaSubmit}
-                disabled={captchaSubmitting || actionLoading || !captchaCode.trim() || commandInProgressRef.current}
-                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-14 sm:h-12 text-base sm:text-sm"
+                disabled={captchaSubmitting || !captchaCode.trim()}
+                className="flex-1 h-12"
               >
-                {captchaSubmitting || actionLoading ? "Enviando..." : "✅ Enviar"}
+                {captchaSubmitting ? "Enviando..." : "✅ Enviar"}
               </Button>
               <Button
                 variant="outline"
                 onClick={handleCaptchaCancel}
-                disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
-                className="flex-1 bg-transparent h-14 sm:h-12 text-base sm:text-sm"
+                disabled={captchaSubmitting}
+                className="flex-1 h-12"
               >
                 Cancelar
               </Button>
             </div>
-
-            <p className="mt-4 text-center text-sm sm:text-xs text-muted-foreground">
-              {captchaSubmitting ? "⏳ Procesando... NO hagas click nuevamente" : "Presiona Enviar UNA SOLA VEZ"}
-            </p>
           </div>
         </div>
       )}
 
       {showNotificationSettings && (
         <NotificationSettings
-          browserName={liveData.browserName || (liveData as BrowserData & { name?: string }).name || ""}
+          postId={postId}
           onClose={() => setShowNotificationSettings(false)}
         />
       )}
