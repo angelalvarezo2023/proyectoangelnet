@@ -24,7 +24,6 @@ function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   
-  // ✅ Leer vista de la URL
   const currentView = (searchParams.get("view") as View) || "home";
   
   const [showAdminLogin, setShowAdminLogin] = useState(false);
@@ -38,7 +37,6 @@ function HomeContent() {
       }
     }
     
-    // ✅ Cambiar URL (sin recargar página)
     if (newView === "home") {
       router.push("/");
     } else {
@@ -53,6 +51,19 @@ function HomeContent() {
     router.push("/?view=admin");
   };
 
+  // 🎯 SI ESTÁ EN ADMIN, RENDERIZAR SOLO EL PANEL (PANTALLA COMPLETA)
+  if (currentView === "admin") {
+    return (
+      <ProtectedRoute requireAdmin={true}>
+        <UnifiedAdmin 
+          isOpen={true}
+          onClose={() => router.push("/")}
+        />
+      </ProtectedRoute>
+    );
+  }
+
+  // RESTO DE VISTAS (con Navigation y main container normal)
   return (
     <div className="min-h-screen bg-background">
       <Navigation 
@@ -64,7 +75,7 @@ function HomeContent() {
       />
 
       <main className="mx-auto max-w-7xl px-4 py-8">
-        {/* Home View - PÚBLICO (sin login) */}
+        {/* Home View */}
         {currentView === "home" && (
           <div className="space-y-12">
             {/* Hero Section */}
@@ -154,7 +165,7 @@ function HomeContent() {
           </div>
         )}
 
-        {/* Anuncios View - PÚBLICO (búsqueda de anuncios) */}
+        {/* Anuncios View */}
         {currentView === "anuncios" && (
           <div className="space-y-6">
             <div className="text-center py-12">
@@ -167,33 +178,22 @@ function HomeContent() {
               </p>
             </div>
 
-            {/* Control Panel para búsqueda pública */}
             <ControlPanel initialBrowserData={null} initialError="" />
           </div>
         )}
 
-        {/* Chat View - PÚBLICO (sin login) */}
+        {/* Chat View */}
         {currentView === "chat" && (
           <div className="w-full">
             <ChatGrupal />
           </div>
-        )}
-
-        {/* Admin View - PROTEGIDO (requiere login) */}
-        {currentView === "admin" && (
-          <ProtectedRoute requireAdmin={true}>
-            <UnifiedAdmin 
-              isOpen={true}
-              onClose={() => router.push("/")}
-            />
-          </ProtectedRoute>
         )}
       </main>
 
       {/* Chatbot */}
       <Chatbot />
 
-      {/* ProxyPanel Modal - PÚBLICO (sin login) */}
+      {/* ProxyPanel Modal */}
       <ProxyPanel 
         isOpen={showProxyPanel} 
         onClose={() => setShowProxyPanel(false)} 
@@ -208,11 +208,10 @@ function HomeContent() {
         </div>
       </footer>
 
-      {/* Modal de Login - Aparece cuando haces click en Admin sin estar logueado */}
+      {/* Modal de Login */}
       {showAdminLogin && !user && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="relative w-full max-w-md">
-            {/* Botón cerrar */}
             <button
               onClick={() => setShowAdminLogin(false)}
               className="absolute -top-4 -right-4 z-10 rounded-full bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors shadow-lg"
@@ -222,7 +221,6 @@ function HomeContent() {
               </svg>
             </button>
             
-            {/* Formulario de Login */}
             <div className="bg-card rounded-2xl shadow-2xl border border-border p-8">
               <div className="text-center mb-6">
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
