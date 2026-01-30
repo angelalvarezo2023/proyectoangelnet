@@ -6,11 +6,12 @@ import {
   set,
   update,
   onValue,
+  push,
   type Database,
 } from "firebase/database";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // ← 📌 LÍNEA 1 NUEVA
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: "AIzaSyABwJCZpBeCXu0-X16HpKnHoJXL4tVjTAY",
@@ -23,11 +24,9 @@ const firebaseConfig = {
   measurementId: "G-EMFS14MSGS"
 };
 
-// Initialize Firebase only if it hasn't been initialized already
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const database: Database = getDatabase(app);
 
-// 🔥 EXPORTAR AUTH, FIRESTORE Y STORAGE
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
@@ -45,7 +44,6 @@ export interface RepublishStatus {
   nextRepublishAt: string;
 }
 
-// 🆕 Interfaces para notificaciones
 export interface NotificationConfig {
   email: {
     active: boolean;
@@ -82,13 +80,9 @@ export interface BrowserData {
   notificationConfig?: NotificationConfig;
   lastScreenshot?: string;
   postName?: string;
-  
-  // 🆕 NUEVOS CAMPOS PARA VER ANUNCIO EN VIVO
   postId?: string;
   postUrl?: string;
   postIdCapturedAt?: number;
-  
-  // CAMPOS PARA MONITOREO EN TIEMPO REAL
   connectionStatus?: "online" | "offline" | "error";
   lastHeartbeat?: string;
   lastError?: {
@@ -100,6 +94,32 @@ export interface BrowserData {
   consecutiveErrors?: number;
   currentUrl?: string;
   pageTitle?: string;
+  
+  // 🆕 CAMPOS PARA ESTADÍSTICAS
+  createdAt?: string; // Fecha de creación del cliente
+  isBanned?: boolean; // Si está baneado
+  bannedAt?: string; // Cuándo fue baneado
+}
+
+// 🆕 INTERFACES PARA ESTADÍSTICAS
+export interface WeeklyStats {
+  weekId: string; // Formato: "2026-W05"
+  startDate: string; // ISO date
+  endDate: string; // ISO date
+  bannedAccounts: string[]; // Lista de browserNames baneados
+  renewals: number; // Cantidad de renovaciones (7 días)
+  newClients: string[]; // Lista de browserNames creados esta semana
+  totalClients: number; // Total de clientes activos al final de la semana
+  totalRevenue?: number; // Ingresos (opcional)
+}
+
+export interface StatsEvent {
+  type: "ban" | "renewal" | "newClient";
+  browserName: string;
+  clientName?: string;
+  timestamp: string;
+  weekId: string;
+  details?: any;
 }
 
 export const FirebaseAPI = {
@@ -139,14 +159,18 @@ export const FirebaseAPI = {
         },
         lastUpdate: now.toISOString(),
         manuallyCreated: true,
-        
-        // Inicializar campos de monitoreo
         connectionStatus: "offline",
         lastHeartbeat: now.toISOString(),
         consecutiveErrors: 0,
+        createdAt: now.toISOString(), // 🆕 Registrar fecha de creación
+        isBanned: false,
       };
 
       await set(ref(database, `browsers/${browserName}`), userData);
+      
+      // 🆕 REGISTRAR EVENTO DE NUEVO CLIENTE
+      await StatsAPI.registerNewClient(browserName);
+      
       return { success: true, uniqueId };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -208,7 +232,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 NUEVA FUNCIÓN - Buscar TODOS los navegadores de un cliente
   async findAllBrowsersByClientName(clientName: string): Promise<BrowserData[]> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -219,11 +242,9 @@ export const FirebaseAPI = {
       const cleanSearch = clientName.trim().toLowerCase();
       const results: BrowserData[] = [];
 
-      // Buscar todas las coincidencias (exactas y parciales)
       for (const [, data] of Object.entries(browsers)) {
         const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
         
-        // Coincidencia exacta o parcial
         if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
           results.push(data as BrowserData);
         }
@@ -235,7 +256,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // Mantener función original para compatibilidad (retorna solo el primero)
   async findBrowserByClientName(clientName: string): Promise<BrowserData | null> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -245,7 +265,6 @@ export const FirebaseAPI = {
 
       const cleanSearch = clientName.trim().toLowerCase();
 
-      // Buscar coincidencia exacta primero
       for (const [, data] of Object.entries(browsers)) {
         const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
         if (browserClientName === cleanSearch) {
@@ -253,7 +272,6 @@ export const FirebaseAPI = {
         }
       }
 
-      // Si no hay coincidencia exacta, buscar parcial
       for (const [, data] of Object.entries(browsers)) {
         const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
         if (browserClientName.includes(cleanSearch)) {
@@ -312,7 +330,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 NUEVA FUNCIÓN - Actualizar isPaused directamente (SIN LAG)
   async togglePause(browserName: string, newState: boolean) {
     try {
       await update(ref(database, `browsers/${browserName}`), {
@@ -325,13 +342,11 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 NUEVA FUNCIÓN - Forzar republicación directamente (SIN LAG)
   async forceRepublish(browserName: string) {
     try {
-      const totalSeconds = 900 + Math.floor(Math.random() * 181); // 900-1080 segundos
+      const totalSeconds = 900 + Math.floor(Math.random() * 181);
       const now = new Date();
       
-      // Actualizar directamente el estado de republicación
       await update(ref(database, `browsers/${browserName}`), {
         republishStatus: {
           totalSeconds: totalSeconds,
@@ -342,7 +357,6 @@ export const FirebaseAPI = {
         lastUpdate: now.toISOString(),
       });
 
-      // También enviar comando para que la extensión lo ejecute
       const commandId = Date.now().toString();
       await set(ref(database, `commands/${browserName}/${commandId}`), {
         type: "republish",
@@ -355,7 +369,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 NUEVA FUNCIÓN - Actualizar un campo específico directamente
   async updateBrowserField(browserName: string, field: string, value: any) {
     try {
       await update(ref(database, `browsers/${browserName}`), {
@@ -377,16 +390,10 @@ export const FirebaseAPI = {
     return unsubscribe;
   },
 
-  // 🆕 NUEVA FUNCIÓN - Eliminar navegador completamente
   async deleteBrowser(browserName: string) {
     try {
-      // Eliminar de /browsers
       await set(ref(database, `browsers/${browserName}`), null);
-      
-      // Eliminar comandos pendientes
       await set(ref(database, `commands/${browserName}`), null);
-      
-      // Eliminar notificaciones si existen
       await set(ref(database, `notifications/${browserName}`), null);
       await set(ref(database, `lastNotified/${browserName}`), null);
       
@@ -396,7 +403,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 FUNCIÓN - Obtener configuración de notificaciones
   async getNotificationConfig(browserName: string): Promise<NotificationConfig | null> {
     try {
       const notifRef = ref(database, `notifications/${browserName}`);
@@ -406,7 +412,6 @@ export const FirebaseAPI = {
         return snapshot.val() as NotificationConfig;
       }
       
-      // Si no existe, retornar config por defecto
       return {
         email: {
           active: false,
@@ -427,7 +432,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 FUNCIÓN - Guardar configuración de notificaciones
   async saveNotificationConfig(
     browserName: string,
     config: NotificationConfig
@@ -440,7 +444,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 FUNCIÓN - Enviar email de prueba
   async sendTestEmail(browserName: string, email: string) {
     try {
       const response = await fetch("/api/send-notification", {
@@ -462,6 +465,239 @@ export const FirebaseAPI = {
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
+  },
+};
+
+// 🆕 API DE ESTADÍSTICAS
+export const StatsAPI = {
+  // Obtener ID de la semana actual (formato: "2026-W05")
+  getCurrentWeekId(): string {
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
+    const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+    return `${now.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
+  },
+
+  // Obtener rango de fechas de una semana
+  getWeekRange(weekId: string): { start: Date; end: Date } {
+    const [year, week] = weekId.split('-W');
+    const firstDayOfYear = new Date(parseInt(year), 0, 1);
+    const daysToFirstMonday = (8 - firstDayOfYear.getDay()) % 7;
+    const firstMonday = new Date(firstDayOfYear);
+    firstMonday.setDate(firstDayOfYear.getDate() + daysToFirstMonday);
+    
+    const start = new Date(firstMonday);
+    start.setDate(firstMonday.getDate() + (parseInt(week) - 1) * 7);
+    
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    
+    return { start, end };
+  },
+
+  // 🆕 Registrar cuenta baneada
+  async registerBan(browserName: string) {
+    try {
+      const weekId = this.getCurrentWeekId();
+      const now = new Date().toISOString();
+      
+      // Actualizar estado del browser
+      await update(ref(database, `browsers/${browserName}`), {
+        isBanned: true,
+        bannedAt: now,
+      });
+      
+      // Registrar evento
+      const eventRef = push(ref(database, `stats/events/${weekId}`));
+      await set(eventRef, {
+        type: "ban",
+        browserName,
+        timestamp: now,
+        weekId,
+      });
+      
+      // Actualizar estadísticas de la semana
+      const statsRef = ref(database, `stats/weeks/${weekId}`);
+      const snapshot = await get(statsRef);
+      const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
+      
+      if (!currentStats.bannedAccounts.includes(browserName)) {
+        currentStats.bannedAccounts.push(browserName);
+      }
+      
+      await set(statsRef, currentStats);
+      
+      console.log(`[Stats]: Ban registrado para ${browserName} en ${weekId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Registrar renovación (cuando agregues/establezcas 7 días)
+  async registerRenewal(browserName: string, days: number) {
+    try {
+      // Solo contar si se agregan/establecen 7 días o más
+      if (days < 7) return { success: true };
+      
+      const weekId = this.getCurrentWeekId();
+      const now = new Date().toISOString();
+      
+      // Registrar evento
+      const eventRef = push(ref(database, `stats/events/${weekId}`));
+      await set(eventRef, {
+        type: "renewal",
+        browserName,
+        days,
+        timestamp: now,
+        weekId,
+      });
+      
+      // Actualizar estadísticas de la semana
+      const statsRef = ref(database, `stats/weeks/${weekId}`);
+      const snapshot = await get(statsRef);
+      const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
+      
+      currentStats.renewals += 1;
+      
+      await set(statsRef, currentStats);
+      
+      console.log(`[Stats]: Renovación registrada para ${browserName} en ${weekId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Registrar nuevo cliente
+  async registerNewClient(browserName: string) {
+    try {
+      const weekId = this.getCurrentWeekId();
+      const now = new Date().toISOString();
+      
+      // Registrar evento
+      const eventRef = push(ref(database, `stats/events/${weekId}`));
+      await set(eventRef, {
+        type: "newClient",
+        browserName,
+        timestamp: now,
+        weekId,
+      });
+      
+      // Actualizar estadísticas de la semana
+      const statsRef = ref(database, `stats/weeks/${weekId}`);
+      const snapshot = await get(statsRef);
+      const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
+      
+      if (!currentStats.newClients.includes(browserName)) {
+        currentStats.newClients.push(browserName);
+      }
+      
+      // Actualizar total de clientes
+      const allBrowsers = await FirebaseAPI.getAllBrowsers();
+      currentStats.totalClients = Object.keys(allBrowsers).length;
+      
+      await set(statsRef, currentStats);
+      
+      console.log(`[Stats]: Nuevo cliente registrado: ${browserName} en ${weekId}`);
+      return { success: true };
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // Crear estadísticas vacías para una semana
+  createEmptyWeekStats(weekId: string): WeeklyStats {
+    const { start, end } = this.getWeekRange(weekId);
+    return {
+      weekId,
+      startDate: start.toISOString(),
+      endDate: end.toISOString(),
+      bannedAccounts: [],
+      renewals: 0,
+      newClients: [],
+      totalClients: 0,
+    };
+  },
+
+  // 🆕 Obtener estadísticas de la semana actual
+  async getCurrentWeekStats(): Promise<WeeklyStats> {
+    try {
+      const weekId = this.getCurrentWeekId();
+      const statsRef = ref(database, `stats/weeks/${weekId}`);
+      const snapshot = await get(statsRef);
+      
+      if (snapshot.exists()) {
+        return snapshot.val() as WeeklyStats;
+      }
+      
+      return this.createEmptyWeekStats(weekId);
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return this.createEmptyWeekStats(this.getCurrentWeekId());
+    }
+  },
+
+  // 🆕 Obtener historial de semanas (últimas N semanas)
+  async getWeeksHistory(count: number = 12): Promise<WeeklyStats[]> {
+    try {
+      const statsRef = ref(database, `stats/weeks`);
+      const snapshot = await get(statsRef);
+      
+      if (!snapshot.exists()) return [];
+      
+      const weeksData = snapshot.val();
+      const weeks: WeeklyStats[] = Object.values(weeksData);
+      
+      // Ordenar por fecha (más reciente primero)
+      weeks.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+      
+      return weeks.slice(0, count);
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return [];
+    }
+  },
+
+  // 🆕 Obtener eventos de una semana específica
+  async getWeekEvents(weekId: string): Promise<StatsEvent[]> {
+    try {
+      const eventsRef = ref(database, `stats/events/${weekId}`);
+      const snapshot = await get(eventsRef);
+      
+      if (!snapshot.exists()) return [];
+      
+      const eventsData = snapshot.val();
+      const events: StatsEvent[] = Object.values(eventsData);
+      
+      // Ordenar por timestamp (más reciente primero)
+      events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      
+      return events;
+    } catch (error) {
+      console.error("[Stats Error]:", error);
+      return [];
+    }
+  },
+
+  // 🆕 Escuchar cambios en estadísticas de la semana actual
+  listenToCurrentWeekStats(callback: (stats: WeeklyStats) => void) {
+    const weekId = this.getCurrentWeekId();
+    const statsRef = ref(database, `stats/weeks/${weekId}`);
+    const unsubscribe = onValue(statsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        callback(data as WeeklyStats);
+      } else {
+        callback(this.createEmptyWeekStats(weekId));
+      }
+    });
+    return unsubscribe;
   },
 };
 
