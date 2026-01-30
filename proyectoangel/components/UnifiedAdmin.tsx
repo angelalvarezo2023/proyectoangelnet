@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ProxyPanel } from "@/components/proxy-panel";
 import { AdminPanel } from "@/components/admin-panel";
+import { StatsPanel } from "@/components/StatsPanel";
 import { cn } from "@/lib/utils";
 
-type AdminSection = "anuncios" | "proxies" | "megabot";
+type AdminSection = "anuncios" | "estadisticas" | "proxies" | "megabot";
 
 interface UnifiedAdminProps {
   isOpen: boolean;
@@ -29,6 +30,12 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
       color: "from-blue-500 to-cyan-500",
     },
     {
+      id: "estadisticas" as AdminSection,
+      label: "📊 Estadísticas",
+      description: "Métricas y rendimiento semanal",
+      color: "from-purple-500 to-pink-500",
+    },
+    {
       id: "proxies" as AdminSection,
       label: "🌐 Proxies",
       description: "Verificación y gestión de proxies",
@@ -42,8 +49,8 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
     },
   ];
 
-  // 🎯 SI ESTÁ EN "ANUNCIOS", RENDERIZAR ADMINPANEL EN PANTALLA COMPLETA (SIN MODAL)
-  if (activeSection === "anuncios") {
+  // 🎯 SI ESTÁ EN "ANUNCIOS" O "ESTADISTICAS", RENDERIZAR EN PANTALLA COMPLETA
+  if (activeSection === "anuncios" || activeSection === "estadisticas") {
     return (
       <>
         {/* Header fijo con navegación */}
@@ -87,12 +94,18 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
           </div>
         </div>
 
-        {/* AdminPanel con padding-top para el header */}
-        <div className="pt-[136px]">
-          <AdminPanel 
-            isAuthenticated={true}
-            onLogin={() => {}}
-          />
+        {/* Contenido con padding-top para el header */}
+        <div className="pt-[136px] min-h-screen bg-background">
+          {activeSection === "anuncios" && (
+            <AdminPanel 
+              isAuthenticated={true}
+              onLogin={() => {}}
+            />
+          )}
+          
+          {activeSection === "estadisticas" && (
+            <StatsPanel />
+          )}
         </div>
       </>
     );
