@@ -126,6 +126,7 @@ function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
 }
 
 export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }: AdminPanelProps) {
+  const [mounted, setMounted] = useState(false);
   const [browsers, setBrowsers] = useState<Record<string, BrowserData>>({});
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -133,6 +134,10 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newUser, setNewUser] = useState({ name: "", days: "", hours: "" });
   const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   
   const [showRentalModal, setShowRentalModal] = useState(false);
   const [rentalBrowser, setRentalBrowser] = useState<BrowserData | null>(null);
@@ -143,6 +148,10 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteBrowser, setDeleteBrowser] = useState<BrowserData | null>(null);
   const [deleting, setDeleting] = useState(false);
+  
+  // 🆕 Estados para pausa masiva
+  const [pausingAll, setPausingAll] = useState(false);
+  const [allPaused, setAllPaused] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -326,9 +335,60 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     }
   };
 
+  // 🆕 CALCULAR SI TODOS ESTÁN PAUSADOS
+  useEffect(() => {
+    const totalActive = browserList.filter(b => 
+      getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    const totalPaused = browserList.filter(b => 
+      b.isPaused && getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    // Si todos los activos están pausados
+    setAllPaused(totalActive > 0 && totalActive === totalPaused);
+  }, [browsers]);
+
+  // 🆕 FUNCIÓN PAUSAR/REANUDAR TODAS
+  const handlePauseAll = async () => {
+    const activeBrowsers = browserList.filter(b => 
+      getConnectionStatus(b).status !== "offline"
+    );
+    
+    if (activeBrowsers.length === 0) {
+      alert("No hay navegadores activos para pausar/reanudar");
+      return;
+    }
+
+    const confirmMessage = allPaused
+      ? `¿Reanudar ${activeBrowsers.length} navegadores?`
+      : `¿Pausar ${activeBrowsers.length} navegadores?`;
+    
+    if (!confirm(confirmMessage)) return;
+
+    setPausingAll(true);
+
+    try {
+      const newState = !allPaused;
+      
+      // Pausar/Reanudar todos los navegadores activos
+      const promises = activeBrowsers.map(browser =>
+        FirebaseAPI.togglePause(browser.browserName, newState)
+      );
+      
+      await Promise.all(promises);
+      
+      alert(`${activeBrowsers.length} navegadores ${newState ? "pausados" : "reanudados"} correctamente`);
+    } catch (error) {
+      alert("Error al cambiar el estado de los navegadores");
+    } finally {
+      setPausingAll(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-background">
+      <div className="fixed inset-0 flex items-center justify-center bg-background z-[100]">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8">
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
@@ -397,7 +457,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   };
 
   return (
-    <div className="fixed inset-0 overflow-auto bg-background p-4">
+    <div className="fixed inset-0 overflow-auto bg-background p-4 z-[100]">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
@@ -462,17 +522,32 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
 
         <div className="rounded-2xl border border-border bg-card">
           <div className="border-b border-border p-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
-                <UsersIcon className="h-5 w-5 text-primary" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <UsersIcon className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">Monitoreo en Tiempo Real</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {stats.total} usuarios • {stats.online} activos • {stats.offline} desconectados • {stats.error} con errores
+                    {stats.debt > 0 && <span className="text-red-500 font-bold"> • {stats.debt} CON DEUDA 💀</span>}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-foreground">Monitoreo en Tiempo Real</h3>
-                <p className="text-sm text-muted-foreground">
-                  {stats.total} usuarios • {stats.online} activos • {stats.offline} desconectados • {stats.error} con errores
-                  {stats.debt > 0 && <span className="text-red-500 font-bold"> • {stats.debt} CON DEUDA 💀</span>}
-                </p>
-              </div>
+              <Button
+                onClick={handlePauseAll}
+                disabled={pausingAll}
+                className={cn(
+                  "min-w-[140px]",
+                  allPaused 
+                    ? "bg-accent/10 text-accent hover:bg-accent/20" 
+                    : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20"
+                )}
+              >
+                <ClockIcon className="mr-2 h-4 w-4" />
+                {pausingAll ? "Procesando..." : allPaused ? "▶️ Reanudar Todas" : "⏸️ Pausar Todas"}
+              </Button>
             </div>
           </div>
 
