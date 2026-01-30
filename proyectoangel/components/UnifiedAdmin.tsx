@@ -42,6 +42,63 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
     },
   ];
 
+  // 🎯 SI ESTÁ EN "ANUNCIOS", RENDERIZAR ADMINPANEL EN PANTALLA COMPLETA (SIN MODAL)
+  if (activeSection === "anuncios") {
+    return (
+      <>
+        {/* Header fijo con navegación */}
+        <div className="fixed top-0 left-0 right-0 z-[60] border-b border-border bg-card">
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              <button
+                onClick={onClose}
+                className="rounded-full p-2 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors"
+                title="Volver"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-foreground">🛡️ Panel de Administración</h2>
+                <p className="text-sm text-muted-foreground">Bienvenido, {userData?.name}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Navigation Tabs */}
+          <div className="border-t border-border bg-secondary/30 px-4">
+            <nav className="flex gap-2">
+              {sections.map((section) => (
+                <button
+                  key={section.id}
+                  onClick={() => setActiveSection(section.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-all",
+                    activeSection === section.id
+                      ? "border-primary text-foreground bg-background/50"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  )}
+                >
+                  <span>{section.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+        </div>
+
+        {/* AdminPanel con padding-top para el header */}
+        <div className="pt-[136px]">
+          <AdminPanel 
+            isAuthenticated={true}
+            onLogin={() => {}}
+          />
+        </div>
+      </>
+    );
+  }
+
+  // PARA PROXIES Y MEGABOT, USAR EL MODAL NORMAL
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -94,17 +151,6 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
 
           {/* Content */}
           <div className="p-6">
-            {/* Anuncios Section - MUESTRA LA TABLA COMPLETA DE ADMINISTRACIÓN */}
-            {activeSection === "anuncios" && (
-              <div className="space-y-6">
-                {/* 🆕 USAR EL ADMIN PANEL COMPLETO CON LA TABLA */}
-                <AdminPanel 
-                  isAuthenticated={true}
-                  onLogin={() => {}}
-                />
-              </div>
-            )}
-
             {/* Proxies Section */}
             {activeSection === "proxies" && (
               <div className="space-y-6">
