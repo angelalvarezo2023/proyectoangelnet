@@ -457,7 +457,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   };
 
   return (
-    <div className="fixed inset-0 overflow-auto bg-background p-4 z-[100]">
+    <div className="w-full overflow-auto bg-background p-4">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="rounded-2xl border border-border bg-card p-6">
           <div className="mb-4 flex items-center justify-between">
