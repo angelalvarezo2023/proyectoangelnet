@@ -7,6 +7,7 @@ import {
   update,
   onValue,
   push,
+  remove,
   type Database,
 } from "firebase/database";
 import { getAuth } from "firebase/auth";
@@ -59,6 +60,39 @@ export interface NotificationConfig {
   };
 }
 
+// 🆕 INTERFACE PARA POSTS INDEPENDIENTES (DUAL MODE)
+export interface PostData {
+  postId: string; // Ej: "Angel_17_Post1"
+  browserName: string;
+  postSlot: 1 | 2; // Indica si es Post 1 o Post 2
+  
+  // Datos del cliente/post
+  clientName: string;
+  postName: string;
+  age: string;
+  headline: string;
+  body: string;
+  city: string;
+  location: string;
+  phoneNumber: string;
+  
+  // ID del post en Megapersonals
+  megaPostId?: string;
+  megaPostUrl?: string;
+  postIdCapturedAt?: number;
+  
+  // Estadísticas individuales
+  stats?: {
+    totalRepublishes: number;
+    lastRepublishAt: string;
+    successRate?: number;
+  };
+  
+  // Estado
+  isActive: boolean;
+  lastUpdate: string;
+}
+
 export interface BrowserData {
   browserName: string;
   clientName?: string;
@@ -95,22 +129,27 @@ export interface BrowserData {
   currentUrl?: string;
   pageTitle?: string;
   
-  // 🆕 CAMPOS PARA ESTADÍSTICAS
-  createdAt?: string; // Fecha de creación del cliente
-  isBanned?: boolean; // Si está baneado
-  bannedAt?: string; // Cuándo fue baneado
+  // Campos para estadísticas
+  createdAt?: string;
+  isBanned?: boolean;
+  bannedAt?: string;
+  
+  // 🆕 CAMPOS PARA DUAL POST
+  mode?: "single" | "double"; // Modo del navegador
+  currentPost?: 1 | 2; // Indica qué post republicará ahora
+  post1Id?: string; // Referencia a "Angel_17_Post1"
+  post2Id?: string; // Referencia a "Angel_17_Post2"
 }
 
-// 🆕 INTERFACES PARA ESTADÍSTICAS
 export interface WeeklyStats {
-  weekId: string; // Formato: "2026-W05"
-  startDate: string; // ISO date
-  endDate: string; // ISO date
-  bannedAccounts: string[]; // Lista de browserNames baneados
-  renewals: number; // Cantidad de renovaciones (7 días)
-  newClients: string[]; // Lista de browserNames creados esta semana
-  totalClients: number; // Total de clientes activos al final de la semana
-  totalRevenue?: number; // Ingresos (opcional)
+  weekId: string;
+  startDate: string;
+  endDate: string;
+  bannedAccounts: string[];
+  renewals: number;
+  newClients: string[];
+  totalClients: number;
+  totalRevenue?: number;
 }
 
 export interface StatsEvent {
@@ -120,6 +159,23 @@ export interface StatsEvent {
   timestamp: string;
   weekId: string;
   details?: any;
+}
+
+// 🆕 RESULTADO DE BÚSQUEDA
+export interface SearchResult {
+  type: "single" | "dual";
+  browserName: string;
+  clientName: string;
+  postName?: string;
+  phoneNumber?: string;
+  city?: string;
+  
+  // Si es dual, incluir info del post
+  postId?: string;
+  postSlot?: 1 | 2;
+  
+  // Data completa
+  data: BrowserData | PostData;
 }
 
 export const FirebaseAPI = {
@@ -162,13 +218,13 @@ export const FirebaseAPI = {
         connectionStatus: "offline",
         lastHeartbeat: now.toISOString(),
         consecutiveErrors: 0,
-        createdAt: now.toISOString(), // 🆕 Registrar fecha de creación
+        createdAt: now.toISOString(),
         isBanned: false,
+        mode: "single", // 🆕 Por defecto en modo single
+        currentPost: 1,
       };
 
       await set(ref(database, `browsers/${browserName}`), userData);
-      
-      // 🆕 REGISTRAR EVENTO DE NUEVO CLIENTE
       await StatsAPI.registerNewClient(browserName);
       
       return { success: true, uniqueId };
@@ -229,6 +285,136 @@ export const FirebaseAPI = {
       return snapshot.val();
     } catch {
       return null;
+    }
+  },
+
+  // 🆕 OBTENER TODOS LOS POSTS
+  async getAllPosts(): Promise<Record<string, PostData>> {
+    try {
+      const snapshot = await get(ref(database, "posts"));
+      return snapshot.val() || {};
+    } catch {
+      return {};
+    }
+  },
+
+  // 🆕 OBTENER POST POR ID
+  async getPostById(postId: string): Promise<PostData | null> {
+    try {
+      const snapshot = await get(ref(database, `posts/${postId}`));
+      return snapshot.val();
+    } catch {
+      return null;
+    }
+  },
+
+  // 🆕 OBTENER POSTS DE UN NAVEGADOR
+  async getBrowserPosts(browserName: string): Promise<{ post1: PostData | null; post2: PostData | null }> {
+    try {
+      const browser = await this.findBrowserByName(browserName);
+      if (!browser || browser.mode !== "double") {
+        return { post1: null, post2: null };
+      }
+
+      const [post1, post2] = await Promise.all([
+        browser.post1Id ? this.getPostById(browser.post1Id) : null,
+        browser.post2Id ? this.getPostById(browser.post2Id) : null,
+      ]);
+
+      return { post1, post2 };
+    } catch {
+      return { post1: null, post2: null };
+    }
+  },
+
+  // 🆕 ESCUCHAR POSTS DE UN NAVEGADOR
+  listenToBrowserPosts(
+    browserName: string,
+    callback: (posts: { post1: PostData | null; post2: PostData | null }) => void
+  ) {
+    const browserRef = ref(database, `browsers/${browserName}`);
+    
+    const unsubscribe = onValue(browserRef, async (snapshot) => {
+      const browser = snapshot.val() as BrowserData;
+      
+      if (!browser || browser.mode !== "double") {
+        callback({ post1: null, post2: null });
+        return;
+      }
+
+      const posts = await this.getBrowserPosts(browserName);
+      callback(posts);
+    });
+
+    return unsubscribe;
+  },
+
+  // 🆕 BÚSQUEDA UNIFICADA (INCLUYE POSTS)
+  async searchClients(query: string): Promise<SearchResult[]> {
+    if (!query || query.length < 2) return [];
+
+    try {
+      const [browsersSnapshot, postsSnapshot] = await Promise.all([
+        get(ref(database, "browsers")),
+        get(ref(database, "posts")),
+      ]);
+
+      const browsers = browsersSnapshot.val() || {};
+      const posts = postsSnapshot.val() || {};
+      const results: SearchResult[] = [];
+      const queryLower = query.toLowerCase();
+
+      // Buscar en navegadores modo single
+      for (const [, browser] of Object.entries(browsers)) {
+        const b = browser as BrowserData;
+        if (b.mode === "single" || !b.mode) {
+          const matches =
+            b.clientName?.toLowerCase().includes(queryLower) ||
+            b.postName?.toLowerCase().includes(queryLower) ||
+            b.phoneNumber?.includes(query) ||
+            b.browserName.toLowerCase().includes(queryLower);
+
+          if (matches) {
+            results.push({
+              type: "single",
+              browserName: b.browserName,
+              clientName: b.clientName || "Sin asignar",
+              postName: b.postName,
+              phoneNumber: b.phoneNumber,
+              city: b.city,
+              data: b,
+            });
+          }
+        }
+      }
+
+      // Buscar en posts independientes (dual mode)
+      for (const [, post] of Object.entries(posts)) {
+        const p = post as PostData;
+        const matches =
+          p.clientName?.toLowerCase().includes(queryLower) ||
+          p.postName?.toLowerCase().includes(queryLower) ||
+          p.phoneNumber?.includes(query);
+
+        if (matches) {
+          results.push({
+            type: "dual",
+            browserName: p.browserName,
+            clientName: p.clientName,
+            postName: p.postName,
+            phoneNumber: p.phoneNumber,
+            city: p.city,
+            postId: p.postId,
+            postSlot: p.postSlot,
+            data: p,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error("Error en búsqueda:", error);
+      return [];
     }
   },
 
@@ -330,6 +516,68 @@ export const FirebaseAPI = {
     }
   },
 
+  // 🆕 CAMBIAR MODO (SINGLE/DOUBLE)
+  async setMode(browserName: string, mode: "single" | "double") {
+    try {
+      const updates: Partial<BrowserData> = {
+        mode: mode,
+        currentPost: 1,
+        lastUpdate: new Date().toISOString(),
+      };
+
+      // Si se activa modo dual, crear IDs de posts
+      if (mode === "double") {
+        updates.post1Id = `${browserName}_Post1`;
+        updates.post2Id = `${browserName}_Post2`;
+      }
+
+      await update(ref(database, `browsers/${browserName}`), updates);
+
+      // Enviar comando a la extensión
+      await this.sendCommand(browserName, "set_mode", { mode });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 ALTERNAR POST MANUALMENTE
+  async switchPost(browserName: string) {
+    try {
+      await this.sendCommand(browserName, "switch_post");
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 EDITAR POST ESPECÍFICO
+  async editPost(browserName: string, postNumber: 1 | 2, changes: Partial<PostData>) {
+    try {
+      await this.sendCommand(browserName, "edit_post", {
+        postNumber,
+        changes,
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 ACTUALIZAR POST EN FIREBASE
+  async updatePost(postId: string, updates: Partial<PostData>) {
+    try {
+      await update(ref(database, `posts/${postId}`), {
+        ...updates,
+        lastUpdate: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
   async togglePause(browserName: string, newState: boolean) {
     try {
       await update(ref(database, `browsers/${browserName}`), {
@@ -392,6 +640,19 @@ export const FirebaseAPI = {
 
   async deleteBrowser(browserName: string) {
     try {
+      const browser = await this.findBrowserByName(browserName);
+      
+      // Si es modo dual, eliminar posts también
+      if (browser && browser.mode === "double") {
+        if (browser.post1Id) {
+          await remove(ref(database, `posts/${browser.post1Id}`));
+        }
+        if (browser.post2Id) {
+          await remove(ref(database, `posts/${browser.post2Id}`));
+        }
+      }
+      
+      // Eliminar navegador y datos relacionados
       await set(ref(database, `browsers/${browserName}`), null);
       await set(ref(database, `commands/${browserName}`), null);
       await set(ref(database, `notifications/${browserName}`), null);
@@ -468,9 +729,7 @@ export const FirebaseAPI = {
   },
 };
 
-// 🆕 API DE ESTADÍSTICAS
 export const StatsAPI = {
-  // Obtener ID de la semana actual (formato: "2026-W05")
   getCurrentWeekId(): string {
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 1);
@@ -479,7 +738,6 @@ export const StatsAPI = {
     return `${now.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
   },
 
-  // Obtener rango de fechas de una semana
   getWeekRange(weekId: string): { start: Date; end: Date } {
     const [year, week] = weekId.split('-W');
     const firstDayOfYear = new Date(parseInt(year), 0, 1);
@@ -497,19 +755,16 @@ export const StatsAPI = {
     return { start, end };
   },
 
-  // 🆕 Registrar cuenta baneada
   async registerBan(browserName: string) {
     try {
       const weekId = this.getCurrentWeekId();
       const now = new Date().toISOString();
       
-      // Actualizar estado del browser
       await update(ref(database, `browsers/${browserName}`), {
         isBanned: true,
         bannedAt: now,
       });
       
-      // Registrar evento
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "ban",
@@ -518,7 +773,6 @@ export const StatsAPI = {
         weekId,
       });
       
-      // Actualizar estadísticas de la semana
       const statsRef = ref(database, `stats/weeks/${weekId}`);
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
@@ -537,16 +791,13 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Registrar renovación (cuando agregues/establezcas 7 días)
   async registerRenewal(browserName: string, days: number) {
     try {
-      // Solo contar si se agregan/establecen 7 días o más
       if (days < 7) return { success: true };
       
       const weekId = this.getCurrentWeekId();
       const now = new Date().toISOString();
       
-      // Registrar evento
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "renewal",
@@ -556,7 +807,6 @@ export const StatsAPI = {
         weekId,
       });
       
-      // Actualizar estadísticas de la semana
       const statsRef = ref(database, `stats/weeks/${weekId}`);
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
@@ -573,13 +823,11 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Registrar nuevo cliente
   async registerNewClient(browserName: string) {
     try {
       const weekId = this.getCurrentWeekId();
       const now = new Date().toISOString();
       
-      // Registrar evento
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "newClient",
@@ -588,7 +836,6 @@ export const StatsAPI = {
         weekId,
       });
       
-      // Actualizar estadísticas de la semana
       const statsRef = ref(database, `stats/weeks/${weekId}`);
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
@@ -597,7 +844,6 @@ export const StatsAPI = {
         currentStats.newClients.push(browserName);
       }
       
-      // Actualizar total de clientes
       const allBrowsers = await FirebaseAPI.getAllBrowsers();
       currentStats.totalClients = Object.keys(allBrowsers).length;
       
@@ -611,7 +857,6 @@ export const StatsAPI = {
     }
   },
 
-  // Crear estadísticas vacías para una semana
   createEmptyWeekStats(weekId: string): WeeklyStats {
     const { start, end } = this.getWeekRange(weekId);
     return {
@@ -625,7 +870,6 @@ export const StatsAPI = {
     };
   },
 
-  // 🆕 Obtener estadísticas de la semana actual
   async getCurrentWeekStats(): Promise<WeeklyStats> {
     try {
       const weekId = this.getCurrentWeekId();
@@ -643,7 +887,6 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Obtener historial de semanas (últimas N semanas)
   async getWeeksHistory(count: number = 12): Promise<WeeklyStats[]> {
     try {
       const statsRef = ref(database, `stats/weeks`);
@@ -654,7 +897,6 @@ export const StatsAPI = {
       const weeksData = snapshot.val();
       const weeks: WeeklyStats[] = Object.values(weeksData);
       
-      // Ordenar por fecha (más reciente primero)
       weeks.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
       
       return weeks.slice(0, count);
@@ -664,7 +906,6 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Obtener eventos de una semana específica
   async getWeekEvents(weekId: string): Promise<StatsEvent[]> {
     try {
       const eventsRef = ref(database, `stats/events/${weekId}`);
@@ -675,7 +916,6 @@ export const StatsAPI = {
       const eventsData = snapshot.val();
       const events: StatsEvent[] = Object.values(eventsData);
       
-      // Ordenar por timestamp (más reciente primero)
       events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       
       return events;
@@ -685,7 +925,6 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Escuchar cambios en estadísticas de la semana actual
   listenToCurrentWeekStats(callback: (stats: WeeklyStats) => void) {
     const weekId = this.getCurrentWeekId();
     const statsRef = ref(database, `stats/weeks/${weekId}`);
