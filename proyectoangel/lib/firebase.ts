@@ -60,13 +60,15 @@ export interface NotificationConfig {
   };
 }
 
-// 🆕 INTERFACE PARA POST INDIVIDUAL
+// 🆕 POST INDEPENDIENTE - Cada post tiene su propia renta y datos
 export interface PostData {
-  postId: string;
-  browserName: string;
-  postSlot: 1 | 2; // Indica si es Post 1 o Post 2
+  // Identificación
+  postId: string;              // "POST_ABC123"
+  uniqueId: string;             // "ABC123" - para link único
+  browserName: string;          // Navegador asignado
+  postSlot: 1 | 2;             // Slot en el navegador
   
-  // Datos del cliente/post
+  // Datos del cliente
   clientName: string;
   postName: string;
   age?: string;
@@ -76,75 +78,88 @@ export interface PostData {
   location: string;
   phoneNumber: string;
   
-  // Megapersonals info
-  megaPostId?: string;
-  megaPostUrl?: string;
-  postIdCapturedAt?: number;
+  // 🆕 RENTA INDIVIDUAL (cada post tiene su propia renta)
+  rentalExpiration: string;
+  rentalRemaining: RentalRemaining;
   
-  // Estadísticas
-  stats?: {
+  // 🆕 ESTADO INDIVIDUAL (cada post se pausa/activa independientemente)
+  isPaused: boolean;
+  editInProgress?: boolean;
+  editLog?: string;
+  editLogType?: "error" | "success" | "info";
+  
+  // 🆕 DATOS EXTRAÍDOS DE MEGAPERSONALS (se guardan por post)
+  megaPostId?: string;          // ID del post en Megapersonals
+  megaPostUrl?: string;          // URL del post
+  postIdCapturedAt?: number;    // Timestamp de cuándo se capturó
+  
+  // Republicación individual
+  republishStatus: RepublishStatus;
+  
+  // Captcha
+  captchaWaiting?: boolean;
+  captchaImage?: string;
+  
+  // Notificaciones individuales
+  notificationConfig?: NotificationConfig;
+  
+  // Screenshots
+  lastScreenshot?: string;
+  
+  // Estadísticas individuales
+  stats: {
     totalRepublishes: number;
     lastRepublishAt: string;
     successRate?: number;
   };
   
+  // Timestamps
+  createdAt: string;
+  lastUpdate: string;
+  
   // Estado
   isActive: boolean;
-  lastUpdate: string;
+  isBanned?: boolean;
+  bannedAt?: string;
 }
 
+// 🆕 NAVEGADOR SIMPLIFICADO - Solo maneja alternancia
 export interface BrowserData {
   browserName: string;
   
-  // 🆕 MODO (single o double)
-  mode?: "single" | "double";
-  currentPost?: 1 | 2; // En modo double, indica cuál post publicará ahora
+  // Modo de operación
+  mode: "single" | "double";
+  currentPost: 1 | 2;           // Qué post republicará ahora
   
-  // 🆕 REFERENCIAS A POSTS (modo double)
-  post1Id?: string; // "BrowserName_Post1"
-  post2Id?: string; // "BrowserName_Post2"
+  // Referencias a posts
+  post1Id?: string;              // "POST_ABC123"
+  post2Id?: string;              // "POST_XYZ789"
   
-  // DATOS LEGACY (modo single) - mantener compatibilidad
-  clientName?: string;
-  phoneNumber?: string;
-  city?: string;
-  location?: string;
-  postName?: string;
-  postId?: string;
-  postUrl?: string;
-  postIdCapturedAt?: number;
-  
-  // Datos comunes (ambos modos)
-  uniqueId?: string;
-  isPaused: boolean;
-  rentalExpiration: string;
-  rentalRemaining: RentalRemaining;
-  republishStatus: RepublishStatus;
-  lastUpdate: string;
-  manuallyCreated?: boolean;
-  editInProgress?: boolean;
-  editLog?: string;
-  editLogType?: "error" | "success" | "info";
-  captchaWaiting?: boolean;
-  captchaImage?: string;
-  notificationConfig?: NotificationConfig;
-  lastScreenshot?: string;
-  connectionStatus?: "online" | "offline" | "error";
-  lastHeartbeat?: string;
+  // Estado de conexión
+  lastHeartbeat: string;
+  connectionStatus: "online" | "offline" | "error";
+  consecutiveErrors: number;
   lastError?: {
     context: string;
     message: string;
     timestamp: string;
     stack?: string;
   };
-  consecutiveErrors?: number;
+  
+  // Info de navegación
   currentUrl?: string;
   pageTitle?: string;
   
-  // Estadísticas
-  createdAt?: string;
-  isBanned?: boolean;
-  bannedAt?: string;
+  // Timestamps
+  createdAt: string;
+  lastUpdate: string;
+  
+  // ⚠️ YA NO TIENE:
+  // - rentalExpiration (ahora en cada post)
+  // - rentalRemaining (ahora en cada post)
+  // - clientName (ahora en cada post)
+  // - phoneNumber (ahora en cada post)
+  // - isPaused (ahora en cada post)
 }
 
 export interface WeeklyStats {
@@ -178,70 +193,150 @@ export const FirebaseAPI = {
     };
   },
 
-  async createManualUser(browserName: string, days: number, hours: number) {
+  // 🆕 GENERAR ID ÚNICO PARA POST
+  generatePostId(): string {
+    return "POST_" + Math.random().toString(36).substring(2, 10).toUpperCase();
+  },
+
+  generateUniqueId(): string {
+    return Math.random().toString(36).substring(2, 10).toUpperCase();
+  },
+
+  // 🆕 CREAR POST INDIVIDUAL CON RENTA
+  async createPost(
+    browserName: string,
+    clientName: string,
+    days: number,
+    hours: number,
+    postSlot: 1 | 2 = 1
+  ) {
     try {
       const now = new Date();
       const expirationDate = new Date(now);
       expirationDate.setDate(expirationDate.getDate() + days);
       expirationDate.setHours(expirationDate.getHours() + hours);
 
-      const uniqueId = Math.random().toString(36).substring(2, 10).toUpperCase();
+      const postId = this.generatePostId();
+      const uniqueId = this.generateUniqueId();
 
-      const userData: BrowserData = {
-        browserName: browserName,
+      const postData: PostData = {
+        postId: postId,
         uniqueId: uniqueId,
-        mode: "single", // 🆕 Por defecto modo single
-        phoneNumber: "Manual",
-        city: "Manual",
-        location: "Manual",
-        isPaused: false,
+        browserName: browserName,
+        postSlot: postSlot,
+        
+        clientName: clientName,
+        postName: `Post de ${clientName}`,
+        city: "",
+        location: "",
+        phoneNumber: "",
+        
         rentalExpiration: expirationDate.toISOString(),
         rentalRemaining: this.calculateRentalRemaining(expirationDate.toISOString()),
+        
+        isPaused: false,
+        
         republishStatus: {
           totalSeconds: 900,
           elapsedSeconds: 0,
           remainingSeconds: 900,
           nextRepublishAt: new Date(now.getTime() + 900000).toISOString(),
         },
-        lastUpdate: now.toISOString(),
-        manuallyCreated: true,
-        connectionStatus: "offline",
-        lastHeartbeat: now.toISOString(),
-        consecutiveErrors: 0,
+        
+        stats: {
+          totalRepublishes: 0,
+          lastRepublishAt: now.toISOString(),
+        },
+        
         createdAt: now.toISOString(),
-        isBanned: false,
+        lastUpdate: now.toISOString(),
+        isActive: true,
       };
 
-      await set(ref(database, `browsers/${browserName}`), userData);
-      await StatsAPI.registerNewClient(browserName);
+      await set(ref(database, `posts/${postId}`), postData);
       
-      return { success: true, uniqueId };
+      // Actualizar referencia en el navegador
+      const updateKey = postSlot === 1 ? "post1Id" : "post2Id";
+      await update(ref(database, `browsers/${browserName}`), {
+        [updateKey]: postId,
+        lastUpdate: now.toISOString(),
+      });
+      
+      // Registrar en estadísticas
+      await StatsAPI.registerNewClient(postId);
+      
+      return { success: true, postId, uniqueId };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
   },
 
-  async generateUniqueId(browserName: string) {
+  // 🆕 CREAR NAVEGADOR (sin renta, solo contenedor)
+  async createBrowser(browserName: string) {
     try {
-      const uniqueId = Math.random().toString(36).substring(2, 10).toUpperCase();
-      await set(ref(database, `browsers/${browserName}/uniqueId`), uniqueId);
-      return uniqueId;
+      const now = new Date();
+
+      const browserData: BrowserData = {
+        browserName: browserName,
+        mode: "single",
+        currentPost: 1,
+        lastHeartbeat: now.toISOString(),
+        connectionStatus: "offline",
+        consecutiveErrors: 0,
+        createdAt: now.toISOString(),
+        lastUpdate: now.toISOString(),
+      };
+
+      await set(ref(database, `browsers/${browserName}`), browserData);
+      
+      return { success: true };
     } catch (error) {
-      console.error("Error generating uniqueId:", error);
-      return null;
+      return { success: false, error: (error as Error).message };
     }
   },
 
-  async findBrowserByUniqueId(uniqueId: string): Promise<BrowserData | null> {
+  // 🆕 CREAR NAVEGADOR CON POST INICIAL
+  async createBrowserWithPost(
+    browserName: string,
+    clientName: string,
+    days: number,
+    hours: number
+  ) {
     try {
-      const snapshot = await get(ref(database, "browsers"));
-      const browsers = snapshot.val();
+      // 1. Crear navegador
+      const browserResult = await this.createBrowser(browserName);
+      if (!browserResult.success) {
+        return browserResult;
+      }
 
-      if (!browsers) return null;
+      // 2. Crear post inicial
+      const postResult = await this.createPost(browserName, clientName, days, hours, 1);
+      if (!postResult.success) {
+        return postResult;
+      }
 
-      for (const [, data] of Object.entries(browsers)) {
-        if ((data as BrowserData).uniqueId === uniqueId) {
-          return data as BrowserData;
+      return {
+        success: true,
+        browserName,
+        postId: postResult.postId,
+        uniqueId: postResult.uniqueId,
+      };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 BUSCAR POST POR UNIQUE ID (para links de clientes)
+  async findPostByUniqueId(uniqueId: string): Promise<PostData | null> {
+    try {
+      const snapshot = await get(ref(database, "posts"));
+      const posts = snapshot.val();
+
+      if (!posts) return null;
+
+      for (const [, data] of Object.entries(posts)) {
+        if ((data as PostData).uniqueId === uniqueId) {
+          return data as PostData;
         }
       }
       return null;
@@ -250,6 +345,68 @@ export const FirebaseAPI = {
     }
   },
 
+  // 🆕 BUSCAR POST POR POST ID
+  async findPostById(postId: string): Promise<PostData | null> {
+    try {
+      const snapshot = await get(ref(database, `posts/${postId}`));
+      return snapshot.exists() ? snapshot.val() as PostData : null;
+    } catch {
+      return null;
+    }
+  },
+
+  // 🆕 OBTENER TODOS LOS POSTS
+  async getAllPosts(): Promise<Record<string, PostData>> {
+    try {
+      const snapshot = await get(ref(database, "posts"));
+      return snapshot.val() || {};
+    } catch {
+      return {};
+    }
+  },
+
+  // 🆕 ESCUCHAR TODOS LOS POSTS
+  listenToAllPosts(callback: (posts: Record<string, PostData>) => void) {
+    const postsRef = ref(database, "posts");
+    const unsubscribe = onValue(postsRef, (snapshot) => {
+      callback(snapshot.val() || {});
+    });
+    return unsubscribe;
+  },
+
+  // 🆕 ESCUCHAR POST ESPECÍFICO
+  listenToPost(postId: string, callback: (data: PostData | null) => void) {
+    const postRef = ref(database, `posts/${postId}`);
+    const unsubscribe = onValue(postRef, (snapshot) => {
+      callback(snapshot.exists() ? snapshot.val() as PostData : null);
+    });
+    return unsubscribe;
+  },
+
+  // 🆕 OBTENER POSTS DE UN NAVEGADOR
+  async getBrowserPosts(browserName: string): Promise<PostData[]> {
+    try {
+      const postsSnapshot = await get(ref(database, "posts"));
+      const posts = postsSnapshot.val() || {};
+      
+      const browserPosts: PostData[] = [];
+      for (const [, postData] of Object.entries(posts)) {
+        const post = postData as PostData;
+        if (post.browserName === browserName) {
+          browserPosts.push(post);
+        }
+      }
+      
+      // Ordenar por postSlot
+      browserPosts.sort((a, b) => a.postSlot - b.postSlot);
+      return browserPosts;
+    } catch (error) {
+      console.error("Error obteniendo posts del navegador:", error);
+      return [];
+    }
+  },
+
+  // NAVEGADORES
   async getAllBrowsers(): Promise<Record<string, BrowserData>> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -276,113 +433,170 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 BUSCAR POR NOMBRE DE CLIENTE (incluye posts dual)
-  async findAllBrowsersByClientName(clientName: string): Promise<Array<{browser: BrowserData, post?: PostData}>> {
+  listenToBrowser(browserName: string, callback: (data: BrowserData) => void) {
+    const browserRef = ref(database, `browsers/${browserName}`);
+    const unsubscribe = onValue(browserRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) callback(data);
+    });
+    return unsubscribe;
+  },
+
+  // 🆕 AJUSTAR RENTA DE UN POST ESPECÍFICO
+  async adjustPostRental(
+    postId: string,
+    days: number,
+    hours: number,
+    action: "establecer" | "agregar"
+  ) {
     try {
-      const cleanSearch = clientName.trim().toLowerCase();
-      const results: Array<{browser: BrowserData, post?: PostData}> = [];
-
-      // Buscar en navegadores
-      const browsersSnapshot = await get(ref(database, "browsers"));
-      const browsers = browsersSnapshot.val() || {};
-
-      // Buscar en posts independientes
-      const postsSnapshot = await get(ref(database, "posts"));
-      const posts = postsSnapshot.val() || {};
-
-      // Buscar en navegadores modo single
-      for (const [, browserData] of Object.entries(browsers)) {
-        const browser = browserData as BrowserData;
-        
-        if (browser.mode === "single" || !browser.mode) {
-          const browserClientName = (browser.clientName || "").trim().toLowerCase();
-          
-          if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
-            results.push({ browser });
-          }
-        }
+      const post = await this.findPostById(postId);
+      if (!post) {
+        return { success: false, error: "Post no encontrado" };
       }
 
-      // Buscar en posts independientes (modo dual)
-      for (const [, postData] of Object.entries(posts)) {
-        const post = postData as PostData;
-        const postClientName = (post.clientName || "").trim().toLowerCase();
-        
-        if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
-          const browser = browsers[post.browserName] as BrowserData;
-          if (browser) {
-            results.push({ browser, post });
+      let newDate = new Date();
+
+      if (action === "establecer") {
+        newDate.setDate(newDate.getDate() + days);
+        newDate.setHours(newDate.getHours() + hours);
+      } else {
+        // Agregar a la renta existente
+        if (post.rentalExpiration) {
+          const currentExpiration = new Date(post.rentalExpiration);
+          if (currentExpiration > new Date()) {
+            newDate = currentExpiration;
           }
         }
+        newDate.setDate(newDate.getDate() + days);
+        newDate.setHours(newDate.getHours() + hours);
       }
 
-      return results;
+      await update(ref(database, `posts/${postId}`), {
+        rentalExpiration: newDate.toISOString(),
+        rentalRemaining: this.calculateRentalRemaining(newDate.toISOString()),
+        lastUpdate: new Date().toISOString(),
+      });
+
+      // Registrar renovación si es 7 días o más
+      if (days >= 7) {
+        await StatsAPI.registerRenewal(postId, days);
+      }
+
+      return { success: true };
     } catch (error) {
-      console.error("Error en búsqueda:", error);
-      return [];
+      return { success: false, error: (error as Error).message };
     }
   },
 
-  async findBrowserByClientName(clientName: string): Promise<BrowserData | null> {
+  // 🆕 PAUSAR/REANUDAR POST
+  async togglePostPause(postId: string, newState: boolean) {
     try {
-      const snapshot = await get(ref(database, "browsers"));
-      const browsers = snapshot.val();
+      await update(ref(database, `posts/${postId}`), {
+        isPaused: newState,
+        lastUpdate: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 ACTUALIZAR DATOS DE POST
+  async updatePost(postId: string, updates: Partial<PostData>) {
+    try {
+      await update(ref(database, `posts/${postId}`), {
+        ...updates,
+        lastUpdate: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 ELIMINAR POST
+  async deletePost(postId: string) {
+    try {
+      const post = await this.findPostById(postId);
+      if (!post) {
+        return { success: false, error: "Post no encontrado" };
+      }
+
+      // Eliminar post
+      await remove(ref(database, `posts/${postId}`));
       
-      if (!browsers) return null;
-
-      const cleanSearch = clientName.trim().toLowerCase();
-
-      for (const [, data] of Object.entries(browsers)) {
-        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
-        if (browserClientName === cleanSearch) {
-          return data as BrowserData;
-        }
-      }
-
-      for (const [, data] of Object.entries(browsers)) {
-        const browserClientName = ((data as BrowserData).clientName || "").trim().toLowerCase();
-        if (browserClientName.includes(cleanSearch)) {
-          return data as BrowserData;
-        }
-      }
-
-      return null;
-    } catch {
-      return null;
+      // Limpiar referencia en navegador
+      const updateKey = post.postSlot === 1 ? "post1Id" : "post2Id";
+      await update(ref(database, `browsers/${post.browserName}`), {
+        [updateKey]: null,
+      });
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
     }
   },
 
-  async findBrowser(phoneNumber: string): Promise<BrowserData | null> {
+  // 🆕 ELIMINAR NAVEGADOR Y SUS POSTS
+  async deleteBrowser(browserName: string) {
     try {
-      const snapshot = await get(ref(database, "browsers"));
-      const browsers = snapshot.val();
-      if (!browsers) return null;
-
-      const cleanPhone = phoneNumber.replace(/\D/g, "");
-
-      for (const [, data] of Object.entries(browsers)) {
-        const browserPhone = ((data as BrowserData).phoneNumber || "").replace(/\D/g, "");
-        if (browserPhone === cleanPhone) {
-          return data as BrowserData;
-        }
+      // Obtener posts del navegador
+      const posts = await this.getBrowserPosts(browserName);
+      
+      // Eliminar cada post
+      for (const post of posts) {
+        await remove(ref(database, `posts/${post.postId}`));
       }
-
-      if (cleanPhone.length >= 10) {
-        const last10 = cleanPhone.slice(-10);
-        for (const [, data] of Object.entries(browsers)) {
-          const browserPhone = ((data as BrowserData).phoneNumber || "").replace(/\D/g, "");
-          if (browserPhone.endsWith(last10)) {
-            return data as BrowserData;
-          }
-        }
-      }
-
-      return null;
-    } catch {
-      return null;
+      
+      // Eliminar navegador
+      await remove(ref(database, `browsers/${browserName}`));
+      await remove(ref(database, `commands/${browserName}`));
+      await remove(ref(database, `notifications/${browserName}`));
+      await remove(ref(database, `lastNotified/${browserName}`));
+      
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
     }
   },
 
+  // 🆕 CAMBIAR MODO DEL NAVEGADOR
+  async setBrowserMode(browserName: string, mode: "single" | "double") {
+    try {
+      await update(ref(database, `browsers/${browserName}`), {
+        mode: mode,
+        currentPost: 1,
+        lastUpdate: new Date().toISOString(),
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 ALTERNAR POST ACTUAL
+  async switchBrowserPost(browserName: string) {
+    try {
+      const browser = await this.findBrowserByName(browserName);
+      if (!browser) {
+        return { success: false, error: "Navegador no encontrado" };
+      }
+
+      const newPost = browser.currentPost === 1 ? 2 : 1;
+      
+      await update(ref(database, `browsers/${browserName}`), {
+        currentPost: newPost,
+        lastUpdate: new Date().toISOString(),
+      });
+
+      return { success: true, newPost };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // COMANDOS
   async sendCommand(browserName: string, actionType: string, payload: Record<string, unknown> = {}) {
     try {
       const commandId = Date.now().toString();
@@ -397,24 +611,18 @@ export const FirebaseAPI = {
     }
   },
 
-  async togglePause(browserName: string, newState: boolean) {
+  // 🆕 FORZAR REPUBLICACIÓN DE UN POST
+  async forceRepublishPost(postId: string) {
     try {
-      await update(ref(database, `browsers/${browserName}`), {
-        isPaused: newState,
-        lastUpdate: new Date().toISOString(),
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
+      const post = await this.findPostById(postId);
+      if (!post) {
+        return { success: false, error: "Post no encontrado" };
+      }
 
-  async forceRepublish(browserName: string) {
-    try {
       const totalSeconds = 900 + Math.floor(Math.random() * 181);
       const now = new Date();
       
-      await update(ref(database, `browsers/${browserName}`), {
+      await update(ref(database, `posts/${postId}`), {
         republishStatus: {
           totalSeconds: totalSeconds,
           elapsedSeconds: 0,
@@ -424,11 +632,8 @@ export const FirebaseAPI = {
         lastUpdate: now.toISOString(),
       });
 
-      const commandId = Date.now().toString();
-      await set(ref(database, `commands/${browserName}/${commandId}`), {
-        type: "republish",
-        timestamp: now.toISOString(),
-      });
+      // Enviar comando al navegador
+      await this.sendCommand(post.browserName, "republish_post", { postId });
 
       return { success: true };
     } catch (error) {
@@ -436,61 +641,14 @@ export const FirebaseAPI = {
     }
   },
 
-  async updateBrowserField(browserName: string, field: string, value: any) {
+  // NOTIFICACIONES
+  async getNotificationConfig(postId: string): Promise<NotificationConfig | null> {
     try {
-      await update(ref(database, `browsers/${browserName}`), {
-        [field]: value,
-        lastUpdate: new Date().toISOString(),
-      });
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  listenToBrowser(browserName: string, callback: (data: BrowserData) => void) {
-    const browserRef = ref(database, `browsers/${browserName}`);
-    const unsubscribe = onValue(browserRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) callback(data);
-    });
-    return unsubscribe;
-  },
-
-  async deleteBrowser(browserName: string) {
-    try {
-      // Obtener info del browser antes de eliminar
-      const browser = await this.findBrowserByName(browserName);
+      const post = await this.findPostById(postId);
+      if (!post) return null;
       
-      // Si es modo dual, eliminar los posts también
-      if (browser && browser.mode === "double") {
-        if (browser.post1Id) {
-          await remove(ref(database, `posts/${browser.post1Id}`));
-        }
-        if (browser.post2Id) {
-          await remove(ref(database, `posts/${browser.post2Id}`));
-        }
-      }
-      
-      // Eliminar browser y datos relacionados
-      await remove(ref(database, `browsers/${browserName}`));
-      await remove(ref(database, `commands/${browserName}`));
-      await remove(ref(database, `notifications/${browserName}`));
-      await remove(ref(database, `lastNotified/${browserName}`));
-      
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  async getNotificationConfig(browserName: string): Promise<NotificationConfig | null> {
-    try {
-      const notifRef = ref(database, `notifications/${browserName}`);
-      const snapshot = await get(notifRef);
-      
-      if (snapshot.exists()) {
-        return snapshot.val() as NotificationConfig;
+      if (post.notificationConfig) {
+        return post.notificationConfig;
       }
       
       return {
@@ -513,235 +671,46 @@ export const FirebaseAPI = {
     }
   },
 
-  async saveNotificationConfig(
-    browserName: string,
-    config: NotificationConfig
-  ) {
+  async saveNotificationConfig(postId: string, config: NotificationConfig) {
     try {
-      await set(ref(database, `notifications/${browserName}`), config);
+      await update(ref(database, `posts/${postId}`), {
+        notificationConfig: config,
+        lastUpdate: new Date().toISOString(),
+      });
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
     }
   },
 
-  async sendTestEmail(browserName: string, email: string) {
-    try {
-      const response = await fetch("/api/send-notification", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          browserName,
-          tipo: "test",
-          config: {
-            email,
-          },
-        }),
-      });
+  // BÚSQUEDA
+  async searchPosts(query: string): Promise<PostData[]> {
+    if (!query || query.length < 2) return [];
 
-      const result = await response.json();
-      return result;
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 API PARA POSTS INDIVIDUALES
-  
-  // Obtener un post por ID
-  async getPost(postId: string): Promise<PostData | null> {
-    try {
-      const snapshot = await get(ref(database, `posts/${postId}`));
-      return snapshot.exists() ? snapshot.val() as PostData : null;
-    } catch (error) {
-      console.error("Error obteniendo post:", error);
-      return null;
-    }
-  },
-
-  // Obtener todos los posts de un navegador
-  async getBrowserPosts(browserName: string): Promise<PostData[]> {
     try {
       const postsSnapshot = await get(ref(database, "posts"));
       const posts = postsSnapshot.val() || {};
       
-      const browserPosts: PostData[] = [];
+      const results: PostData[] = [];
+      const queryLower = query.toLowerCase();
+
       for (const [, postData] of Object.entries(posts)) {
         const post = postData as PostData;
-        if (post.browserName === browserName) {
-          browserPosts.push(post);
+        const matches =
+          post.clientName?.toLowerCase().includes(queryLower) ||
+          post.postName?.toLowerCase().includes(queryLower) ||
+          post.phoneNumber?.includes(query) ||
+          post.uniqueId?.toLowerCase().includes(queryLower);
+
+        if (matches) {
+          results.push(post);
         }
       }
-      
-      // Ordenar por postSlot
-      browserPosts.sort((a, b) => a.postSlot - b.postSlot);
-      return browserPosts;
+
+      return results;
     } catch (error) {
-      console.error("Error obteniendo posts del navegador:", error);
+      console.error("Error en búsqueda:", error);
       return [];
-    }
-  },
-
-  // Escuchar cambios en un post
-  listenToPost(postId: string, callback: (data: PostData | null) => void) {
-    const postRef = ref(database, `posts/${postId}`);
-    const unsubscribe = onValue(postRef, (snapshot) => {
-      callback(snapshot.exists() ? snapshot.val() as PostData : null);
-    });
-    return unsubscribe;
-  },
-
-  // Escuchar todos los posts
-  listenToAllPosts(callback: (posts: Record<string, PostData>) => void) {
-    const postsRef = ref(database, "posts");
-    const unsubscribe = onValue(postsRef, (snapshot) => {
-      callback(snapshot.val() || {});
-    });
-    return unsubscribe;
-  },
-
-  // 🆕 Activar/Desactivar modo dual
-  async toggleDualMode(browserName: string, enableDual: boolean) {
-    try {
-      const browser = await this.findBrowserByName(browserName);
-      if (!browser) {
-        return { success: false, error: "Navegador no encontrado" };
-      }
-
-      if (enableDual) {
-        // Activar modo dual
-        const post1Id = `${browserName}_Post1`;
-        const post2Id = `${browserName}_Post2`;
-
-        // Crear posts si no existen
-        const post1Exists = await get(ref(database, `posts/${post1Id}`));
-        if (!post1Exists.exists()) {
-          const post1: PostData = {
-            postId: post1Id,
-            browserName: browserName,
-            postSlot: 1,
-            clientName: browser.clientName || "Cliente 1",
-            postName: browser.postName || "Post 1",
-            city: browser.city || "",
-            location: browser.location || "",
-            phoneNumber: browser.phoneNumber || "",
-            isActive: true,
-            lastUpdate: new Date().toISOString(),
-            stats: {
-              totalRepublishes: 0,
-              lastRepublishAt: new Date().toISOString(),
-            },
-          };
-          await set(ref(database, `posts/${post1Id}`), post1);
-        }
-
-        const post2Exists = await get(ref(database, `posts/${post2Id}`));
-        if (!post2Exists.exists()) {
-          const post2: PostData = {
-            postId: post2Id,
-            browserName: browserName,
-            postSlot: 2,
-            clientName: "Cliente 2",
-            postName: "Post 2",
-            city: browser.city || "",
-            location: browser.location || "",
-            phoneNumber: "",
-            isActive: false,
-            lastUpdate: new Date().toISOString(),
-            stats: {
-              totalRepublishes: 0,
-              lastRepublishAt: new Date().toISOString(),
-            },
-          };
-          await set(ref(database, `posts/${post2Id}`), post2);
-        }
-
-        // Actualizar browser
-        await update(ref(database, `browsers/${browserName}`), {
-          mode: "double",
-          currentPost: 1,
-          post1Id: post1Id,
-          post2Id: post2Id,
-          lastUpdate: new Date().toISOString(),
-        });
-
-        // Enviar comando a la extensión
-        await this.sendCommand(browserName, "set_mode", { mode: "double" });
-
-        return { success: true, message: "Modo dual activado" };
-      } else {
-        // Desactivar modo dual
-        await update(ref(database, `browsers/${browserName}`), {
-          mode: "single",
-          currentPost: null,
-          post1Id: null,
-          post2Id: null,
-          lastUpdate: new Date().toISOString(),
-        });
-
-        // Enviar comando a la extensión
-        await this.sendCommand(browserName, "set_mode", { mode: "single" });
-
-        return { success: true, message: "Modo dual desactivado" };
-      }
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 Cambiar manualmente al otro post
-  async switchPost(browserName: string) {
-    try {
-      const browser = await this.findBrowserByName(browserName);
-      if (!browser || browser.mode !== "double") {
-        return { success: false, error: "El navegador no está en modo dual" };
-      }
-
-      const newPost = browser.currentPost === 1 ? 2 : 1;
-      
-      await update(ref(database, `browsers/${browserName}`), {
-        currentPost: newPost,
-        lastUpdate: new Date().toISOString(),
-      });
-
-      await this.sendCommand(browserName, "switch_post", {});
-
-      return { success: true, newPost };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
-    }
-  },
-
-  // 🆕 Editar un post específico
-  async editPost(browserName: string, postNumber: 1 | 2, changes: Partial<PostData>) {
-    try {
-      const browser = await this.findBrowserByName(browserName);
-      if (!browser || browser.mode !== "double") {
-        return { success: false, error: "El navegador no está en modo dual" };
-      }
-
-      const postId = postNumber === 1 ? browser.post1Id : browser.post2Id;
-      if (!postId) {
-        return { success: false, error: "Post no encontrado" };
-      }
-
-      // Actualizar post en Firebase
-      await update(ref(database, `posts/${postId}`), {
-        ...changes,
-        lastUpdate: new Date().toISOString(),
-      });
-
-      // Enviar comando a la extensión
-      await this.sendCommand(browserName, "edit_post", {
-        postNumber,
-        changes,
-      });
-
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: (error as Error).message };
     }
   },
 };
@@ -772,20 +741,21 @@ export const StatsAPI = {
     return { start, end };
   },
 
-  async registerBan(browserName: string) {
+  async registerBan(postId: string) {
     try {
       const weekId = this.getCurrentWeekId();
       const now = new Date().toISOString();
       
-      await update(ref(database, `browsers/${browserName}`), {
+      await update(ref(database, `posts/${postId}`), {
         isBanned: true,
         bannedAt: now,
+        isActive: false,
       });
       
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "ban",
-        browserName,
+        postId,
         timestamp: now,
         weekId,
       });
@@ -794,13 +764,12 @@ export const StatsAPI = {
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
       
-      if (!currentStats.bannedAccounts.includes(browserName)) {
-        currentStats.bannedAccounts.push(browserName);
+      if (!currentStats.bannedAccounts.includes(postId)) {
+        currentStats.bannedAccounts.push(postId);
       }
       
       await set(statsRef, currentStats);
       
-      console.log(`[Stats]: Ban registrado para ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
       console.error("[Stats Error]:", error);
@@ -808,7 +777,7 @@ export const StatsAPI = {
     }
   },
 
-  async registerRenewal(browserName: string, days: number) {
+  async registerRenewal(postId: string, days: number) {
     try {
       if (days < 7) return { success: true };
       
@@ -818,7 +787,7 @@ export const StatsAPI = {
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "renewal",
-        browserName,
+        postId,
         days,
         timestamp: now,
         weekId,
@@ -832,7 +801,6 @@ export const StatsAPI = {
       
       await set(statsRef, currentStats);
       
-      console.log(`[Stats]: Renovación registrada para ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
       console.error("[Stats Error]:", error);
@@ -840,7 +808,7 @@ export const StatsAPI = {
     }
   },
 
-  async registerNewClient(browserName: string) {
+  async registerNewClient(postId: string) {
     try {
       const weekId = this.getCurrentWeekId();
       const now = new Date().toISOString();
@@ -848,7 +816,7 @@ export const StatsAPI = {
       const eventRef = push(ref(database, `stats/events/${weekId}`));
       await set(eventRef, {
         type: "newClient",
-        browserName,
+        postId,
         timestamp: now,
         weekId,
       });
@@ -857,16 +825,15 @@ export const StatsAPI = {
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
       
-      if (!currentStats.newClients.includes(browserName)) {
-        currentStats.newClients.push(browserName);
+      if (!currentStats.newClients.includes(postId)) {
+        currentStats.newClients.push(postId);
       }
       
-      const allBrowsers = await FirebaseAPI.getAllBrowsers();
-      currentStats.totalClients = Object.keys(allBrowsers).length;
+      const allPosts = await FirebaseAPI.getAllPosts();
+      currentStats.totalClients = Object.keys(allPosts).length;
       
       await set(statsRef, currentStats);
       
-      console.log(`[Stats]: Nuevo cliente registrado: ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
       console.error("[Stats Error]:", error);
