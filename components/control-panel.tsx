@@ -699,23 +699,22 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
       )}
 
       {showCriticalModal && criticalResult && criticalResult.rentalRemaining && (
-        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
-          <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
+        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-destructive/20 via-transparent to-destructive/20 animate-pulse" />
             
             <div className="relative p-8">
               <div className="text-center">
-                <div className="text-7xl mb-4 animate-bounce">🚨</div>
+                <div className="text-7xl mb-4">🚨</div>
                 
                 <h2 className="text-3xl font-black text-destructive mb-2 uppercase tracking-tight">
-                  ¡Atención Urgente!
+                  Atencion Urgente
                 </h2>
                 <p className="text-muted-foreground mb-6">
-                  Tu cuenta está por expirar
+                  Tu cuenta esta por expirar
                 </p>
                 
                 <div className="bg-destructive/20 border-2 border-destructive rounded-xl p-6 mb-6 relative overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-shimmer" />
                   <p className="text-lg font-bold text-destructive mb-2">
                     Expira en
                   </p>
@@ -737,40 +736,38 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 </div>
                 
                 <div className="bg-black/60 rounded-xl p-5 mb-6 text-left border border-destructive/30">
-                  <p className="text-destructive font-bold mb-3 text-center text-lg flex items-center justify-center gap-2">
-                    <span>💀</span>
-                    <span>Después de eso:</span>
-                    <span>💀</span>
+                  <p className="text-destructive font-bold mb-3 text-center text-lg">
+                    Que pasara si no renuevas
                   </p>
                   <ul className="space-y-2.5">
                     <li className="flex items-start gap-2 text-sm">
                       <span className="text-destructive flex-shrink-0 text-lg">❌</span>
                       <span className="text-foreground">
-                        Tu anuncio será <strong className="text-destructive">ELIMINADO</strong>
+                        Tu anuncio sera ELIMINADO
                       </span>
                     </li>
                     <li className="flex items-start gap-2 text-sm">
                       <span className="text-warning flex-shrink-0 text-lg">❌</span>
                       <span className="text-foreground">
-                        Perderás tu <strong className="text-warning">posicionamiento</strong>
+                        Perderas tu posicionamiento
                       </span>
                     </li>
                     <li className="flex items-start gap-2 text-sm">
                       <span className="text-orange-500 flex-shrink-0 text-lg">❌</span>
                       <span className="text-foreground">
-                        Las estadísticas se <strong className="text-orange-500">borrarán</strong>
+                        Las estadisticas se borraran
                       </span>
                     </li>
                     <li className="flex items-start gap-2 text-sm">
                       <span className="text-pink-500 flex-shrink-0 text-lg">❌</span>
                       <span className="text-foreground">
-                        No lo podrás recuperar después de <strong className="text-pink-500">48 horas</strong>
+                        No podras recuperarlo despues de 48 horas
                       </span>
                     </li>
                   </ul>
                 </div>
 
-                
+                <a
                   href={`https://wa.me/18293837695?text=${encodeURIComponent(
                     `🚨 URGENTE: Renovar ${criticalResult.clientName} - Expira en ${criticalResult.rentalRemaining.hours}h ${criticalResult.rentalRemaining.minutes}m`
                   )}`}
@@ -798,7 +795,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 </button>
                 
                 <p className="mt-4 text-xs text-destructive/70">
-                  ⚠️ Este mensaje se mostrará cada 6 horas
+                  Este mensaje se mostrara cada 6 horas
                 </p>
               </div>
             </div>
