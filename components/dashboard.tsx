@@ -113,6 +113,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const captchaWaiting = liveData.fullData.captchaWaiting;
   const captchaImage = liveData.fullData.captchaImage;
   const manuallyCreated = liveData.fullData.manuallyCreated;
+  
+  // 🔒 NUEVO: Variable para saber si ESTE usuario puede editar
+  const canEdit = !editInProgress;
 
   useEffect(() => {
     if (!republishStatus || isPaused) return;
@@ -331,6 +334,11 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleSaveAllEdits = async () => {
+    // 🔒 BLOQUEO SILENCIOSO: Si hay edición en curso, simplemente no hace nada
+    if (!canEdit) {
+      return;
+    }
+
     if (commandInProgressRef.current || actionLoading) {
       return;
     }
@@ -782,14 +790,21 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <span className="text-xs">Republicar</span>
                 </Button>
 
+                {/* 🔒 BOTÓN EDITAR CON BLOQUEO SILENCIOSO */}
                 <Button
                   onClick={handleOpenEditor}
-                  disabled={actionLoading || editInProgress || commandInProgressRef.current}
-                  className="flex h-auto flex-col gap-2 bg-chart-4/10 py-5 sm:py-4 text-chart-4 hover:bg-chart-4/20 text-base sm:text-sm"
+                  disabled={actionLoading || !canEdit || commandInProgressRef.current}
+                  className={cn(
+                    "flex h-auto flex-col gap-2 py-5 sm:py-4 text-base sm:text-sm",
+                    !canEdit 
+                      ? "bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50"
+                      : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20"
+                  )}
+                  title={!canEdit ? "" : "Editar"}
                 >
                   <EditIcon className="h-6 w-6 sm:h-5 sm:w-5" />
                   <span className="text-xs">
-                    {editInProgress ? "Editando..." : "Editar"}
+                    {!canEdit ? "Ocupado" : "Editar"}
                   </span>
                 </Button>
 
@@ -1252,25 +1267,31 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
 
               <div className="mt-8 flex flex-col sm:flex-row gap-4 relative z-20">
+                {/* 🔒 BOTÓN GUARDAR CON BLOQUEO SILENCIOSO */}
                 <Button
                   onClick={handleSaveAllEdits}
-                  disabled={actionLoading || commandInProgressRef.current}
+                  disabled={actionLoading || !canEdit || commandInProgressRef.current}
                   style={{
                     flex: 1,
                     height: '55px',
-                    background: 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
-                    border: '3px solid #00C853',
+                    background: (!canEdit || actionLoading) 
+                      ? '#666666' 
+                      : 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
+                    border: (!canEdit || actionLoading) 
+                      ? '3px solid #555555' 
+                      : '3px solid #00C853',
                     borderRadius: '10px',
                     color: '#FFFFFF',
                     fontWeight: 'bold',
                     fontSize: '18px',
                     textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
-                    cursor: actionLoading ? 'not-allowed' : 'pointer',
+                    cursor: (!canEdit || actionLoading) ? 'not-allowed' : 'pointer',
                     fontFamily: 'Arial Black, system-ui, sans-serif',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.2)',
+                    opacity: (!canEdit || actionLoading) ? 0.5 : 1
                   }}
                 >
-                  {actionLoading ? "Guardando..." : "Guardar Cambios"}
+                  {actionLoading ? "Guardando..." : !canEdit ? "Ocupado..." : "Guardar Cambios"}
                 </Button>
                 <Button
                   onClick={async () => {
