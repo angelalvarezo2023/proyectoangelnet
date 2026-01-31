@@ -13,11 +13,9 @@ interface ControlPanelProps {
   initialError?: string;
 }
 
-// 🆕 MODIFICADO: Detecta y muestra DEUDA
 function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "Sin renta";
   
-  // 🆕 DETECTAR DEUDA
   const isDebt = rental.days < 0 || (rental as any).isDebt === true;
   
   if (isDebt) {
@@ -37,14 +35,10 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   return parts.join(" ");
 }
 
-// 🆕 MODIFICADO: Nuevo status "debt"
 function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "neutral";
-  
-  // 🆕 PRIORIDAD: Detectar deuda
   const isDebt = rental.days < 0 || (rental as any).isDebt === true;
   if (isDebt) return "debt";
-  
   if (rental.days === 0 && rental.hours === 0) return "critical";
   if (rental.days === 0) return "warning";
   if (rental.days < 2) return "caution";
@@ -53,11 +47,8 @@ function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "from-gray-500/10 to-gray-600/10";
-  
-  // 🆕 Gradiente especial para deuda
   const isDebt = rental.days < 0 || (rental as any).isDebt === true;
   if (isDebt) return "from-red-600/30 via-red-500/20 to-red-600/30";
-  
   if (rental.days === 0 && rental.hours < 24) return "from-red-500/20 via-pink-500/20 to-red-600/20";
   if (rental.days <= 1) return "from-orange-500/20 via-amber-500/20 to-orange-600/20";
   if (rental.days <= 3) return "from-yellow-500/20 via-amber-400/20 to-yellow-600/20";
@@ -66,11 +57,8 @@ function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "shadow-gray-500/0";
-  
-  // 🆕 Borde especial para deuda
   const isDebt = rental.days < 0 || (rental as any).isDebt === true;
   if (isDebt) return "shadow-red-600/70 shadow-xl border-red-600/50";
-  
   if (rental.days === 0 && rental.hours < 24) return "shadow-red-500/50 shadow-lg";
   if (rental.days <= 1) return "shadow-orange-500/30 shadow-md";
   if (rental.days <= 3) return "shadow-yellow-500/20 shadow-sm";
@@ -79,24 +67,19 @@ function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
 
 function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
   if (!rental || rental.days === -1) return "text-gray-400";
-  
-  // 🆕 Color especial para deuda
   const isDebt = rental.days < 0 || (rental as any).isDebt === true;
   if (isDebt) return "text-red-600 font-black animate-pulse";
-  
   if (rental.days === 0 && rental.hours < 24) return "text-red-400";
   if (rental.days <= 1) return "text-orange-400";
   if (rental.days <= 3) return "text-yellow-400";
   return "text-green-400";
 }
 
-// 🆕 Componente para tarjeta de navegador/post - ADAPTADO PARA SEARCH RESULT
 function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onClick: () => void; viewMode: 'grid' | 'list' }) {
   const [localRemaining, setLocalRemaining] = useState<number | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  // 🆕 Obtener datos correctos según el tipo
   const isPaused = result.isPaused ?? false;
   const republishStatus = result.republishStatus;
   const rentalRemaining = result.rentalRemaining;
@@ -118,11 +101,7 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
     }
 
     const firebaseRemaining = republishStatus.remainingSeconds;
-    const totalSeconds = republishStatus.totalSeconds;
-
-    const shouldUpdate = 
-      localRemaining === null || 
-      Math.abs(firebaseRemaining - localRemaining) > 5;
+    const shouldUpdate = localRemaining === null || Math.abs(firebaseRemaining - localRemaining) > 5;
 
     if (shouldUpdate) {
       setLocalRemaining(firebaseRemaining);
@@ -148,7 +127,7 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         intervalRef.current = null;
       }
     };
-  }, [republishStatus?.remainingSeconds, republishStatus?.totalSeconds, isPaused]);
+  }, [republishStatus?.remainingSeconds, republishStatus?.totalSeconds, isPaused, localRemaining]);
 
   useEffect(() => {
     if (localRemaining !== null && republishStatus) {
@@ -183,7 +162,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
     rentalRemaining.days === 0 && 
     rentalRemaining.hours < 24;
 
-  // 🆕 Detectar DEUDA
   const isDebt = rentalRemaining && 
     (rentalRemaining.days < 0 || (rentalRemaining as any).isDebt === true);
 
@@ -191,7 +169,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
   const rentalBorderGlow = getRentalBorderGlow(rentalRemaining);
   const rentalTextColor = getRentalTextColor(rentalRemaining);
 
-  // 📋 VISTA DE LISTA - MEJORADA PARA MÓVILES
   if (viewMode === 'list') {
     return (
       <div
@@ -203,7 +180,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
             : `bg-gradient-to-r ${rentalGradient} ${rentalBorderGlow}`
         )}
       >
-        {/* Estado */}
         <div className="flex items-center gap-3 min-w-[120px] sm:min-w-[100px]">
           <div className={cn(
             "h-4 w-4 sm:h-3 sm:w-3 rounded-full relative",
@@ -221,7 +197,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
           </span>
         </div>
 
-        {/* Nombre */}
         <div className="flex-1 min-w-[150px]">
           <h3 className="text-xl sm:text-lg font-bold text-white">{clientName}</h3>
           {postName && postName !== "N/A" && (
@@ -229,7 +204,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
           )}
         </div>
 
-        {/* Countdown */}
         <div className="w-full sm:w-auto sm:min-w-[140px] text-center bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
           {isPaused ? (
             <span className="text-xl sm:text-lg font-bold text-yellow-400">⏸ Pausado</span>
@@ -242,7 +216,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
           )}
         </div>
 
-        {/* Tiempo de Renta */}
         <div className="w-full sm:w-auto sm:min-w-[120px] text-center sm:text-right bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
           <div className="text-sm sm:text-xs text-white/60 mb-1">RENTA</div>
           <div className={cn("text-2xl sm:text-xl font-black", rentalTextColor)}>
@@ -250,7 +223,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
           </div>
         </div>
 
-        {/* 🆕 Banner de DEUDA para lista */}
         {isDebt && (
           <div className="w-full sm:w-auto flex items-center gap-2 bg-red-600/30 border-2 border-red-500 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm animate-pulse">
             <span className="text-red-400 text-2xl sm:text-xl">💀</span>
@@ -279,7 +251,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
     );
   }
 
-  // 🔲 VISTA DE GRID - MEJORADA PARA MÓVILES
   return (
     <div
       onClick={onClick}
@@ -290,10 +261,8 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
           : `bg-gradient-to-br ${rentalGradient} ${rentalBorderGlow}`
       )}
     >
-      {/* Efecto de brillo animado */}
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
 
-      {/* 🆕 BANNER DE DEUDA - GRID */}
       {isDebt && (
         <div className="mb-4 rounded-2xl border-3 border-red-600 bg-gradient-to-br from-red-600/40 to-red-500/30 p-5 backdrop-blur-sm animate-pulse">
           <div className="flex items-center gap-3 mb-3">
@@ -324,7 +293,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         </div>
       )}
 
-      {/* Alerta de Error */}
       {hasError && (
         <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 animate-pulse" />
@@ -346,7 +314,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         </div>
       )}
 
-      {/* Banner de Alerta de Renta (solo si NO es deuda) */}
       {showRentalAlert && !isDebt && (
         <div className="mb-4 rounded-2xl border-2 border-red-500/50 bg-gradient-to-br from-red-500/20 to-pink-500/20 p-5 sm:p-4 backdrop-blur-sm animate-pulse">
           <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-3 mb-4 sm:mb-3">
@@ -378,7 +345,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         </div>
       )}
 
-      {/* Header - Estado y Nombre */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-4">
           <div className={cn(
@@ -417,7 +383,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         )}
       </div>
 
-      {/* Countdown de Republicación */}
       <div className="mb-4 rounded-2xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
         
@@ -453,7 +418,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
                 )}
               </div>
               
-              {/* Barra de progreso mejorada */}
               <div className="relative h-3 w-full overflow-hidden rounded-full bg-black/30 border border-white/10">
                 <div
                   className={cn(
@@ -476,7 +440,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         </div>
       </div>
 
-      {/* Tiempo de Renta */}
       <div className={cn(
         "rounded-2xl border p-5 backdrop-blur-sm relative overflow-hidden",
         `bg-gradient-to-br ${rentalGradient} border-white/10`
@@ -504,7 +467,6 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
         </div>
       </div>
 
-      {/* Hover Tooltip */}
       <div className="mt-4 text-center text-xs text-white/40 opacity-0 transition-opacity group-hover:opacity-100">
         👆 Toca para ver más opciones
       </div>
@@ -523,7 +485,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const [showCriticalModal, setShowCriticalModal] = useState(false);
   const [criticalResult, setCriticalResult] = useState<SearchResult | null>(null);
 
-  // 🆕 Listener para actualizar results en tiempo real
   useEffect(() => {
     if (resultsList.length === 0) return;
 
@@ -536,9 +497,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           setResultsList(prev => {
             const newList = [...prev];
             
-            // 🆕 ACTUALIZAR SEGÚN TIPO
             if (result.type === "single") {
-              // Single-post: actualizar todo
               newList[index] = {
                 ...result,
                 fullData: updatedData,
@@ -551,7 +510,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 postName: updatedData.postName,
               };
             } else {
-              // Multi-post: actualizar desde posts/
               if (updatedData.posts && result.postId && updatedData.posts[result.postId]) {
                 const postData = updatedData.posts[result.postId];
                 newList[index] = {
@@ -560,7 +518,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   postData: postData,
                   isPaused: postData.isPaused,
                   rentalRemaining: postData.rentalRemaining,
-                  republishStatus: updatedData.republishStatus, // Compartido
+                  republishStatus: updatedData.republishStatus,
                   phoneNumber: postData.phoneNumber,
                   city: postData.city,
                   location: postData.location,
@@ -581,7 +539,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     };
   }, [resultsList.length]);
 
-  // 🆕 Modal de renta crítica
   useEffect(() => {
     if (resultsList.length === 0) return;
 
@@ -616,7 +573,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     setSelectedResult(null);
     setResultsList([]);
 
-    // 🆕 USAR NUEVA API
     const results = await FirebaseAPI.findAllBrowsersByClientName(clientSearch);
 
     if (results.length === 0) {
@@ -637,7 +593,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* Panel de búsqueda */}
         <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 min-h-[360px] sm:min-h-[320px] flex flex-col justify-center">
           <div className="mb-6 sm:mb-8 text-center">
             <div className="mx-auto mb-4 flex h-20 w-20 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
@@ -676,7 +631,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           </div>
         </div>
 
-        {/* Lista de resultados */}
         {resultsList.length > 0 && (
           <div className="mt-8 space-y-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -735,7 +689,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         )}
       </div>
 
-      {/* Dashboard modal */}
       {selectedResult && (
         <Dashboard
           searchResult={selectedResult}
@@ -745,7 +698,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         />
       )}
 
-      {/* Modal de renta crítica */}
       {showCriticalModal && criticalResult && criticalResult.rentalRemaining && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
           <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
@@ -831,7 +783,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                     setShowCriticalModal(false);
                   }}
                 >
-                  🔥 Renovar Ahora 🔥
+                  Renovar Ahora
                 </a>
                 
                 <button
