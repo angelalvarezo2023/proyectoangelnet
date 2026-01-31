@@ -63,6 +63,19 @@ export function StatsPanel() {
     return allBrowsers[browserName]?.clientName || browserName;
   };
 
+  // 🆕 CALCULAR TOTAL DE POSTS (incluyendo multi-post)
+  const getTotalPosts = () => {
+    let totalPosts = 0;
+    Object.values(allBrowsers).forEach(browser => {
+      if (browser.isMultiPost && browser.posts) {
+        totalPosts += browser.postCount || Object.keys(browser.posts).length;
+      } else {
+        totalPosts += 1;
+      }
+    });
+    return totalPosts;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -177,7 +190,7 @@ export function StatsPanel() {
           </div>
         </div>
 
-        {/* Total Clientes */}
+        {/* Total Clientes - 🆕 CORREGIDO */}
         <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="relative z-10">
@@ -188,11 +201,11 @@ export function StatsPanel() {
               </div>
             </div>
             <div className="text-3xl font-bold text-foreground mb-2">
-              {Object.keys(allBrowsers).length}
+              {getTotalPosts()}
             </div>
-            <div className="text-sm text-muted-foreground">Clientes Activos</div>
+            <div className="text-sm text-muted-foreground">Posts/Clientes Activos</div>
             <div className="mt-3 pt-3 border-t border-purple-500/20">
-              <div className="text-xs text-purple-400">Base de clientes</div>
+              <div className="text-xs text-purple-400">Base total de posts</div>
             </div>
           </div>
         </div>
