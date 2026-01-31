@@ -27,7 +27,16 @@ interface AdminPanelProps {
   onClose?: () => void;
 }
 
-function getConnectionStatus(browser: BrowserData) {
+// 🆕 Interface extendida para navegadores expandidos
+interface ExpandedBrowser extends BrowserData {
+  displayName: string;
+  postIndex: number | null;
+  totalPosts: number;
+  isExpandedPost: boolean;
+  postId?: string;
+}
+
+function getConnectionStatus(browser: BrowserData | ExpandedBrowser) {
   const now = new Date().getTime();
   const lastHeartbeat = browser.lastHeartbeat ? new Date(browser.lastHeartbeat).getTime() : 0;
   const timeSinceHeartbeat = now - lastHeartbeat;
@@ -140,13 +149,13 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
   }, []);
   
   const [showRentalModal, setShowRentalModal] = useState(false);
-  const [rentalBrowser, setRentalBrowser] = useState<BrowserData | null>(null);
+  const [rentalBrowser, setRentalBrowser] = useState<ExpandedBrowser | null>(null);
   const [rentalDays, setRentalDays] = useState("");
   const [rentalHours, setRentalHours] = useState("");
   const [adjustingRental, setAdjustingRental] = useState(false);
 
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteBrowser, setDeleteBrowser] = useState<BrowserData | null>(null);
+  const [deleteBrowser, setDeleteBrowser] = useState<ExpandedBrowser | null>(null);
   const [deleting, setDeleting] = useState(false);
   
   // 🆕 Estados para pausa masiva
@@ -200,20 +209,25 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     setCreating(false);
   };
 
-  const generateUserLink = (browser: BrowserData) => {
+  const generateUserLink = (browser: ExpandedBrowser) => {
     const baseUrl = window.location.origin + window.location.pathname;
+    const baseBrowserName = browser.isExpandedPost 
+      ? browser.browserName 
+      : browser.browserName;
+      
     if (browser.uniqueId) {
       return `${baseUrl}?id=${encodeURIComponent(browser.uniqueId)}`;
     }
-    const browserName = browser.browserName;
-    return `${baseUrl}?user=${encodeURIComponent(browserName)}`;
+    return `${baseUrl}?user=${encodeURIComponent(baseBrowserName)}`;
   };
 
-  const handleCopyLink = async (browser: BrowserData) => {
-    const browserName = browser.browserName;
+  const handleCopyLink = async (browser: ExpandedBrowser) => {
+    const baseBrowserName = browser.isExpandedPost 
+      ? browser.browserName 
+      : browser.browserName;
 
     if (!browser.uniqueId) {
-      const uniqueId = await FirebaseAPI.generateUniqueId(browserName);
+      const uniqueId = await FirebaseAPI.generateUniqueId(baseBrowserName);
       if (uniqueId) {
         browser.uniqueId = uniqueId;
       } else {
@@ -227,7 +241,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     alert("Link copiado");
   };
 
-  const handleOpenRentalModal = (browser: BrowserData) => {
+  const handleOpenRentalModal = (browser: ExpandedBrowser) => {
     setRentalBrowser(browser);
     setRentalDays("");
     setRentalHours("");
@@ -287,10 +301,19 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     setAdjustingRental(true);
 
     try {
+      const baseBrowserName = rentalBrowser.isExpandedPost 
+        ? rentalBrowser.browserName 
+        : rentalBrowser.browserName;
+      
       const result = await FirebaseAPI.sendCommand(
-        rentalBrowser.browserName,
+        baseBrowserName,
         "adjustRental",
-        { days, hours, action }
+        { 
+          days, 
+          hours, 
+          action,
+          postId: rentalBrowser.isExpandedPost ? rentalBrowser.postId : undefined
+        }
       );
 
       if (result.success) {
@@ -308,7 +331,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     }
   };
 
-  const handleOpenDeleteModal = (browser: BrowserData) => {
+  const handleOpenDeleteModal = (browser: ExpandedBrowser) => {
     setDeleteBrowser(browser);
     setShowDeleteModal(true);
   };
@@ -319,10 +342,14 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     setDeleting(true);
 
     try {
-      const result = await FirebaseAPI.deleteBrowser(deleteBrowser.browserName);
+      const baseBrowserName = deleteBrowser.isExpandedPost 
+        ? deleteBrowser.browserName 
+        : deleteBrowser.browserName;
+      
+      const result = await FirebaseAPI.deleteBrowser(baseBrowserName);
 
       if (result.success) {
-        alert(`Usuario "${deleteBrowser.browserName}" eliminado correctamente`);
+        alert(`Usuario "${deleteBrowser.displayName}" eliminado correctamente`);
         setShowDeleteModal(false);
         setDeleteBrowser(null);
       } else {
@@ -332,57 +359,6 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
       alert("Error al eliminar el usuario");
     } finally {
       setDeleting(false);
-    }
-  };
-
-  // 🆕 CALCULAR SI TODOS ESTÁN PAUSADOS
-  useEffect(() => {
-    const totalActive = browserList.filter(b => 
-      getConnectionStatus(b).status !== "offline"
-    ).length;
-    
-    const totalPaused = browserList.filter(b => 
-      b.isPaused && getConnectionStatus(b).status !== "offline"
-    ).length;
-    
-    // Si todos los activos están pausados
-    setAllPaused(totalActive > 0 && totalActive === totalPaused);
-  }, [browsers]);
-
-  // 🆕 FUNCIÓN PAUSAR/REANUDAR TODAS
-  const handlePauseAll = async () => {
-    const activeBrowsers = browserList.filter(b => 
-      getConnectionStatus(b).status !== "offline"
-    );
-    
-    if (activeBrowsers.length === 0) {
-      alert("No hay navegadores activos para pausar/reanudar");
-      return;
-    }
-
-    const confirmMessage = allPaused
-      ? `¿Reanudar ${activeBrowsers.length} navegadores?`
-      : `¿Pausar ${activeBrowsers.length} navegadores?`;
-    
-    if (!confirm(confirmMessage)) return;
-
-    setPausingAll(true);
-
-    try {
-      const newState = !allPaused;
-      
-      // Pausar/Reanudar todos los navegadores activos
-      const promises = activeBrowsers.map(browser =>
-        FirebaseAPI.togglePause(browser.browserName, newState)
-      );
-      
-      await Promise.all(promises);
-      
-      alert(`${activeBrowsers.length} navegadores ${newState ? "pausados" : "reanudados"} correctamente`);
-    } catch (error) {
-      alert("Error al cambiar el estado de los navegadores");
-    } finally {
-      setPausingAll(false);
     }
   };
 
@@ -428,7 +404,47 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     ...data,
   }));
 
-  browserList.sort((a, b) => {
+  // 🆕 EXPANDIR NAVEGADORES MULTI-POST EN FILAS INDIVIDUALES
+  const expandedBrowserList: ExpandedBrowser[] = browserList.flatMap((browser) => {
+    // CASO 1: Navegador single-post (sin cambios)
+    if (!browser.isMultiPost || !browser.posts || Object.keys(browser.posts).length === 0) {
+      return [{
+        ...browser,
+        displayName: browser.browserName || browser.name,
+        postIndex: null,
+        totalPosts: 1,
+        isExpandedPost: false,
+      }];
+    }
+
+    // CASO 2: Navegador multi-post (expandir en múltiples filas)
+    const posts = Object.entries(browser.posts);
+    const activePostCount = browser.postCount || posts.length;
+    
+    return posts.slice(0, activePostCount).map(([postId, postData], index) => ({
+      // Datos del navegador base
+      ...browser,
+      
+      // 🎯 DATOS ESPECÍFICOS DEL POST (sobrescriben los del navegador)
+      displayName: `${browser.browserName}-${index + 1}`, // "Billone-1", "Billone-2"
+      clientName: postData.clientName,
+      phoneNumber: postData.phoneNumber,
+      city: postData.city,
+      location: postData.location,
+      postName: postData.postName,
+      rentalExpiration: postData.rentalExpiration,
+      rentalRemaining: postData.rentalRemaining,
+      isPaused: postData.isPaused,
+      
+      // Metadata adicional
+      postId: postId,
+      postIndex: index + 1,
+      totalPosts: activePostCount,
+      isExpandedPost: true,
+    }));
+  });
+
+  expandedBrowserList.sort((a, b) => {
     const statusA = getConnectionStatus(a);
     const statusB = getConnectionStatus(b);
 
@@ -437,20 +453,78 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
     if (statusA.status === "error" && statusB.status !== "error") return -1;
     if (statusA.status !== "error" && statusB.status === "error") return 1;
 
-    const getRentalDays = (browser: BrowserData) => {
+    const getRentalDays = (browser: ExpandedBrowser) => {
       if (!browser.rentalRemaining || browser.rentalRemaining.days === -1) return 999;
       return browser.rentalRemaining.days + browser.rentalRemaining.hours / 24;
     };
     return getRentalDays(a) - getRentalDays(b);
   });
 
+  // 🆕 CALCULAR SI TODOS ESTÁN PAUSADOS (usando expandedBrowserList)
+  useEffect(() => {
+    const totalActive = expandedBrowserList.filter(b => 
+      getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    const totalPaused = expandedBrowserList.filter(b => 
+      b.isPaused && getConnectionStatus(b).status !== "offline"
+    ).length;
+    
+    setAllPaused(totalActive > 0 && totalActive === totalPaused);
+  }, [browsers]);
+
+  // 🆕 FUNCIÓN PAUSAR/REANUDAR TODAS
+  const handlePauseAll = async () => {
+    const activeBrowsers = expandedBrowserList.filter(b => 
+      getConnectionStatus(b).status !== "offline"
+    );
+    
+    if (activeBrowsers.length === 0) {
+      alert("No hay navegadores activos para pausar/reanudar");
+      return;
+    }
+
+    const confirmMessage = allPaused
+      ? `¿Reanudar ${activeBrowsers.length} posts/navegadores?`
+      : `¿Pausar ${activeBrowsers.length} posts/navegadores?`;
+    
+    if (!confirm(confirmMessage)) return;
+
+    setPausingAll(true);
+
+    try {
+      const newState = !allPaused;
+      
+      // Pausar/Reanudar todos los posts activos
+      const promises = activeBrowsers.map(browser => {
+        const baseBrowserName = browser.isExpandedPost 
+          ? browser.browserName 
+          : browser.browserName;
+        
+        return FirebaseAPI.togglePausePost(
+          baseBrowserName,
+          browser.isExpandedPost ? browser.postId : undefined,
+          newState
+        );
+      });
+      
+      await Promise.all(promises);
+      
+      alert(`${activeBrowsers.length} posts/navegadores ${newState ? "pausados" : "reanudados"} correctamente`);
+    } catch (error) {
+      alert("Error al cambiar el estado de los navegadores");
+    } finally {
+      setPausingAll(false);
+    }
+  };
+
   const stats = {
-    total: browserList.length,
-    online: browserList.filter((b) => getConnectionStatus(b).status === "online").length,
-    offline: browserList.filter((b) => getConnectionStatus(b).status === "offline").length,
-    error: browserList.filter((b) => getConnectionStatus(b).status === "error").length,
-    paused: browserList.filter((b) => getConnectionStatus(b).status === "paused").length,
-    debt: browserList.filter((b) => {
+    total: expandedBrowserList.length,
+    online: expandedBrowserList.filter((b) => getConnectionStatus(b).status === "online").length,
+    offline: expandedBrowserList.filter((b) => getConnectionStatus(b).status === "offline").length,
+    error: expandedBrowserList.filter((b) => getConnectionStatus(b).status === "error").length,
+    paused: expandedBrowserList.filter((b) => getConnectionStatus(b).status === "paused").length,
+    debt: expandedBrowserList.filter((b) => {
       const rental = b.rentalRemaining;
       return rental && (rental.days < 0 || (rental as any).isDebt === true);
     }).length,
@@ -530,7 +604,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                 <div>
                   <h3 className="text-lg font-semibold text-foreground">Monitoreo en Tiempo Real</h3>
                   <p className="text-sm text-muted-foreground">
-                    {stats.total} usuarios • {stats.online} activos • {stats.offline} desconectados • {stats.error} con errores
+                    {stats.total} posts/navegadores • {stats.online} activos • {stats.offline} desconectados • {stats.error} con errores
                     {stats.debt > 0 && <span className="text-red-500 font-bold"> • {stats.debt} CON DEUDA 💀</span>}
                   </p>
                 </div>
@@ -579,7 +653,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {browserList.map((browser, idx) => {
+                {expandedBrowserList.map((browser, idx) => {
                   const connectionStatus = getConnectionStatus(browser);
                   const rentalStatus = getRentalStatus(browser.rentalRemaining);
                   const StatusIcon = connectionStatus.icon;
@@ -594,7 +668,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
 
                   return (
                     <tr
-                      key={idx}
+                      key={`${browser.browserName}-${browser.postId || 'single'}-${idx}`}
                       className={cn(
                         "transition-colors hover:bg-secondary/20",
                         connectionStatus.status === "offline" && "bg-destructive/5",
@@ -616,7 +690,16 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                               )}
                             />
                           </div>
-                          <span className="font-medium text-foreground">{browser.browserName || browser.name}</span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-foreground">
+                              {browser.displayName}
+                            </span>
+                            {browser.isExpandedPost && (
+                              <span className="text-xs text-muted-foreground">
+                                Post {browser.postIndex}/{browser.totalPosts}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
 
@@ -756,7 +839,7 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
               </tbody>
             </table>
 
-            {browserList.length === 0 && (
+            {expandedBrowserList.length === 0 && (
               <div className="py-12 text-center text-muted-foreground">
                 <UsersIcon className="mx-auto mb-3 h-12 w-12 opacity-50" />
                 <p>No hay usuarios. Crea uno arriba.</p>
@@ -778,7 +861,10 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-foreground">Ajustar Tiempo de Renta</h3>
-                  <p className="text-sm text-muted-foreground">{rentalBrowser.browserName}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {rentalBrowser.displayName}
+                    {rentalBrowser.isExpandedPost && ` - ${rentalBrowser.clientName}`}
+                  </p>
                 </div>
               </div>
               <Button
@@ -891,12 +977,18 @@ export function AdminPanel({ isAuthenticated, onLogin, isOpen = true, onClose }:
 
             <div className="mb-6 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
               <div className="mb-2 text-xs font-medium text-muted-foreground">Navegador</div>
-              <div className="mb-3 text-lg font-bold text-foreground">{deleteBrowser.browserName}</div>
+              <div className="mb-3 text-lg font-bold text-foreground">{deleteBrowser.displayName}</div>
               
               <div className="mb-1 text-xs font-medium text-muted-foreground">Cliente</div>
               <div className="text-base font-semibold text-primary">
                 {deleteBrowser.clientName || "Sin asignar"}
               </div>
+              
+              {deleteBrowser.isExpandedPost && (
+                <div className="mt-3 rounded-lg bg-warning/10 p-2 text-xs text-warning">
+                  ⚠️ Esto eliminará TODOS los posts de este navegador
+                </div>
+              )}
             </div>
 
             <div className="mb-4 rounded-lg bg-warning/10 p-3 text-sm text-warning">
