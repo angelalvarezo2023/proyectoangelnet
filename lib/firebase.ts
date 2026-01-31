@@ -810,8 +810,19 @@ export const StatsAPI = {
         currentStats.newClients.push(browserName);
       }
       
+      // 🆕 CALCULAR TOTAL CORRECTO INCLUYENDO MULTI-POST
       const allBrowsers = await FirebaseAPI.getAllBrowsers();
-      currentStats.totalClients = Object.keys(allBrowsers).length;
+      let totalCount = 0;
+      
+      Object.values(allBrowsers).forEach(browser => {
+        if (browser.isMultiPost && browser.posts) {
+          totalCount += browser.postCount || Object.keys(browser.posts).length;
+        } else {
+          totalCount += 1;
+        }
+      });
+      
+      currentStats.totalClients = totalCount;
       
       await set(statsRef, currentStats);
       
