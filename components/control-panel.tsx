@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FirebaseAPI, type BrowserData } from "@/lib/firebase";
+import { FirebaseAPI, type BrowserData, type SearchResult } from "@/lib/firebase";
 import { SearchIcon, SettingsIcon, AlertTriangleIcon } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
@@ -90,14 +90,24 @@ function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
   return "text-green-400";
 }
 
-// Componente para tarjeta de navegador - MEJORADO PARA MÓVILES
-function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onClick: () => void; viewMode: 'grid' | 'list' }) {
+// 🆕 Componente para tarjeta de navegador/post - ADAPTADO PARA SEARCH RESULT
+function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onClick: () => void; viewMode: 'grid' | 'list' }) {
   const [localRemaining, setLocalRemaining] = useState<number | null>(null);
   const [progressPercent, setProgressPercent] = useState(0);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  // 🆕 Obtener datos correctos según el tipo
+  const isPaused = result.isPaused ?? false;
+  const republishStatus = result.republishStatus;
+  const rentalRemaining = result.rentalRemaining;
+  const clientName = result.clientName || "Sin nombre";
+  const postName = result.postName;
+  const phoneNumber = result.phoneNumber || "N/A";
+  const city = result.city || "N/A";
+  const location = result.location || "N/A";
+
   useEffect(() => {
-    if (!browser.republishStatus || browser.isPaused) {
+    if (!republishStatus || isPaused) {
       setLocalRemaining(null);
       setProgressPercent(0);
       if (intervalRef.current) {
@@ -107,8 +117,8 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
       return;
     }
 
-    const firebaseRemaining = browser.republishStatus.remainingSeconds;
-    const totalSeconds = browser.republishStatus.totalSeconds;
+    const firebaseRemaining = republishStatus.remainingSeconds;
+    const totalSeconds = republishStatus.totalSeconds;
 
     const shouldUpdate = 
       localRemaining === null || 
@@ -138,16 +148,16 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         intervalRef.current = null;
       }
     };
-  }, [browser.republishStatus?.remainingSeconds, browser.republishStatus?.totalSeconds, browser.isPaused]);
+  }, [republishStatus?.remainingSeconds, republishStatus?.totalSeconds, isPaused]);
 
   useEffect(() => {
-    if (localRemaining !== null && browser.republishStatus) {
-      const totalSeconds = browser.republishStatus.totalSeconds;
+    if (localRemaining !== null && republishStatus) {
+      const totalSeconds = republishStatus.totalSeconds;
       const elapsedSeconds = totalSeconds - localRemaining;
       const progress = totalSeconds > 0 ? ((elapsedSeconds / totalSeconds) * 100) : 0;
       setProgressPercent(Math.min(100, Math.max(0, progress)));
     }
-  }, [localRemaining, browser.republishStatus?.totalSeconds]);
+  }, [localRemaining, republishStatus?.totalSeconds]);
 
   const timeRemaining = localRemaining !== null ? {
     minutes: Math.floor(localRemaining / 60),
@@ -157,29 +167,29 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
   const isCompleted = timeRemaining !== null && timeRemaining.minutes === 0 && timeRemaining.seconds === 0;
   
   const hasDataExtractionError = 
-    (browser.phoneNumber === "N/A" || browser.phoneNumber === "Manual") &&
-    (browser.city === "N/A" || browser.city === "Manual") &&
-    (browser.location === "N/A" || browser.location === "Manual");
+    (phoneNumber === "N/A" || phoneNumber === "Manual") &&
+    (city === "N/A" || city === "Manual") &&
+    (location === "N/A" || location === "Manual");
   
-  const hasRecentError = browser.lastError && 
-    (Date.now() - new Date(browser.lastError.timestamp).getTime()) < 5 * 60 * 1000;
+  const hasRecentError = result.fullData.lastError && 
+    (Date.now() - new Date(result.fullData.lastError.timestamp).getTime()) < 5 * 60 * 1000;
   
-  const hasRepublishFailure = browser.republishStatus && 
-    browser.republishStatus.elapsedSeconds > (browser.republishStatus.totalSeconds + 60);
+  const hasRepublishFailure = republishStatus && 
+    republishStatus.elapsedSeconds > (republishStatus.totalSeconds + 60);
   
   const hasError = hasDataExtractionError || hasRecentError || hasRepublishFailure;
 
-  const showRentalAlert = browser.rentalRemaining && 
-    browser.rentalRemaining.days === 0 && 
-    browser.rentalRemaining.hours < 24;
+  const showRentalAlert = rentalRemaining && 
+    rentalRemaining.days === 0 && 
+    rentalRemaining.hours < 24;
 
   // 🆕 Detectar DEUDA
-  const isDebt = browser.rentalRemaining && 
-    (browser.rentalRemaining.days < 0 || (browser.rentalRemaining as any).isDebt === true);
+  const isDebt = rentalRemaining && 
+    (rentalRemaining.days < 0 || (rentalRemaining as any).isDebt === true);
 
-  const rentalGradient = getRentalGradient(browser.rentalRemaining);
-  const rentalBorderGlow = getRentalBorderGlow(browser.rentalRemaining);
-  const rentalTextColor = getRentalTextColor(browser.rentalRemaining);
+  const rentalGradient = getRentalGradient(rentalRemaining);
+  const rentalBorderGlow = getRentalBorderGlow(rentalRemaining);
+  const rentalTextColor = getRentalTextColor(rentalRemaining);
 
   // 📋 VISTA DE LISTA - MEJORADA PARA MÓVILES
   if (viewMode === 'list') {
@@ -197,31 +207,31 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         <div className="flex items-center gap-3 min-w-[120px] sm:min-w-[100px]">
           <div className={cn(
             "h-4 w-4 sm:h-3 sm:w-3 rounded-full relative",
-            browser.isPaused ? "bg-yellow-400" : "bg-green-400"
+            isPaused ? "bg-yellow-400" : "bg-green-400"
           )}>
-            {!browser.isPaused && (
+            {!isPaused && (
               <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
             )}
           </div>
           <span className={cn(
             "text-base sm:text-sm font-bold",
-            browser.isPaused ? "text-yellow-400" : "text-green-400"
+            isPaused ? "text-yellow-400" : "text-green-400"
           )}>
-            {browser.isPaused ? "Pausado" : "Activo"}
+            {isPaused ? "Pausado" : "Activo"}
           </span>
         </div>
 
         {/* Nombre */}
         <div className="flex-1 min-w-[150px]">
-          <h3 className="text-xl sm:text-lg font-bold text-white">{browser.browserName}</h3>
-          {browser.postName && browser.postName !== "N/A" && (
-            <p className="text-base sm:text-sm text-white/60 mt-1">{browser.postName}</p>
+          <h3 className="text-xl sm:text-lg font-bold text-white">{clientName}</h3>
+          {postName && postName !== "N/A" && (
+            <p className="text-base sm:text-sm text-white/60 mt-1">{postName}</p>
           )}
         </div>
 
         {/* Countdown */}
         <div className="w-full sm:w-auto sm:min-w-[140px] text-center bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
-          {browser.isPaused ? (
+          {isPaused ? (
             <span className="text-xl sm:text-lg font-bold text-yellow-400">⏸ Pausado</span>
           ) : timeRemaining ? (
             <span className="text-3xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
@@ -236,7 +246,7 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         <div className="w-full sm:w-auto sm:min-w-[120px] text-center sm:text-right bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
           <div className="text-sm sm:text-xs text-white/60 mb-1">RENTA</div>
           <div className={cn("text-2xl sm:text-xl font-black", rentalTextColor)}>
-            {formatRentalTime(browser.rentalRemaining)}
+            {formatRentalTime(rentalRemaining)}
           </div>
         </div>
 
@@ -294,15 +304,15 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
               <h4 className="font-black text-xl text-red-300 mb-1">CUENTA VENCIDA</h4>
               <p className="text-sm text-red-200">
                 {(() => {
-                  const absDays = Math.abs(browser.rentalRemaining!.days);
-                  return `Deuda: ${absDays}d ${browser.rentalRemaining!.hours}h ${browser.rentalRemaining!.minutes}m`;
+                  const absDays = Math.abs(rentalRemaining!.days);
+                  return `Deuda: ${absDays}d ${rentalRemaining!.hours}h ${rentalRemaining!.minutes}m`;
                 })()}
               </p>
             </div>
           </div>
           <a 
             href={`https://wa.me/18293837695?text=${encodeURIComponent(
-              `🚨 RENOVAR ${browser.browserName} - Tengo deuda`
+              `🚨 RENOVAR ${clientName} - Tengo deuda`
             )}`}
             target="_blank"
             rel="noopener noreferrer"
@@ -346,7 +356,7 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
             
             <div className="flex-1 text-center sm:text-left">
               <p className="font-black text-xl sm:text-base text-red-400 mb-1">
-                ¡Expira en {browser.rentalRemaining.hours}h {browser.rentalRemaining.minutes}m!
+                ¡Expira en {rentalRemaining.hours}h {rentalRemaining.minutes}m!
               </p>
               <p className="text-sm sm:text-xs text-red-300/80">
                 Tu anuncio será eliminado automáticamente
@@ -355,7 +365,7 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
             
             <a 
               href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                `🚨 URGENTE: Renovar ${browser.browserName} - Expira en ${browser.rentalRemaining.hours}h`
+                `🚨 URGENTE: Renovar ${clientName} - Expira en ${rentalRemaining.hours}h`
               )}`}
               target="_blank"
               rel="noopener noreferrer"
@@ -373,24 +383,24 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         <div className="flex items-center justify-between mb-4">
           <div className={cn(
             "flex items-center gap-3 px-4 py-2 rounded-full backdrop-blur-md border",
-            browser.isPaused 
+            isPaused 
               ? "bg-yellow-500/20 border-yellow-500/30" 
               : "bg-green-500/20 border-green-500/30"
           )}>
             <div className="relative">
               <div className={cn(
                 "h-3 w-3 rounded-full",
-                browser.isPaused ? "bg-yellow-400" : "bg-green-400"
+                isPaused ? "bg-yellow-400" : "bg-green-400"
               )} />
-              {!browser.isPaused && (
+              {!isPaused && (
                 <div className="absolute inset-0 rounded-full bg-green-400 animate-ping" />
               )}
             </div>
             <span className={cn(
               "text-sm font-bold",
-              browser.isPaused ? "text-yellow-400" : "text-green-400"
+              isPaused ? "text-yellow-400" : "text-green-400"
             )}>
-              {browser.isPaused ? "Pausado" : "En Línea"}
+              {isPaused ? "Pausado" : "En Línea"}
             </span>
           </div>
           
@@ -400,10 +410,10 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
         </div>
 
         <h3 className="text-3xl font-black text-white mb-2 tracking-tight">
-          {browser.browserName}
+          {clientName}
         </h3>
-        {browser.postName && browser.postName !== "N/A" && (
-          <p className="text-sm text-white/60">{browser.postName}</p>
+        {postName && postName !== "N/A" && (
+          <p className="text-sm text-white/60">{postName}</p>
         )}
       </div>
 
@@ -419,11 +429,11 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
               </svg>
             </div>
             <span className="text-xs font-bold uppercase tracking-wider text-pink-400">
-              {browser.isPaused ? "⏸ Pausado" : isCompleted ? "✓ Completado" : "Próximo Anuncio"}
+              {isPaused ? "⏸ Pausado" : isCompleted ? "✓ Completado" : "Próximo Anuncio"}
             </span>
           </div>
           
-          {browser.isPaused ? (
+          {isPaused ? (
             <div className="text-center py-4">
               <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
                 ⏸ En Pausa
@@ -477,7 +487,7 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
           <div className="flex items-center gap-2 mb-2">
             <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", 
               isDebt ? "bg-red-600/30" : 
-              browser.rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
+              rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
             )}>
               <span className="text-lg">{isDebt ? "💀" : "⏰"}</span>
             </div>
@@ -488,7 +498,7 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
           
           <div className="text-center py-2">
             <span className={cn("text-5xl font-black", rentalTextColor)}>
-              {formatRentalTime(browser.rentalRemaining)}
+              {formatRentalTime(rentalRemaining)}
             </span>
           </div>
         </div>
@@ -504,27 +514,61 @@ function BrowserCard({ browser, onClick, viewMode }: { browser: BrowserData; onC
 
 export function ControlPanel({ initialBrowserData, initialError }: ControlPanelProps) {
   const [clientSearch, setClientSearch] = useState("");
-  const [browserData, setBrowserData] = useState<BrowserData | null>(initialBrowserData || null);
-  const [browserList, setBrowserList] = useState<BrowserData[]>([]);
+  const [selectedResult, setSelectedResult] = useState<SearchResult | null>(null);
+  const [resultsList, setResultsList] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const [showCriticalModal, setShowCriticalModal] = useState(false);
-  const [criticalBrowser, setCriticalBrowser] = useState<BrowserData | null>(null);
+  const [criticalResult, setCriticalResult] = useState<SearchResult | null>(null);
 
+  // 🆕 Listener para actualizar results en tiempo real
   useEffect(() => {
-    if (browserList.length === 0) return;
+    if (resultsList.length === 0) return;
 
     const unsubscribers: (() => void)[] = [];
 
-    browserList.forEach((browser, index) => {
+    resultsList.forEach((result, index) => {
       const unsubscribe = FirebaseAPI.listenToBrowser(
-        browser.browserName,
+        result.browserName,
         (updatedData) => {
-          setBrowserList(prev => {
+          setResultsList(prev => {
             const newList = [...prev];
-            newList[index] = updatedData;
+            
+            // 🆕 ACTUALIZAR SEGÚN TIPO
+            if (result.type === "single") {
+              // Single-post: actualizar todo
+              newList[index] = {
+                ...result,
+                fullData: updatedData,
+                isPaused: updatedData.isPaused,
+                rentalRemaining: updatedData.rentalRemaining,
+                republishStatus: updatedData.republishStatus,
+                phoneNumber: updatedData.phoneNumber,
+                city: updatedData.city,
+                location: updatedData.location,
+                postName: updatedData.postName,
+              };
+            } else {
+              // Multi-post: actualizar desde posts/
+              if (updatedData.posts && result.postId && updatedData.posts[result.postId]) {
+                const postData = updatedData.posts[result.postId];
+                newList[index] = {
+                  ...result,
+                  fullData: updatedData,
+                  postData: postData,
+                  isPaused: postData.isPaused,
+                  rentalRemaining: postData.rentalRemaining,
+                  republishStatus: updatedData.republishStatus, // Compartido
+                  phoneNumber: postData.phoneNumber,
+                  city: postData.city,
+                  location: postData.location,
+                  postName: postData.postName,
+                };
+              }
+            }
+            
             return newList;
           });
         }
@@ -535,29 +579,31 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
     return () => {
       unsubscribers.forEach(unsub => unsub());
     };
-  }, [browserList.length]);
+  }, [resultsList.length]);
 
+  // 🆕 Modal de renta crítica
   useEffect(() => {
-    if (browserList.length === 0) return;
+    if (resultsList.length === 0) return;
 
-    const criticalBrowsers = browserList.filter(browser => {
-      if (!browser.rentalRemaining) return false;
-      const { days, hours } = browser.rentalRemaining;
+    const criticalResults = resultsList.filter(result => {
+      if (!result.rentalRemaining) return false;
+      const { days, hours } = result.rentalRemaining;
       return days === 0 && hours < 12;
     });
 
-    if (criticalBrowsers.length > 0) {
-      const browser = criticalBrowsers[0];
+    if (criticalResults.length > 0) {
+      const result = criticalResults[0];
+      const clientName = result.clientName || "Sin nombre";
       
-      const lastShown = localStorage.getItem(`modal-renta-${browser.browserName}`);
+      const lastShown = localStorage.getItem(`modal-renta-${clientName}`);
       const sixHoursAgo = Date.now() - (6 * 60 * 60 * 1000);
       
       if (!lastShown || parseInt(lastShown) < sixHoursAgo) {
-        setCriticalBrowser(browser);
+        setCriticalResult(result);
         setShowCriticalModal(true);
       }
     }
-  }, [browserList]);
+  }, [resultsList]);
 
   const handleSearch = async () => {
     if (!clientSearch.trim()) {
@@ -567,30 +613,31 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
 
     setSearching(true);
     setError("");
-    setBrowserData(null);
-    setBrowserList([]);
+    setSelectedResult(null);
+    setResultsList([]);
 
+    // 🆕 USAR NUEVA API
     const results = await FirebaseAPI.findAllBrowsersByClientName(clientSearch);
 
     if (results.length === 0) {
       setError("No encontramos tu nombre. Verifica que esté bien escrito.");
     } else if (results.length === 1) {
-      setBrowserData(results[0]);
+      setSelectedResult(results[0]);
     } else {
-      setBrowserList(results);
+      setResultsList(results);
     }
 
     setSearching(false);
   };
 
-  const handleSelectBrowser = (browser: BrowserData) => {
-    setBrowserData(browser);
+  const handleSelectResult = (result: SearchResult) => {
+    setSelectedResult(result);
   };
 
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        {/* Panel de búsqueda mejorado para móviles */}
+        {/* Panel de búsqueda */}
         <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 min-h-[360px] sm:min-h-[320px] flex flex-col justify-center">
           <div className="mb-6 sm:mb-8 text-center">
             <div className="mx-auto mb-4 flex h-20 w-20 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
@@ -629,7 +676,8 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
           </div>
         </div>
 
-        {browserList.length > 0 && (
+        {/* Lista de resultados */}
+        {resultsList.length > 0 && (
           <div className="mt-8 space-y-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="text-center sm:text-left flex-1 w-full sm:w-auto">
@@ -637,7 +685,7 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   Tus Perfiles
                 </h3>
                 <p className="text-base md:text-base text-muted-foreground">
-                  {browserList.length} {browserList.length === 1 ? "perfil" : "perfiles"}
+                  {resultsList.length} {resultsList.length === 1 ? "perfil" : "perfiles"}
                 </p>
               </div>
 
@@ -674,11 +722,11 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 ? "grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2" 
                 : "space-y-3"
             )}>
-              {browserList.map((browser) => (
+              {resultsList.map((result, idx) => (
                 <BrowserCard
-                  key={browser.browserName}
-                  browser={browser}
-                  onClick={() => handleSelectBrowser(browser)}
+                  key={`${result.browserName}-${result.postId || 'single'}-${idx}`}
+                  result={result}
+                  onClick={() => handleSelectResult(result)}
                   viewMode={viewMode}
                 />
               ))}
@@ -687,16 +735,18 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         )}
       </div>
 
-      {browserData && (
+      {/* Dashboard modal */}
+      {selectedResult && (
         <Dashboard
-          browserData={browserData}
+          searchResult={selectedResult}
           onClose={() => {
-            setBrowserData(null);
+            setSelectedResult(null);
           }}
         />
       )}
 
-      {showCriticalModal && criticalBrowser && criticalBrowser.rentalRemaining && (
+      {/* Modal de renta crítica */}
+      {showCriticalModal && criticalResult && criticalResult.rentalRemaining && (
         <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4 animate-in fade-in duration-500 backdrop-blur-sm">
           <div className="bg-card border-4 border-destructive rounded-2xl max-w-lg w-full shadow-2xl animate-in zoom-in duration-300 relative overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-destructive/20 via-transparent to-destructive/20 animate-pulse" />
@@ -720,14 +770,14 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   <div className="flex items-center justify-center gap-2">
                     <div className="bg-black/40 rounded-lg px-4 py-2">
                       <div className="text-4xl font-black text-destructive tabular-nums">
-                        {criticalBrowser.rentalRemaining.hours.toString().padStart(2, '0')}
+                        {criticalResult.rentalRemaining.hours.toString().padStart(2, '0')}
                       </div>
                       <div className="text-xs text-muted-foreground">horas</div>
                     </div>
                     <div className="text-3xl font-bold text-destructive">:</div>
                     <div className="bg-black/40 rounded-lg px-4 py-2">
                       <div className="text-4xl font-black text-destructive tabular-nums">
-                        {criticalBrowser.rentalRemaining.minutes.toString().padStart(2, '0')}
+                        {criticalResult.rentalRemaining.minutes.toString().padStart(2, '0')}
                       </div>
                       <div className="text-xs text-muted-foreground">minutos</div>
                     </div>
@@ -768,15 +818,16 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                   </ul>
                 </div>
 
-                <a
+                
                   href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                    `🚨 URGENTE: Renovar ${criticalBrowser.browserName} - Expira en ${criticalBrowser.rentalRemaining.hours}h ${criticalBrowser.rentalRemaining.minutes}m`
+                    `🚨 URGENTE: Renovar ${criticalResult.clientName} - Expira en ${criticalResult.rentalRemaining.hours}h ${criticalResult.rentalRemaining.minutes}m`
                   )}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="block w-full bg-gradient-to-r from-destructive to-pink-600 text-white py-4 rounded-xl font-black text-lg mb-4 hover:scale-105 transition-transform shadow-lg shadow-destructive/50 uppercase tracking-wide"
                   onClick={() => {
-                    localStorage.setItem(`modal-renta-${criticalBrowser.browserName}`, Date.now().toString());
+                    const clientName = criticalResult.clientName || "Sin nombre";
+                    localStorage.setItem(`modal-renta-${clientName}`, Date.now().toString());
                     setShowCriticalModal(false);
                   }}
                 >
@@ -785,7 +836,8 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
                 
                 <button
                   onClick={() => {
-                    localStorage.setItem(`modal-renta-${criticalBrowser.browserName}`, Date.now().toString());
+                    const clientName = criticalResult.clientName || "Sin nombre";
+                    localStorage.setItem(`modal-renta-${clientName}`, Date.now().toString());
                     setShowCriticalModal(false);
                   }}
                   className="text-muted-foreground text-sm hover:text-foreground transition-colors underline"
