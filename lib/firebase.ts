@@ -14,14 +14,13 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyABwJCZpBeCXu0-X16HpKnHoJXL4tVjTAY",
-  authDomain: "megapersonals-4f24c.firebaseapp.com",
-  databaseURL: "https://megapersonals-4f24c-default-rtdb.firebaseio.com",
-  projectId: "megapersonals-4f24c",
-  storageBucket: "megapersonals-4f24c.firebasestorage.app",
-  messagingSenderId: "35208143914",
-  appId: "1:35208143914:web:06ffcc05069eaf88af0f53",
-  measurementId: "G-EMFS14MSGS"
+  apiKey: "AIzaSyCnFuJqTuAXWYcg5N9rz0eNgQDj7JFEEjw",
+  authDomain: "megapersonals-control.firebaseapp.com",
+  databaseURL: "https://megapersonals-control-default-rtdb.firebaseio.com",
+  projectId: "megapersonals-control",
+  storageBucket: "megapersonals-control.firebasestorage.app",
+  messagingSenderId: "530333025314",
+  appId: "1:530333025314:web:f61e35f980195be437367b"
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
