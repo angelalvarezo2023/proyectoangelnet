@@ -330,9 +330,36 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     });
   }, [browserName, debounce, actionLoading, isPaused]);
 
-  const handleOpenEditor = () => {
+  const handleOpenEditor = async () => {
     userIsEditingRef.current = false;
     
+    // 🆕 TRAER VENTANA AL FRENTE ANTES DE ABRIR MODAL
+    try {
+      console.log('[Dashboard]: 📍 Enviando comando para traer ventana al frente...');
+      
+      // Enviar comando a Firebase
+      const FIREBASE_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
+      
+      await fetch(`${FIREBASE_URL}/commands/${browserName}.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'bring_to_front',
+          timestamp: Date.now()
+        })
+      });
+      
+      console.log('[Dashboard]: ✅ Comando enviado, esperando 800ms para que la ventana venga al frente...');
+      
+      // Esperar un momento para que la ventana se traiga al frente
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+    } catch (error) {
+      console.error('[Dashboard]: ⚠️ Error enviando comando bring_to_front:', error);
+      // Continuar de todas formas y abrir el modal
+    }
+    
+    // Abrir modal de edición
     setEditForm({
       name: name || "",
       age: age ? String(age) : "",
@@ -343,6 +370,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     });
     
     setShowEditForm(true);
+    console.log('[Dashboard]: ✅ Modal de edición abierto');
   };
 
   // Manejo del historial del navegador para el modal de edición
