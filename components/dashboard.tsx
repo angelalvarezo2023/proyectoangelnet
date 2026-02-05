@@ -356,10 +356,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         })
       });
       
-      console.log('[Dashboard]: ✅ Comando enviado, esperando 800ms para que la ventana venga al frente...');
+      console.log('[Dashboard]: ✅ Comando enviado, esperando 1500ms para que la ventana venga al frente...');
       
       // Esperar un momento para que la ventana se traiga al frente
-      await new Promise(resolve => setTimeout(resolve, 800));
+      await new Promise(resolve => setTimeout(resolve, 1500));
       
     } catch (error) {
       console.error('[Dashboard]: ⚠️ Error enviando comando bring_to_front:', error);
