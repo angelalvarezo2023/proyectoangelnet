@@ -116,6 +116,23 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   
   const canEdit = !editInProgress;
 
+  // Manejo del historial del navegador para el modal principal
+  useEffect(() => {
+    // Agregar entrada al historial cuando se monta el componente
+    window.history.pushState({ modalOpen: true }, '');
+
+    const handlePopState = (event: PopStateEvent) => {
+      // Si el usuario presiona atrás y el modal está abierto, cerrarlo
+      onClose();
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onClose]);
+
   useEffect(() => {
     if (!republishStatus || isPaused) return;
 
@@ -322,6 +339,45 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     setShowEditForm(true);
   };
 
+  // Manejo del historial del navegador para el modal de edición
+  useEffect(() => {
+    if (!showEditForm) return;
+
+    // Agregar entrada al historial cuando se abre el modal de edición
+    window.history.pushState({ editFormOpen: true }, '');
+
+    const handlePopState = () => {
+      setShowEditForm(false);
+      setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showEditForm]);
+
+  // Manejo del historial del navegador para el modal de captcha
+  useEffect(() => {
+    if (!showCaptchaForm) return;
+
+    // Agregar entrada al historial cuando se abre el modal de captcha
+    window.history.pushState({ captchaFormOpen: true }, '');
+
+    const handlePopState = () => {
+      setShowCaptchaForm(false);
+      setCaptchaCode("");
+      modalManuallyControlledRef.current = false;
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [showCaptchaForm]);
+
   const handleFieldChange = (field: keyof typeof editForm, value: string) => {
     userIsEditingRef.current = true;
     setEditForm(prev => ({ ...prev, [field]: value }));
@@ -403,8 +459,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       if (result.success) {
         alert("Edicion iniciada. El sistema procesara los cambios automaticamente.");
         userIsEditingRef.current = false;
-        setShowEditForm(false);
-        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        window.history.back();
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -436,9 +491,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        setShowCaptchaForm(false);
-        setCaptchaCode("");
-        modalManuallyControlledRef.current = false;
+        window.history.back();
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -450,9 +503,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleCaptchaCancel = () => {
-    setShowCaptchaForm(false);
-    setCaptchaCode("");
-    modalManuallyControlledRef.current = false;
+    window.history.back();
   };
 
   const handleCaptchaRefresh = async () => {
@@ -493,7 +544,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
           <div className="border-b border-border/50 px-4 sm:px-6 py-3 sm:py-4">
             <Button 
               variant="ghost" 
-              onClick={onClose} 
+              onClick={() => {
+                window.history.back();
+              }} 
               className="flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-xl px-3 sm:px-4 py-2 h-auto text-sm sm:text-base"
             >
               <svg 
@@ -836,7 +889,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
             </div>
 
-            <Button onClick={onClose} variant="outline" className="w-full bg-transparent h-12 sm:h-14 text-sm sm:text-base">
+            <Button onClick={() => window.history.back()} variant="outline" className="w-full bg-transparent h-12 sm:h-14 text-sm sm:text-base">
               Cerrar
             </Button>
           </div>
@@ -1324,8 +1377,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     }
                     
                     userIsEditingRef.current = false;
-                    setShowEditForm(false);
-                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                    window.history.back();
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
