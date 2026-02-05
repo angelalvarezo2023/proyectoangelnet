@@ -185,6 +185,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
           setShowCaptchaForm(false);
           setCaptchaCode("");
           modalManuallyControlledRef.current = false;
+          // Limpiar el historial si existe la entrada
+          setTimeout(() => {
+            if (window.history.state?.captchaFormOpen) {
+              window.history.back();
+            }
+          }, 100);
         }
 
         if (modalManuallyControlledRef.current) {
@@ -347,8 +353,11 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     window.history.pushState({ editFormOpen: true }, '');
 
     const handlePopState = () => {
-      setShowEditForm(false);
-      setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+      // Solo cerrar si el modal aún está abierto
+      if (showEditForm) {
+        setShowEditForm(false);
+        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -366,9 +375,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     window.history.pushState({ captchaFormOpen: true }, '');
 
     const handlePopState = () => {
-      setShowCaptchaForm(false);
-      setCaptchaCode("");
-      modalManuallyControlledRef.current = false;
+      // Solo cerrar si el modal aún está abierto
+      if (showCaptchaForm) {
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
+      }
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -459,7 +471,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       if (result.success) {
         alert("Edicion iniciada. El sistema procesara los cambios automaticamente.");
         userIsEditingRef.current = false;
-        window.history.back();
+        setShowEditForm(false);
+        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        // Limpiar el historial después de un pequeño delay
+        setTimeout(() => {
+          if (window.history.state?.editFormOpen) {
+            window.history.back();
+          }
+        }, 100);
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -491,7 +510,15 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        window.history.back();
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
+        // Limpiar el historial después de un pequeño delay
+        setTimeout(() => {
+          if (window.history.state?.captchaFormOpen) {
+            window.history.back();
+          }
+        }, 100);
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -503,7 +530,15 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleCaptchaCancel = () => {
-    window.history.back();
+    setShowCaptchaForm(false);
+    setCaptchaCode("");
+    modalManuallyControlledRef.current = false;
+    // Limpiar el historial después de un pequeño delay
+    setTimeout(() => {
+      if (window.history.state?.captchaFormOpen) {
+        window.history.back();
+      }
+    }, 100);
   };
 
   const handleCaptchaRefresh = async () => {
@@ -1377,7 +1412,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     }
                     
                     userIsEditingRef.current = false;
-                    window.history.back();
+                    setShowEditForm(false);
+                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                    // Limpiar el historial después de un pequeño delay
+                    setTimeout(() => {
+                      if (window.history.state?.editFormOpen) {
+                        window.history.back();
+                      }
+                    }, 100);
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
