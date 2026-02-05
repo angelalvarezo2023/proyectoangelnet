@@ -511,7 +511,7 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 PAUSAR POST INDIVIDUAL (si es multi-post)
+  // 🆕 PAUSAR POST INDIVIDUAL (MODIFICADO - AHORA ENVÍA COMANDO)
   async togglePausePost(browserName: string, postId: string | undefined, newState: boolean) {
     try {
       const browserData = await this.findBrowserByName(browserName);
@@ -526,6 +526,10 @@ export const FirebaseAPI = {
           isPaused: newState,
           lastUpdate: new Date().toISOString(),
         });
+        
+        // 🆕 ENVIAR COMANDO AL BOT
+        await this.sendCommand(browserName, newState ? 'pause' : 'resume');
+        
         return { success: true };
       }
 
@@ -539,6 +543,9 @@ export const FirebaseAPI = {
       await update(ref(database, `browsers/${browserName}`), {
         lastUpdate: new Date().toISOString(),
       });
+
+      // 🆕 ENVIAR COMANDO AL BOT CON POST ID
+      await this.sendCommand(browserName, newState ? 'pause' : 'resume', { postId });
 
       return { success: true };
     } catch (error) {
