@@ -182,15 +182,22 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         }
 
         if (!newData.captchaWaiting && showCaptchaForm) {
-          setShowCaptchaForm(false);
-          setCaptchaCode("");
-          modalManuallyControlledRef.current = false;
-          // Limpiar el historial si existe la entrada
-          setTimeout(() => {
-            if (window.history.state?.captchaFormOpen) {
-              window.history.back();
-            }
-          }, 100);
+          // Limpiar entrada del historial ANTES de cerrar el modal
+          if (window.history.state?.captchaFormOpen) {
+            window.history.back();
+            // Esperar a que el popstate se procese
+            setTimeout(() => {
+              // Si el modal no se cerró automáticamente, cerrarlo manualmente
+              setShowCaptchaForm(false);
+              setCaptchaCode("");
+              modalManuallyControlledRef.current = false;
+            }, 50);
+          } else {
+            // Si no hay entrada en el historial, solo cerrar el modal
+            setShowCaptchaForm(false);
+            setCaptchaCode("");
+            modalManuallyControlledRef.current = false;
+          }
         }
 
         if (modalManuallyControlledRef.current) {
@@ -378,7 +385,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     if (!showEditForm) return;
 
     // Agregar entrada al historial cuando se abre el modal de edición
-    window.history.pushState({ editFormOpen: true }, '');
+    const historyState = { editFormOpen: true, timestamp: Date.now() };
+    window.history.pushState(historyState, '');
 
     const handlePopState = () => {
       // Solo cerrar si el modal aún está abierto
@@ -400,7 +408,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     if (!showCaptchaForm) return;
 
     // Agregar entrada al historial cuando se abre el modal de captcha
-    window.history.pushState({ captchaFormOpen: true }, '');
+    const historyState = { captchaFormOpen: true, timestamp: Date.now() };
+    window.history.pushState(historyState, '');
 
     const handlePopState = () => {
       // Solo cerrar si el modal aún está abierto
@@ -499,14 +508,21 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       if (result.success) {
         alert("Edicion iniciada. El sistema procesara los cambios automaticamente.");
         userIsEditingRef.current = false;
-        setShowEditForm(false);
-        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-        // Limpiar el historial después de un pequeño delay
-        setTimeout(() => {
-          if (window.history.state?.editFormOpen) {
-            window.history.back();
-          }
-        }, 100);
+        
+        // Limpiar entrada del historial ANTES de cerrar el modal
+        if (window.history.state?.editFormOpen) {
+          window.history.back();
+          // Esperar a que el popstate se procese
+          setTimeout(() => {
+            // Si el modal no se cerró automáticamente, cerrarlo manualmente
+            setShowEditForm(false);
+            setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+          }, 50);
+        } else {
+          // Si no hay entrada en el historial, solo cerrar el modal
+          setShowEditForm(false);
+          setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        }
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -538,15 +554,22 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        setShowCaptchaForm(false);
-        setCaptchaCode("");
-        modalManuallyControlledRef.current = false;
-        // Limpiar el historial después de un pequeño delay
-        setTimeout(() => {
-          if (window.history.state?.captchaFormOpen) {
-            window.history.back();
-          }
-        }, 100);
+        // Limpiar entrada del historial ANTES de cerrar el modal
+        if (window.history.state?.captchaFormOpen) {
+          window.history.back();
+          // Esperar a que el popstate se procese
+          setTimeout(() => {
+            // Si el modal no se cerró automáticamente, cerrarlo manualmente
+            setShowCaptchaForm(false);
+            setCaptchaCode("");
+            modalManuallyControlledRef.current = false;
+          }, 50);
+        } else {
+          // Si no hay entrada en el historial, solo cerrar el modal
+          setShowCaptchaForm(false);
+          setCaptchaCode("");
+          modalManuallyControlledRef.current = false;
+        }
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -558,15 +581,22 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleCaptchaCancel = () => {
-    setShowCaptchaForm(false);
-    setCaptchaCode("");
-    modalManuallyControlledRef.current = false;
-    // Limpiar el historial después de un pequeño delay
-    setTimeout(() => {
-      if (window.history.state?.captchaFormOpen) {
-        window.history.back();
-      }
-    }, 100);
+    // Limpiar entrada del historial ANTES de cerrar el modal
+    if (window.history.state?.captchaFormOpen) {
+      window.history.back();
+      // Esperar a que el popstate se procese
+      setTimeout(() => {
+        // Si el modal no se cerró automáticamente, cerrarlo manualmente
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
+      }, 50);
+    } else {
+      // Si no hay entrada en el historial, solo cerrar el modal
+      setShowCaptchaForm(false);
+      setCaptchaCode("");
+      modalManuallyControlledRef.current = false;
+    }
   };
 
   const handleCaptchaRefresh = async () => {
@@ -1440,14 +1470,21 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     }
                     
                     userIsEditingRef.current = false;
-                    setShowEditForm(false);
-                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-                    // Limpiar el historial después de un pequeño delay
-                    setTimeout(() => {
-                      if (window.history.state?.editFormOpen) {
-                        window.history.back();
-                      }
-                    }, 100);
+                    
+                    // Limpiar entrada del historial ANTES de cerrar el modal
+                    if (window.history.state?.editFormOpen) {
+                      window.history.back();
+                      // Esperar a que el popstate se procese
+                      setTimeout(() => {
+                        // Si el modal no se cerró automáticamente, cerrarlo manualmente
+                        setShowEditForm(false);
+                        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                      }, 50);
+                    } else {
+                      // Si no hay entrada en el historial, solo cerrar el modal
+                      setShowEditForm(false);
+                      setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                    }
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
