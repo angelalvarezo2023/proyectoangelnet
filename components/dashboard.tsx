@@ -181,23 +181,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
           previousRepublishRef.current = newData.republishStatus;
         }
 
+        // CORRECCIÓN: Cerrar modal de captcha solo cuando captchaWaiting sea false
         if (!newData.captchaWaiting && showCaptchaForm) {
-          // Limpiar entrada del historial ANTES de cerrar el modal
-          if (window.history.state?.captchaFormOpen) {
-            window.history.back();
-            // Esperar a que el popstate se procese
-            setTimeout(() => {
-              // Si el modal no se cerró automáticamente, cerrarlo manualmente
-              setShowCaptchaForm(false);
-              setCaptchaCode("");
-              modalManuallyControlledRef.current = false;
-            }, 50);
-          } else {
-            // Si no hay entrada en el historial, solo cerrar el modal
-            setShowCaptchaForm(false);
-            setCaptchaCode("");
-            modalManuallyControlledRef.current = false;
-          }
+          // Cerrar directamente sin usar history.back()
+          setShowCaptchaForm(false);
+          setCaptchaCode("");
+          modalManuallyControlledRef.current = false;
         }
 
         if (modalManuallyControlledRef.current) {
@@ -509,20 +498,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         alert("Edicion iniciada. El sistema procesara los cambios automaticamente.");
         userIsEditingRef.current = false;
         
-        // Limpiar entrada del historial ANTES de cerrar el modal
-        if (window.history.state?.editFormOpen) {
-          window.history.back();
-          // Esperar a que el popstate se procese
-          setTimeout(() => {
-            // Si el modal no se cerró automáticamente, cerrarlo manualmente
-            setShowEditForm(false);
-            setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-          }, 50);
-        } else {
-          // Si no hay entrada en el historial, solo cerrar el modal
-          setShowEditForm(false);
-          setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-        }
+        // CORRECCIÓN: Cerrar directamente sin usar history.back()
+        setShowEditForm(false);
+        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -554,22 +532,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        // Limpiar entrada del historial ANTES de cerrar el modal
-        if (window.history.state?.captchaFormOpen) {
-          window.history.back();
-          // Esperar a que el popstate se procese
-          setTimeout(() => {
-            // Si el modal no se cerró automáticamente, cerrarlo manualmente
-            setShowCaptchaForm(false);
-            setCaptchaCode("");
-            modalManuallyControlledRef.current = false;
-          }, 50);
-        } else {
-          // Si no hay entrada en el historial, solo cerrar el modal
-          setShowCaptchaForm(false);
-          setCaptchaCode("");
-          modalManuallyControlledRef.current = false;
-        }
+        // CORRECCIÓN: Cerrar directamente sin usar history.back()
+        // El modal se cerrará automáticamente cuando captchaWaiting se ponga en false desde Firebase
+        // No necesitamos cerrar manualmente aquí
+        setCaptchaCode("");
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -581,22 +547,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleCaptchaCancel = () => {
-    // Limpiar entrada del historial ANTES de cerrar el modal
-    if (window.history.state?.captchaFormOpen) {
-      window.history.back();
-      // Esperar a que el popstate se procese
-      setTimeout(() => {
-        // Si el modal no se cerró automáticamente, cerrarlo manualmente
-        setShowCaptchaForm(false);
-        setCaptchaCode("");
-        modalManuallyControlledRef.current = false;
-      }, 50);
-    } else {
-      // Si no hay entrada en el historial, solo cerrar el modal
-      setShowCaptchaForm(false);
-      setCaptchaCode("");
-      modalManuallyControlledRef.current = false;
-    }
+    // CORRECCIÓN: Cerrar directamente sin usar history.back()
+    setShowCaptchaForm(false);
+    setCaptchaCode("");
+    modalManuallyControlledRef.current = false;
   };
 
   const handleCaptchaRefresh = async () => {
@@ -1471,20 +1425,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     
                     userIsEditingRef.current = false;
                     
-                    // Limpiar entrada del historial ANTES de cerrar el modal
-                    if (window.history.state?.editFormOpen) {
-                      window.history.back();
-                      // Esperar a que el popstate se procese
-                      setTimeout(() => {
-                        // Si el modal no se cerró automáticamente, cerrarlo manualmente
-                        setShowEditForm(false);
-                        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-                      }, 50);
-                    } else {
-                      // Si no hay entrada en el historial, solo cerrar el modal
-                      setShowEditForm(false);
-                      setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-                    }
+                    // CORRECCIÓN: Cerrar directamente sin usar history.back()
+                    setShowEditForm(false);
+                    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
