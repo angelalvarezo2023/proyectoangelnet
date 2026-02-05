@@ -114,7 +114,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const captchaImage = liveData.fullData.captchaImage;
   const manuallyCreated = liveData.fullData.manuallyCreated;
   
-  // 🔒 NUEVO: Variable para saber si ESTE usuario puede editar
   const canEdit = !editInProgress;
 
   useEffect(() => {
@@ -334,7 +333,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleSaveAllEdits = async () => {
-    // 🔒 BLOQUEO SILENCIOSO: Si hay edición en curso, simplemente no hace nada
     if (!canEdit) {
       return;
     }
@@ -487,67 +485,88 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/90 p-4 backdrop-blur-md">
-        <div className="relative my-8 w-full max-w-2xl overflow-hidden rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10">
+      <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background/90 p-2 sm:p-4 backdrop-blur-md">
+        <div className="relative my-4 sm:my-8 w-full max-w-2xl overflow-hidden rounded-2xl sm:rounded-3xl border border-border/50 bg-gradient-to-b from-card to-card/80 shadow-2xl shadow-primary/10">
           <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-pink-400 to-accent" />
           
-          <div className="flex items-center justify-between border-b border-border/50 p-6">
-            <div className="flex items-center gap-4">
-              <div
-                className={cn(
-                  "relative flex h-16 w-16 sm:h-14 sm:w-14 items-center justify-center rounded-2xl shadow-lg",
-                  isPaused 
-                    ? "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 shadow-yellow-500/10" 
-                    : "bg-gradient-to-br from-primary/20 to-accent/20 shadow-primary/10"
-                )}
+          {/* NUEVO: Botón Atrás en la parte superior */}
+          <div className="border-b border-border/50 px-4 sm:px-6 py-3 sm:py-4">
+            <Button 
+              variant="ghost" 
+              onClick={onClose} 
+              className="flex items-center gap-2 text-muted-foreground hover:text-foreground hover:bg-secondary/50 rounded-xl px-3 sm:px-4 py-2 h-auto text-sm sm:text-base"
+            >
+              <svg 
+                xmlns="http://www.w3.org/2000/svg" 
+                width="18" 
+                height="18" 
+                viewBox="0 0 24 24" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round" 
+                strokeLinejoin="round"
+                className="sm:w-5 sm:h-5"
               >
-                <div className={cn(
-                  "absolute inset-0 rounded-2xl opacity-50",
-                  isPaused ? "animate-pulse bg-yellow-500/10" : "animate-pulse bg-primary/10"
-                )} />
-                <div
-                  className={cn(
-                    "relative h-5 w-5 sm:h-4 sm:w-4 rounded-full shadow-lg",
-                    isPaused 
-                      ? "bg-yellow-400 shadow-yellow-400/50" 
-                      : "animate-pulse bg-green-400 shadow-green-400/50"
-                  )}
-                />
-              </div>
-              <div>
-                <h2 className="text-2xl sm:text-xl font-bold text-foreground">
-                  {clientName}
-                </h2>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span
-                    className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm sm:text-xs font-semibold border",
-                      isPaused 
-                        ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" 
-                        : "bg-green-500/10 text-green-400 border-green-500/20"
-                    )}
-                  >
-                    <span className={cn(
-                      "h-2 w-2 sm:h-1.5 sm:w-1.5 rounded-full",
-                      isPaused ? "bg-yellow-400" : "animate-pulse bg-green-400"
-                    )} />
-                    {isPaused ? "Pausado" : "Activo"}
-                  </span>
-                  {editInProgress && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm sm:text-xs font-semibold text-primary border border-primary/20">
-                      <span className="h-2 w-2 sm:h-1.5 sm:w-1.5 animate-spin rounded-full border border-primary border-t-transparent" />
-                      Editando
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-xl h-12 w-12 sm:h-10 sm:w-10 text-muted-foreground hover:text-foreground hover:bg-secondary/50">
-              <XIcon className="h-6 w-6 sm:h-5 sm:w-5" />
+                <path d="M19 12H5M12 19l-7-7 7-7"/>
+              </svg>
+              <span className="font-semibold">Atrás</span>
             </Button>
           </div>
 
-          <div className="space-y-6 p-6">
+          {/* Sección de información del usuario */}
+          <div className="flex items-center gap-3 sm:gap-4 px-4 sm:px-6 py-4 sm:py-6 border-b border-border/50">
+            <div
+              className={cn(
+                "relative flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-xl sm:rounded-2xl shadow-lg flex-shrink-0",
+                isPaused 
+                  ? "bg-gradient-to-br from-yellow-500/20 to-orange-500/20 shadow-yellow-500/10" 
+                  : "bg-gradient-to-br from-primary/20 to-accent/20 shadow-primary/10"
+              )}
+            >
+              <div className={cn(
+                "absolute inset-0 rounded-xl sm:rounded-2xl opacity-50",
+                isPaused ? "animate-pulse bg-yellow-500/10" : "animate-pulse bg-primary/10"
+              )} />
+              <div
+                className={cn(
+                  "relative h-4 w-4 sm:h-4 sm:w-4 rounded-full shadow-lg",
+                  isPaused 
+                    ? "bg-yellow-400 shadow-yellow-400/50" 
+                    : "animate-pulse bg-green-400 shadow-green-400/50"
+                )}
+              />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg sm:text-xl font-bold text-foreground truncate">
+                {clientName}
+              </h2>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 sm:gap-1.5 rounded-full px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold border",
+                    isPaused 
+                      ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" 
+                      : "bg-green-500/10 text-green-400 border-green-500/20"
+                  )}
+                >
+                  <span className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    isPaused ? "bg-yellow-400" : "animate-pulse bg-green-400"
+                  )} />
+                  {isPaused ? "Pausado" : "Activo"}
+                </span>
+                {editInProgress && (
+                  <span className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-primary/10 px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold text-primary border border-primary/20">
+                    <span className="h-1.5 w-1.5 animate-spin rounded-full border border-primary border-t-transparent" />
+                    Editando
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
             
             {(() => {
               const isDebt = rentalRemaining && 
@@ -560,20 +579,20 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               const debtTime = `${absDays}d ${rentalRemaining!.hours}h ${rentalRemaining!.minutes}m`;
               
               return (
-                <div className="rounded-2xl border-3 border-red-600 bg-gradient-to-br from-red-600/30 to-red-500/20 p-6 backdrop-blur-sm animate-pulse">
-                  <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
-                    <div className="flex-shrink-0 w-20 h-20 rounded-2xl bg-red-600/40 flex items-center justify-center border-2 border-red-500">
-                      <span className="text-5xl">💀</span>
+                <div className="rounded-xl sm:rounded-2xl border-2 sm:border-3 border-red-600 bg-gradient-to-br from-red-600/30 to-red-500/20 p-4 sm:p-6 backdrop-blur-sm animate-pulse">
+                  <div className="flex flex-col items-center gap-3 sm:gap-4 mb-3 sm:mb-4">
+                    <div className="flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl bg-red-600/40 flex items-center justify-center border-2 border-red-500">
+                      <span className="text-4xl sm:text-5xl">💀</span>
                     </div>
                     
-                    <div className="flex-1 text-center sm:text-left">
-                      <h3 className="font-black text-2xl text-red-400 mb-2">
+                    <div className="flex-1 text-center">
+                      <h3 className="font-black text-xl sm:text-2xl text-red-400 mb-1 sm:mb-2">
                         CUENTA VENCIDA
                       </h3>
-                      <p className="text-xl font-bold text-red-300 mb-1">
+                      <p className="text-lg sm:text-xl font-bold text-red-300 mb-0.5 sm:mb-1">
                         Deuda de {debtTime} de atraso
                       </p>
-                      <p className="text-sm text-red-200">
+                      <p className="text-xs sm:text-sm text-red-200">
                         Tu anuncio sera eliminado automaticamente si no renuevas
                       </p>
                     </div>
@@ -585,14 +604,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="w-full sm:w-auto px-8 py-4 rounded-xl font-black text-lg bg-gradient-to-r from-red-600 to-red-700 text-white hover:scale-105 transition-all duration-200 shadow-2xl shadow-red-600/50 border-2 border-red-400 whitespace-nowrap"
+                      className="w-full px-6 sm:px-8 py-3 sm:py-4 rounded-lg sm:rounded-xl font-black text-base sm:text-lg bg-gradient-to-r from-red-600 to-red-700 text-white hover:scale-105 transition-all duration-200 shadow-2xl shadow-red-600/50 border-2 border-red-400 text-center"
                     >
                       RENOVAR AHORA
                     </a>
                   </div>
                   
-                  <div className="bg-black/40 rounded-xl p-4 border-2 border-red-500/50">
-                    <p className="text-center text-red-300 font-bold text-base">
+                  <div className="bg-black/40 rounded-lg sm:rounded-xl p-3 sm:p-4 border-2 border-red-500/50">
+                    <p className="text-center text-red-300 font-bold text-sm sm:text-base">
                       Si no pagas en las proximas 48 horas perderas tu anuncio para siempre
                     </p>
                   </div>
@@ -603,23 +622,23 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             {editLog && (
               <div
                 className={cn(
-                  "rounded-xl border p-4",
+                  "rounded-lg sm:rounded-xl border p-3 sm:p-4",
                   editLogType === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
                   editLogType === "success" && "border-accent/30 bg-accent/10 text-accent",
                   editLogType === "info" && "border-primary/30 bg-primary/10 text-primary",
                   editLogType === "warning" && "border-orange-500/30 bg-orange-500/10 text-orange-400"
                 )}
               >
-                <p className="text-center text-base sm:text-sm font-medium">{editLog}</p>
+                <p className="text-center text-sm font-medium">{editLog}</p>
               </div>
             )}
 
             {!manuallyCreated && (
-              <div className="rounded-xl border border-border bg-secondary/30 p-4">
-                <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4">
+                <h3 className="mb-2 sm:mb-3 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                   Informacion
                 </h3>
-                <div className="grid gap-2 text-sm">
+                <div className="grid gap-1.5 sm:gap-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Telefono</span>
                     <span className="font-medium text-foreground">{phoneNumber}</span>
@@ -637,17 +656,17 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             )}
 
             {postUrl ? (
-              <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
+              <div className="rounded-lg sm:rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-4 sm:p-5 backdrop-blur-sm relative overflow-hidden">
                 <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
                 
                 <div className="relative">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30">
-                      <span className="text-2xl">👁️</span>
+                  <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/20 flex items-center justify-center border border-primary/30 flex-shrink-0">
+                      <span className="text-xl sm:text-2xl">👁️</span>
                     </div>
-                    <div>
-                      <h4 className="font-bold text-foreground text-lg">Tu Anuncio en Vivo</h4>
-                      <p className="text-sm text-muted-foreground">Asi lo ven tus clientes</p>
+                    <div className="min-w-0">
+                      <h4 className="font-bold text-foreground text-base sm:text-lg">Tu Anuncio en Vivo</h4>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Asi lo ven tus clientes</p>
                     </div>
                   </div>
                   
@@ -656,27 +675,27 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="block w-full bg-gradient-to-r from-primary via-purple-500 to-pink-500 text-white py-4 rounded-xl font-bold text-center hover:scale-105 transition-all duration-200 shadow-lg shadow-primary/50 text-lg"
+                    className="block w-full bg-gradient-to-r from-primary via-purple-500 to-pink-500 text-white py-3 sm:py-4 rounded-lg sm:rounded-xl font-bold text-center hover:scale-105 transition-all duration-200 shadow-lg shadow-primary/50 text-base sm:text-lg"
                   >
                     Ver Mi Anuncio Ahora
                   </a>
                   
                   {postIdCaptured && (
-                    <p className="text-xs text-center text-muted-foreground mt-3">
+                    <p className="text-xs text-center text-muted-foreground mt-2 sm:mt-3">
                       Actualizado {new Date(postIdCaptured).toLocaleString()}
                     </p>
                   )}
                 </div>
               </div>
             ) : (
-              <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-5 backdrop-blur-sm">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center">
-                    <span className="text-xl">⚠️</span>
+              <div className="rounded-lg sm:rounded-xl border border-yellow-500/30 bg-yellow-500/10 p-4 sm:p-5 backdrop-blur-sm">
+                <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-3">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-yellow-500/20 flex items-center justify-center flex-shrink-0">
+                    <span className="text-lg sm:text-xl">⚠️</span>
                   </div>
                   <div>
-                    <h4 className="font-bold text-yellow-400">Anuncio No Sincronizado</h4>
-                    <p className="text-sm text-yellow-300/80">
+                    <h4 className="font-bold text-yellow-400 text-sm sm:text-base">Anuncio No Sincronizado</h4>
+                    <p className="text-xs sm:text-sm text-yellow-300/80">
                       El link se capturara en la proxima republicacion
                     </p>
                   </div>
@@ -685,10 +704,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             )}
 
             {republishStatus && (
-              <div className={cn("rounded-xl border border-border bg-secondary/30 p-4", isPaused && "opacity-60")}>
-                <div className="mb-4 flex items-center justify-between">
-                  <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                    <ClockIcon className="h-4 w-4" />
+              <div className={cn("rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4", isPaused && "opacity-60")}>
+                <div className="mb-3 sm:mb-4 flex items-center justify-between">
+                  <h3 className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                    <ClockIcon className="h-3 w-3 sm:h-4 sm:w-4" />
                     {showSavedMessage
                       ? "Guardado"
                       : editInProgress
@@ -706,25 +725,25 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   )}
                 </div>
 
-                <div className="mb-4 text-center">
-                  <div className="text-5xl sm:text-4xl font-bold tabular-nums text-foreground">
+                <div className="mb-3 sm:mb-4 text-center">
+                  <div className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">
                     {showSavedMessage ? (
-                      <span className="text-accent">Cambios guardados</span>
+                      <span className="text-accent text-2xl sm:text-3xl">Cambios guardados</span>
                     ) : editInProgress ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <span className="text-primary">Editando...</span>
+                      <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                        <span className="text-primary text-2xl sm:text-3xl">Editando...</span>
                         {republishStatus && republishStatus.remainingSeconds > 0 && (
-                          <span className="text-2xl sm:text-xl text-muted-foreground">
+                          <span className="text-lg sm:text-xl text-muted-foreground">
                             Se publicara en {formatTime(republishStatus.remainingSeconds)}
                           </span>
                         )}
                       </div>
                     ) : (republishStatus.remainingSeconds <= 0 && !showSuccessMessage) ? (
-                      <span className="text-accent">Completada</span>
+                      <span className="text-accent text-2xl sm:text-3xl">Completada</span>
                     ) : showSuccessMessage ? (
-                      <span className="text-accent">Completado</span>
+                      <span className="text-accent text-2xl sm:text-3xl">Completado</span>
                     ) : isPaused ? (
-                      <span className="text-warning">En Pausa</span>
+                      <span className="text-warning text-2xl sm:text-3xl">En Pausa</span>
                     ) : (
                       formatTime(republishStatus.remainingSeconds)
                     )}
@@ -745,12 +764,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
             )}
 
-            <div className="rounded-xl border border-border bg-secondary/30 p-4">
+            <div className="rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tiempo de Renta</span>
+                <span className="text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Tiempo de Renta</span>
                 <span
                   className={cn(
-                    "text-2xl sm:text-xl font-bold",
+                    "text-lg sm:text-xl font-bold",
                     status === "healthy" && "text-accent",
                     status === "caution" && "text-chart-4",
                     status === "warning" && "text-warning",
@@ -764,45 +783,44 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-secondary/30 p-4">
-              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
-              <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4">
+              <h3 className="mb-3 sm:mb-4 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">Controles</h3>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <Button
                   onClick={handleTogglePause}
                   disabled={actionLoading || commandInProgressRef.current}
                   className={cn(
-                    "flex h-auto flex-col gap-2 py-5 sm:py-4 text-base sm:text-sm",
+                    "flex h-auto flex-col gap-1.5 sm:gap-2 py-3 sm:py-4 text-sm",
                     isPaused
                       ? "bg-accent/10 text-accent hover:bg-accent/20"
                       : "bg-warning/10 text-warning hover:bg-warning/20"
                   )}
                 >
-                  {isPaused ? <PlayIcon className="h-6 w-6 sm:h-5 sm:w-5" /> : <PauseIcon className="h-6 w-6 sm:h-5 sm:w-5" />}
+                  {isPaused ? <PlayIcon className="h-5 w-5" /> : <PauseIcon className="h-5 w-5" />}
                   <span className="text-xs">{isPaused ? "Reanudar" : "Pausar"}</span>
                 </Button>
 
                 <Button
                   onClick={handleRepublish}
                   disabled={actionLoading || isPaused || commandInProgressRef.current}
-                  className="flex h-auto flex-col gap-2 bg-primary/10 py-5 sm:py-4 text-primary hover:bg-primary/20 text-base sm:text-sm"
+                  className="flex h-auto flex-col gap-1.5 sm:gap-2 bg-primary/10 py-3 sm:py-4 text-primary hover:bg-primary/20 text-sm"
                 >
-                  <RefreshIcon className="h-6 w-6 sm:h-5 sm:w-5" />
+                  <RefreshIcon className="h-5 w-5" />
                   <span className="text-xs">Republicar</span>
                 </Button>
 
-                {/* 🔒 BOTÓN EDITAR CON BLOQUEO SILENCIOSO */}
                 <Button
                   onClick={handleOpenEditor}
                   disabled={actionLoading || !canEdit || commandInProgressRef.current}
                   className={cn(
-                    "flex h-auto flex-col gap-2 py-5 sm:py-4 text-base sm:text-sm",
+                    "flex h-auto flex-col gap-1.5 sm:gap-2 py-3 sm:py-4 text-sm",
                     !canEdit 
                       ? "bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50"
                       : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20"
                   )}
                   title={!canEdit ? "" : "Editar"}
                 >
-                  <EditIcon className="h-6 w-6 sm:h-5 sm:w-5" />
+                  <EditIcon className="h-5 w-5" />
                   <span className="text-xs">
                     {!canEdit ? "Ocupado" : "Editar"}
                   </span>
@@ -810,15 +828,15 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
 
                 <Button
                   onClick={() => setShowNotificationSettings(true)}
-                  className="col-span-3 flex h-auto flex-col gap-2 bg-blue-500/10 py-5 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
+                  className="col-span-3 flex h-auto flex-col gap-1.5 sm:gap-2 bg-blue-500/10 py-3 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
                 >
-                  <span className="text-2xl sm:text-xl">🔔</span>
-                  <span className="text-sm sm:text-xs">Configurar Notificaciones</span>
+                  <span className="text-xl sm:text-2xl">🔔</span>
+                  <span className="text-xs">Configurar Notificaciones</span>
                 </Button>
               </div>
             </div>
 
-            <Button onClick={onClose} variant="outline" className="w-full bg-transparent h-14 sm:h-12 text-base sm:text-sm">
+            <Button onClick={onClose} variant="outline" className="w-full bg-transparent h-12 sm:h-14 text-sm sm:text-base">
               Cerrar
             </Button>
           </div>
@@ -826,12 +844,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       </div>
 
       {showEditForm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-2 sm:p-4 backdrop-blur-sm">
           <div 
-            className="my-8 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto relative"
+            className="my-4 sm:my-8 w-full max-w-2xl shadow-2xl max-h-[95vh] overflow-y-auto relative"
             style={{
               background: 'linear-gradient(180deg, #E6C9E6 0%, #D4A5D4 20%, #C28AC2 40%, #B06FB0 60%, #9E549E 80%, #8C398C 100%)',
-              borderRadius: '0 0 20px 20px',
+              borderRadius: '0 0 16px 16px',
               border: 'none'
             }}
           >
@@ -843,7 +861,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 right: 0,
                 height: '20px',
                 background: 'linear-gradient(90deg, #FF69B4 0%, #FF1493 50%, #FF69B4 100%)',
-                borderRadius: '20px 20px 0 0',
+                borderRadius: '16px 16px 0 0',
               }}
             >
               <svg
@@ -869,7 +887,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             >
               <h1 
                 style={{
-                  fontSize: '32px',
+                  fontSize: 'clamp(24px, 5vw, 32px)',
                   fontWeight: 'bold',
                   color: '#E8E8E8',
                   textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
@@ -881,25 +899,25 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </h1>
               <p 
                 style={{
-                  fontSize: '11px',
+                  fontSize: '10px',
                   color: '#E8E8E8',
                   marginTop: '-5px',
-                  letterSpacing: '3px'
+                  letterSpacing: '2px'
                 }}
               >
                 personals classifieds
               </p>
             </div>
 
-            <div className="relative" style={{ padding: '20px 30px 30px 30px' }}>
+            <div className="relative" style={{ padding: '15px 20px 25px 20px' }}>
               
               <div 
-                className="absolute pointer-events-none"
+                className="absolute pointer-events-none hidden sm:block"
                 style={{
                   top: '-60px',
                   left: '20px',
-                  width: '400px',
-                  height: '300px',
+                  width: '300px',
+                  height: '250px',
                   zIndex: 20
                 }}
               >
@@ -918,10 +936,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 />
               </div>
 
-              <div className="text-center mb-6 relative z-20">
+              <div className="text-center mb-4 sm:mb-6 relative z-20">
                 <h2 
                   style={{
-                    fontSize: '36px',
+                    fontSize: 'clamp(24px, 6vw, 36px)',
                     fontWeight: 900,
                     color: '#FFFF00',
                     textShadow: '3px 3px 6px rgba(0,0,0,0.8), -1px -1px 3px rgba(0,0,0,0.5)',
@@ -933,9 +951,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </h2>
                 <p 
                   style={{
-                    fontSize: '16px',
+                    fontSize: 'clamp(13px, 3vw, 16px)',
                     color: '#FFFFFF',
-                    marginTop: '10px',
+                    marginTop: '8px',
                     textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
                     fontFamily: 'system-ui, sans-serif'
                   }}
@@ -945,20 +963,20 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
 
               <div 
-                className="mb-6 p-5 relative z-20"
+                className="mb-4 sm:mb-6 p-3 sm:p-5 relative z-20"
                 style={{
                   background: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '15px',
-                  border: '3px solid #FF69B4',
+                  borderRadius: '12px',
+                  border: '2px solid #FF69B4',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
                 }}
               >
                 <h3 
                   style={{
-                    fontSize: '20px',
+                    fontSize: 'clamp(16px, 4vw, 20px)',
                     fontWeight: 'bold',
                     color: '#8C398C',
-                    marginBottom: '15px',
+                    marginBottom: '12px',
                     textAlign: 'center',
                     fontFamily: 'system-ui, sans-serif'
                   }}
@@ -967,29 +985,29 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </h3>
                 <ol 
                   style={{
-                    fontSize: '15px',
+                    fontSize: 'clamp(13px, 3vw, 15px)',
                     color: '#333333',
-                    lineHeight: '1.8',
-                    paddingLeft: '25px',
+                    lineHeight: '1.6',
+                    paddingLeft: '20px',
                     fontFamily: 'system-ui, sans-serif'
                   }}
                 >
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 1 - </strong> Cambia SOLO los campos que quieras actualizar
                   </li>
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 2 - </strong> Si NO quieres cambiar un campo dejalo como esta
                   </li>
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 3 - </strong> Haz click en Guardar Cambios
                   </li>
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 4 - </strong> El sistema procesara automaticamente
                   </li>
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 5 - </strong> Aparecera una ventana con codigo de seguridad
                   </li>
-                  <li style={{ marginBottom: '10px' }}>
+                  <li style={{ marginBottom: '8px' }}>
                     <strong style={{ color: '#8C398C' }}>Paso 6 - </strong> Escribe el codigo y presiona Enviar UNA SOLA VEZ
                   </li>
                   <li>
@@ -999,16 +1017,16 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 
                 <div 
                   style={{
-                    marginTop: '20px',
-                    padding: '15px',
+                    marginTop: '15px',
+                    padding: '12px',
                     background: '#FFF3CD',
                     border: '2px solid #FFC107',
-                    borderRadius: '10px'
+                    borderRadius: '8px'
                   }}
                 >
                   <p 
                     style={{
-                      fontSize: '14px',
+                      fontSize: 'clamp(12px, 3vw, 14px)',
                       color: '#856404',
                       fontWeight: 'bold',
                       textAlign: 'center',
@@ -1021,14 +1039,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </div>
               </div>
 
-              <div className="space-y-4 relative z-20" style={{ marginTop: '20px' }}>
+              <div className="space-y-3 sm:space-y-4 relative z-20">
                 
                 <div>
                   <label 
                     style={{
                       display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
+                      marginBottom: '6px',
+                      fontSize: 'clamp(13px, 3vw, 15px)',
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1045,18 +1063,18 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     placeholder="Ejemplo Sofia"
                     style={{
                       width: '100%',
-                      height: '45px',
+                      height: '42px',
                       backgroundColor: '#FFFFFF',
                       border: '2px solid #888888',
                       borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
+                      padding: '10px 12px',
+                      fontSize: 'clamp(14px, 3.5vw, 15px)',
                       color: '#555555',
                       fontFamily: 'system-ui, sans-serif'
                     }}
                   />
                   {editForm.name && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                    <p style={{ marginTop: '4px', fontSize: '11px', color: '#FFFFFF' }}>
                       {editForm.name.length}/50 caracteres
                     </p>
                   )}
@@ -1066,8 +1084,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <label 
                     style={{
                       display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
+                      marginBottom: '6px',
+                      fontSize: 'clamp(13px, 3vw, 15px)',
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1081,12 +1099,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     onChange={(e) => handleFieldChange('age', e.target.value)}
                     style={{
                       width: '100%',
-                      height: '45px',
+                      height: '42px',
                       backgroundColor: '#FFFFFF',
                       border: '2px solid #888888',
                       borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
+                      padding: '10px 12px',
+                      fontSize: 'clamp(14px, 3.5vw, 15px)',
                       color: '#555555',
                       fontFamily: 'system-ui, sans-serif'
                     }}
@@ -1104,8 +1122,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <label 
                     style={{
                       display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
+                      marginBottom: '6px',
+                      fontSize: 'clamp(13px, 3vw, 15px)',
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1122,18 +1140,18 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     placeholder="Ejemplo SEXY COLOMBIANA"
                     style={{
                       width: '100%',
-                      height: '45px',
+                      height: '42px',
                       backgroundColor: '#FFFFFF',
                       border: '2px solid #888888',
                       borderRadius: '5px',
-                      padding: '10px 15px',
-                      fontSize: '15px',
+                      padding: '10px 12px',
+                      fontSize: 'clamp(14px, 3.5vw, 15px)',
                       color: '#555555',
                       fontFamily: 'system-ui, sans-serif'
                     }}
                   />
                   {editForm.headline && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                    <p style={{ marginTop: '4px', fontSize: '11px', color: '#FFFFFF' }}>
                       {editForm.headline.length}/250 caracteres
                     </p>
                   )}
@@ -1143,8 +1161,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <label 
                     style={{
                       display: 'block',
-                      marginBottom: '8px',
-                      fontSize: '15px',
+                      marginBottom: '6px',
+                      fontSize: 'clamp(13px, 3vw, 15px)',
                       fontWeight: 'bold',
                       color: '#FFFF00',
                       textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1156,7 +1174,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <textarea
                     value={editForm.body}
                     onChange={(e) => handleFieldChange('body', e.target.value)}
-                    rows={6}
+                    rows={5}
                     maxLength={2000}
                     placeholder="Ejemplo Hola soy muy caliente..."
                     style={{
@@ -1164,27 +1182,27 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                       backgroundColor: '#FFFFFF',
                       border: '2px solid #888888',
                       borderRadius: '5px',
-                      padding: '12px 15px',
-                      fontSize: '15px',
+                      padding: '10px 12px',
+                      fontSize: 'clamp(14px, 3.5vw, 15px)',
                       color: '#555555',
                       fontFamily: 'system-ui, sans-serif',
                       resize: 'none'
                     }}
                   />
                   {editForm.body && (
-                    <p style={{ marginTop: '5px', fontSize: '12px', color: '#FFFFFF' }}>
+                    <p style={{ marginTop: '4px', fontSize: '11px', color: '#FFFFFF' }}>
                       {editForm.body.length}/2000 caracteres
                     </p>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div>
                     <label 
                       style={{
                         display: 'block',
-                        marginBottom: '8px',
-                        fontSize: '15px',
+                        marginBottom: '6px',
+                        fontSize: 'clamp(13px, 3vw, 15px)',
                         fontWeight: 'bold',
                         color: '#FFFF00',
                         textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1200,12 +1218,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                         readOnly
                         style={{
                           flex: 1,
-                          height: '45px',
+                          height: '42px',
                           backgroundColor: '#FFFFFF',
                           border: '2px solid #888888',
                           borderRadius: '5px',
-                          padding: '10px 15px',
-                          fontSize: '15px',
+                          padding: '10px 12px',
+                          fontSize: 'clamp(14px, 3.5vw, 15px)',
                           color: '#555555',
                           fontFamily: 'system-ui, sans-serif'
                         }}
@@ -1214,16 +1232,17 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                         type="button"
                         onClick={() => setShowCitySelector(true)}
                         style={{
-                          height: '45px',
+                          height: '42px',
                           background: 'linear-gradient(135deg, #FF8C00 0%, #FFA500 100%)',
                           border: '2px solid #FF8C00',
                           borderRadius: '5px',
                           color: '#FFFFFF',
                           fontWeight: 'bold',
-                          padding: '0 20px',
-                          fontSize: '14px',
+                          padding: '0 16px',
+                          fontSize: 'clamp(12px, 3vw, 14px)',
                           cursor: 'pointer',
-                          fontFamily: 'system-ui, sans-serif'
+                          fontFamily: 'system-ui, sans-serif',
+                          whiteSpace: 'nowrap'
                         }}
                       >
                         Cambiar
@@ -1234,8 +1253,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     <label 
                       style={{
                         display: 'block',
-                        marginBottom: '8px',
-                        fontSize: '15px',
+                        marginBottom: '6px',
+                        fontSize: 'clamp(13px, 3vw, 15px)',
                         fontWeight: 'bold',
                         color: '#FFFF00',
                         textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
@@ -1252,12 +1271,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                       placeholder="Ejemplo Downtown"
                       style={{
                         width: '100%',
-                        height: '45px',
+                        height: '42px',
                         backgroundColor: '#FFFFFF',
                         border: '2px solid #888888',
                         borderRadius: '5px',
-                        padding: '10px 15px',
-                        fontSize: '15px',
+                        padding: '10px 12px',
+                        fontSize: 'clamp(14px, 3.5vw, 15px)',
                         color: '#555555',
                         fontFamily: 'system-ui, sans-serif'
                       }}
@@ -1266,24 +1285,23 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </div>
               </div>
 
-              <div className="mt-8 flex flex-col sm:flex-row gap-4 relative z-20">
-                {/* 🔒 BOTÓN GUARDAR CON BLOQUEO SILENCIOSO */}
+              <div className="mt-6 sm:mt-8 flex flex-col gap-3 sm:gap-4 relative z-20">
                 <Button
                   onClick={handleSaveAllEdits}
                   disabled={actionLoading || !canEdit || commandInProgressRef.current}
                   style={{
-                    flex: 1,
-                    height: '55px',
+                    width: '100%',
+                    height: '50px',
                     background: (!canEdit || actionLoading) 
                       ? '#666666' 
                       : 'linear-gradient(135deg, #00C853 0%, #00E676 100%)',
                     border: (!canEdit || actionLoading) 
-                      ? '3px solid #555555' 
-                      : '3px solid #00C853',
-                    borderRadius: '10px',
+                      ? '2px solid #555555' 
+                      : '2px solid #00C853',
+                    borderRadius: '8px',
                     color: '#FFFFFF',
                     fontWeight: 'bold',
-                    fontSize: '18px',
+                    fontSize: 'clamp(15px, 4vw, 18px)',
                     textShadow: '2px 2px 4px rgba(0,0,0,0.3)',
                     cursor: (!canEdit || actionLoading) ? 'not-allowed' : 'pointer',
                     fontFamily: 'Arial Black, system-ui, sans-serif',
@@ -1311,14 +1329,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
-                    flex: 1,
-                    height: '55px',
+                    width: '100%',
+                    height: '50px',
                     background: '#666666',
-                    border: '3px solid #555555',
-                    borderRadius: '10px',
+                    border: '2px solid #555555',
+                    borderRadius: '8px',
                     color: '#FFFFFF',
                     fontWeight: 'bold',
-                    fontSize: '18px',
+                    fontSize: 'clamp(15px, 4vw, 18px)',
                     cursor: actionLoading ? 'not-allowed' : 'pointer',
                     fontFamily: 'Arial Black, system-ui, sans-serif',
                     boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
@@ -1329,17 +1347,17 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
 
               <div 
-                className="mt-6 p-4 relative z-20"
+                className="mt-4 sm:mt-6 p-3 sm:p-4 relative z-20"
                 style={{
                   background: 'rgba(255, 255, 255, 0.95)',
-                  borderRadius: '12px',
+                  borderRadius: '10px',
                   border: '2px solid #00E676',
                   boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
                 }}
               >
                 <p 
                   style={{
-                    fontSize: '14px',
+                    fontSize: 'clamp(12px, 3vw, 14px)',
                     color: '#333333',
                     fontWeight: 'bold',
                     textAlign: 'center',
@@ -1356,23 +1374,23 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       )}
 
       {showCaptchaForm && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-2xl">
-            <h3 className="mb-6 text-center text-3xl sm:text-2xl font-bold text-foreground">Codigo de Seguridad</h3>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-background/95 p-3 sm:p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-xl sm:rounded-2xl border border-border bg-card p-6 sm:p-8 shadow-2xl">
+            <h3 className="mb-4 sm:mb-6 text-center text-2xl sm:text-3xl font-bold text-foreground">Codigo de Seguridad</h3>
 
             {captchaImage && (
-              <div className="mb-6 text-center">
+              <div className="mb-4 sm:mb-6 text-center">
                 <img
                   src={captchaImage}
                   alt="Captcha"
-                  className="mx-auto max-w-full rounded-xl border border-border"
+                  className="mx-auto max-w-full rounded-lg sm:rounded-xl border border-border"
                 />
                 
                 <Button
                   onClick={handleCaptchaRefresh}
                   disabled={captchaRefreshing || actionLoading || commandInProgressRef.current}
                   variant="ghost"
-                  className="mt-3 text-muted-foreground hover:text-foreground"
+                  className="mt-2 sm:mt-3 text-muted-foreground hover:text-foreground text-sm"
                 >
                   {captchaRefreshing ? (
                     <>
@@ -1397,9 +1415,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
             )}
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <div>
-                <label className="mb-2 block text-center text-base sm:text-sm font-medium text-muted-foreground">
+                <label className="mb-2 block text-center text-sm font-medium text-muted-foreground">
                   Escribe los caracteres
                 </label>
                 <Input
@@ -1410,18 +1428,18 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     e.key === "Enter" && !captchaSubmitting && !actionLoading && !commandInProgressRef.current && handleCaptchaSubmit()
                   }
                   placeholder="Ejemplo 3uK"
-                  className="bg-input text-center font-mono text-xl sm:text-lg text-foreground h-16 sm:h-14"
+                  className="bg-input text-center font-mono text-lg sm:text-xl text-foreground h-14 sm:h-16"
                   autoFocus
                   disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
                 />
               </div>
             </div>
 
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+            <div className="mt-4 sm:mt-6 flex flex-col gap-2 sm:gap-3">
               <Button
                 onClick={handleCaptchaSubmit}
                 disabled={captchaSubmitting || actionLoading || !captchaCode.trim() || commandInProgressRef.current}
-                className="flex-1 bg-primary text-primary-foreground hover:bg-primary/90 h-14 sm:h-12 text-base sm:text-sm"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 sm:h-14 text-sm sm:text-base"
               >
                 {captchaSubmitting || actionLoading ? "Enviando..." : "Enviar"}
               </Button>
@@ -1429,13 +1447,13 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 variant="outline"
                 onClick={handleCaptchaCancel}
                 disabled={captchaSubmitting || actionLoading || commandInProgressRef.current}
-                className="flex-1 bg-transparent h-14 sm:h-12 text-base sm:text-sm"
+                className="w-full bg-transparent h-12 sm:h-14 text-sm sm:text-base"
               >
                 Cancelar
               </Button>
             </div>
 
-            <p className="mt-4 text-center text-sm sm:text-xs text-muted-foreground">
+            <p className="mt-3 sm:mt-4 text-center text-xs sm:text-sm text-muted-foreground">
               {captchaSubmitting ? "Procesando NO hagas click nuevamente" : "Presiona Enviar UNA SOLA VEZ"}
             </p>
           </div>
