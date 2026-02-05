@@ -181,12 +181,23 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
           previousRepublishRef.current = newData.republishStatus;
         }
 
-        // CORRECCIÓN: Cerrar modal de captcha solo cuando captchaWaiting sea false
         if (!newData.captchaWaiting && showCaptchaForm) {
-          // Cerrar directamente sin usar history.back()
-          setShowCaptchaForm(false);
-          setCaptchaCode("");
-          modalManuallyControlledRef.current = false;
+          // Limpiar entrada del historial ANTES de cerrar el modal
+          if (window.history.state?.captchaFormOpen) {
+            window.history.back();
+            // Esperar a que el popstate se procese
+            setTimeout(() => {
+              // Si el modal no se cerró automáticamente, cerrarlo manualmente
+              setShowCaptchaForm(false);
+              setCaptchaCode("");
+              modalManuallyControlledRef.current = false;
+            }, 50);
+          } else {
+            // Si no hay entrada en el historial, solo cerrar el modal
+            setShowCaptchaForm(false);
+            setCaptchaCode("");
+            modalManuallyControlledRef.current = false;
+          }
         }
 
         if (modalManuallyControlledRef.current) {
@@ -329,11 +340,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const handleOpenEditor = async () => {
     userIsEditingRef.current = false;
     
-    // 🆕 TRAER VENTANA AL FRENTE ANTES DE ABRIR MODAL
+    // Traer ventana al frente antes de abrir modal
     try {
-      console.log('[Dashboard]: 📍 Enviando comando para traer ventana al frente...');
-      
-      // Enviar comando a Firebase
       const FIREBASE_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
       
       await fetch(`${FIREBASE_URL}/commands/${browserName}.json`, {
@@ -345,13 +353,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         })
       });
       
-      console.log('[Dashboard]: ✅ Comando enviado, esperando 1500ms para que la ventana venga al frente...');
-      
       // Esperar un momento para que la ventana se traiga al frente
       await new Promise(resolve => setTimeout(resolve, 1500));
       
     } catch (error) {
-      console.error('[Dashboard]: ⚠️ Error enviando comando bring_to_front:', error);
       // Continuar de todas formas y abrir el modal
     }
     
@@ -366,7 +371,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     });
     
     setShowEditForm(true);
-    console.log('[Dashboard]: ✅ Modal de edición abierto');
   };
 
   // Manejo del historial del navegador para el modal de edición
@@ -498,9 +502,20 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         alert("Edicion iniciada. El sistema procesara los cambios automaticamente.");
         userIsEditingRef.current = false;
         
-        // CORRECCIÓN: Cerrar directamente sin usar history.back()
-        setShowEditForm(false);
-        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        // Limpiar entrada del historial ANTES de cerrar el modal
+        if (window.history.state?.editFormOpen) {
+          window.history.back();
+          // Esperar a que el popstate se procese
+          setTimeout(() => {
+            // Si el modal no se cerró automáticamente, cerrarlo manualmente
+            setShowEditForm(false);
+            setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+          }, 50);
+        } else {
+          // Si no hay entrada en el historial, solo cerrar el modal
+          setShowEditForm(false);
+          setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+        }
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -532,10 +547,22 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       );
 
       if (result.success) {
-        // CORRECCIÓN: Cerrar directamente sin usar history.back()
-        // El modal se cerrará automáticamente cuando captchaWaiting se ponga en false desde Firebase
-        // No necesitamos cerrar manualmente aquí
-        setCaptchaCode("");
+        // Limpiar entrada del historial ANTES de cerrar el modal
+        if (window.history.state?.captchaFormOpen) {
+          window.history.back();
+          // Esperar a que el popstate se procese
+          setTimeout(() => {
+            // Si el modal no se cerró automáticamente, cerrarlo manualmente
+            setShowCaptchaForm(false);
+            setCaptchaCode("");
+            modalManuallyControlledRef.current = false;
+          }, 50);
+        } else {
+          // Si no hay entrada en el historial, solo cerrar el modal
+          setShowCaptchaForm(false);
+          setCaptchaCode("");
+          modalManuallyControlledRef.current = false;
+        }
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -547,10 +574,22 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   };
 
   const handleCaptchaCancel = () => {
-    // CORRECCIÓN: Cerrar directamente sin usar history.back()
-    setShowCaptchaForm(false);
-    setCaptchaCode("");
-    modalManuallyControlledRef.current = false;
+    // Limpiar entrada del historial ANTES de cerrar el modal
+    if (window.history.state?.captchaFormOpen) {
+      window.history.back();
+      // Esperar a que el popstate se procese
+      setTimeout(() => {
+        // Si el modal no se cerró automáticamente, cerrarlo manualmente
+        setShowCaptchaForm(false);
+        setCaptchaCode("");
+        modalManuallyControlledRef.current = false;
+      }, 50);
+    } else {
+      // Si no hay entrada en el historial, solo cerrar el modal
+      setShowCaptchaForm(false);
+      setCaptchaCode("");
+      modalManuallyControlledRef.current = false;
+    }
   };
 
   const handleCaptchaRefresh = async () => {
@@ -1420,14 +1459,13 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                         {}
                       );
                     } catch (error) {
-                      console.error('Error sending cancel command', error);
+                      // Error silencioso
                     }
                     
                     userIsEditingRef.current = false;
-                    
-                    // CORRECCIÓN: Cerrar directamente sin usar history.back()
                     setShowEditForm(false);
                     setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
+                  }}
                   }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
