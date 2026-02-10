@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { StatsAPI, type WeeklyStats, type StatsEvent, FirebaseAPI, type BrowserData } from "@/lib/firebase";
+import { StatsAPI, type WeeklyStats, type WeeklyFinancials, type StatsEvent, FirebaseAPI, type BrowserData } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
 
 export function StatsPanel() {
@@ -11,6 +11,12 @@ export function StatsPanel() {
   const [weekEvents, setWeekEvents] = useState<StatsEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [allBrowsers, setAllBrowsers] = useState<Record<string, BrowserData>>({});
+  
+  // 🆕 Estado financiero en tiempo real
+  const [currentFinancials, setCurrentFinancials] = useState<WeeklyFinancials>({
+    totalPayments: 0, totalBans: 0, paymentCount: 0,
+    banCount: 0, netProfit: 0, payments: {}, bans: {},
+  });
 
   useEffect(() => {
     loadStats();
@@ -25,9 +31,15 @@ export function StatsPanel() {
       setAllBrowsers(browsers);
     });
 
+    // 🆕 Escuchar cambios financieros en tiempo real
+    const unsubscribeFinancials = StatsAPI.listenToWeeklyFinancials((financials) => {
+      setCurrentFinancials(financials);
+    });
+
     return () => {
       unsubscribe();
       unsubscribeBrowsers();
+      unsubscribeFinancials();
     };
   }, []);
 
@@ -76,6 +88,11 @@ export function StatsPanel() {
     return totalPosts;
   };
 
+  // 🆕 Formatear moneda USD
+  const formatUSD = (amount: number) => {
+    return `$${amount.toFixed(2)}`;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -94,12 +111,15 @@ export function StatsPanel() {
   const bannedChange = previousWeek 
     ? (currentWeek.bannedAccounts?.length || 0) - (previousWeek.bannedAccounts?.length || 0) 
     : 0;
-  const renewalsChange = previousWeek 
-    ? (currentWeek.renewals || 0) - (previousWeek.renewals || 0) 
-    : 0;
   const newClientsChange = previousWeek 
     ? (currentWeek.newClients?.length || 0) - (previousWeek.newClients?.length || 0) 
     : 0;
+  
+  // 🆕 Comparativas financieras
+  const prevPayments = previousWeek?.totalPayments || 0;
+  const prevBanCosts = previousWeek?.totalBanCosts || 0;
+  const paymentsChange = currentFinancials.totalPayments - prevPayments;
+  const banCostsChange = currentFinancials.totalBans - prevBanCosts;
 
   return (
     <div className="space-y-8 p-6">
@@ -113,8 +133,109 @@ export function StatsPanel() {
         </p>
       </div>
 
-      {/* Main Stats Cards */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      {/* 🆕 RESUMEN FINANCIERO - Tarjetas principales */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* 💰 Pagos (Ingresos) */}
+        <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-green-500/10 to-emerald-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-green-500/20">
+          <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-4xl">💰</div>
+              {paymentsChange !== 0 && previousWeek && (
+                <div className={cn(
+                  "px-2 py-1 rounded-full text-xs font-semibold",
+                  paymentsChange > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+                )}>
+                  {paymentsChange > 0 ? `+${formatUSD(paymentsChange)}` : formatUSD(paymentsChange)}
+                </div>
+              )}
+            </div>
+            <div className="text-3xl font-bold text-foreground mb-2">
+              {formatUSD(currentFinancials.totalPayments)}
+            </div>
+            <div className="text-sm text-muted-foreground">Pagos Recibidos</div>
+            <div className="mt-3 pt-3 border-t border-green-500/20">
+              <div className="text-xs text-green-400">
+                {currentFinancials.paymentCount} {currentFinancials.paymentCount === 1 ? 'pago' : 'pagos'} esta semana
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 🔥 Gastos (Costos de Ban) */}
+        <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-red-500/10 to-red-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-4xl">🔥</div>
+              {banCostsChange !== 0 && previousWeek && (
+                <div className={cn(
+                  "px-2 py-1 rounded-full text-xs font-semibold",
+                  banCostsChange > 0 ? "bg-red-500/20 text-red-400" : "bg-green-500/20 text-green-400"
+                )}>
+                  {banCostsChange > 0 ? `+${formatUSD(banCostsChange)}` : formatUSD(banCostsChange)}
+                </div>
+              )}
+            </div>
+            <div className="text-3xl font-bold text-foreground mb-2">
+              {formatUSD(currentFinancials.totalBans)}
+            </div>
+            <div className="text-sm text-muted-foreground">Gastos en Bans</div>
+            <div className="mt-3 pt-3 border-t border-red-500/20">
+              <div className="text-xs text-red-400">
+                {currentFinancials.banCount} {currentFinancials.banCount === 1 ? 'renovación' : 'renovaciones'} de ban
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 📈 Ganancia Neta */}
+        <div className={cn(
+          "group relative overflow-hidden rounded-2xl border border-border p-6 transition-all hover:scale-105 hover:shadow-2xl",
+          currentFinancials.netProfit >= 0
+            ? "bg-gradient-to-br from-emerald-500/10 to-teal-600/5 hover:shadow-emerald-500/20"
+            : "bg-gradient-to-br from-orange-500/10 to-red-600/5 hover:shadow-orange-500/20"
+        )}>
+          <div className={cn(
+            "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity",
+            currentFinancials.netProfit >= 0
+              ? "bg-gradient-to-br from-emerald-500/5 to-transparent"
+              : "bg-gradient-to-br from-orange-500/5 to-transparent"
+          )} />
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <div className="text-4xl">{currentFinancials.netProfit >= 0 ? '📈' : '📉'}</div>
+              <div className={cn(
+                "px-2 py-1 rounded-full text-xs font-semibold",
+                currentFinancials.netProfit >= 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-orange-500/20 text-orange-400"
+              )}>
+                NETO
+              </div>
+            </div>
+            <div className={cn(
+              "text-3xl font-bold mb-2",
+              currentFinancials.netProfit >= 0 ? "text-emerald-400" : "text-orange-400"
+            )}>
+              {currentFinancials.netProfit >= 0 ? '+' : ''}{formatUSD(currentFinancials.netProfit)}
+            </div>
+            <div className="text-sm text-muted-foreground">Ganancia Neta</div>
+            <div className={cn(
+              "mt-3 pt-3 border-t",
+              currentFinancials.netProfit >= 0 ? "border-emerald-500/20" : "border-orange-500/20"
+            )}>
+              <div className={cn(
+                "text-xs",
+                currentFinancials.netProfit >= 0 ? "text-emerald-400" : "text-orange-400"
+              )}>
+                Pagos - Gastos
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Cards secundarios */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {/* Cuentas Bloqueadas */}
         <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-red-500/10 to-red-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-red-500/20">
           <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -136,31 +257,6 @@ export function StatsPanel() {
             <div className="text-sm text-muted-foreground">Cuentas Bloqueadas</div>
             <div className="mt-3 pt-3 border-t border-red-500/20">
               <div className="text-xs text-red-400">Esta semana</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Renovaciones */}
-        <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-green-500/10 to-green-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-green-500/20">
-          <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <div className="text-4xl">🔄</div>
-              {renewalsChange !== 0 && (
-                <div className={cn(
-                  "px-2 py-1 rounded-full text-xs font-semibold",
-                  renewalsChange > 0 ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
-                )}>
-                  {renewalsChange > 0 ? `+${renewalsChange}` : renewalsChange}
-                </div>
-              )}
-            </div>
-            <div className="text-3xl font-bold text-foreground mb-2">
-              {currentWeek.renewals || 0}
-            </div>
-            <div className="text-sm text-muted-foreground">Renovaciones (7d+)</div>
-            <div className="mt-3 pt-3 border-t border-green-500/20">
-              <div className="text-xs text-green-400">Ingresos activos</div>
             </div>
           </div>
         </div>
@@ -190,7 +286,7 @@ export function StatsPanel() {
           </div>
         </div>
 
-        {/* Total Clientes - 🆕 CORREGIDO */}
+        {/* Total Clientes */}
         <div className="group relative overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-6 transition-all hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           <div className="relative z-10">
@@ -211,6 +307,79 @@ export function StatsPanel() {
         </div>
       </div>
 
+      {/* 🆕 DETALLE DE PAGOS Y GASTOS DE ESTA SEMANA */}
+      {(Object.keys(currentFinancials.payments).length > 0 || Object.keys(currentFinancials.bans).length > 0) && (
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Lista de Pagos */}
+          {Object.keys(currentFinancials.payments).length > 0 && (
+            <div className="rounded-2xl border border-green-500/20 bg-card p-6">
+              <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                💰 Pagos Recibidos
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({Object.keys(currentFinancials.payments).length})
+                </span>
+              </h2>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                {Object.entries(currentFinancials.payments)
+                  .sort(([,a], [,b]) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map(([id, payment]) => (
+                    <div key={id} className="flex items-center justify-between rounded-xl border border-green-500/10 bg-green-500/5 p-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-foreground text-sm truncate">
+                          {payment.clientName || payment.browserName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(payment.timestamp).toLocaleDateString('es-ES', {
+                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-green-400 ml-3">
+                        +{formatUSD(payment.amount)}
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
+          {/* Lista de Gastos por Ban */}
+          {Object.keys(currentFinancials.bans).length > 0 && (
+            <div className="rounded-2xl border border-red-500/20 bg-card p-6">
+              <h2 className="text-xl font-bold text-foreground mb-4 flex items-center gap-2">
+                🔥 Gastos por Bans
+                <span className="text-sm font-normal text-muted-foreground">
+                  ({Object.keys(currentFinancials.bans).length})
+                </span>
+              </h2>
+              <div className="space-y-3 max-h-[300px] overflow-y-auto">
+                {Object.entries(currentFinancials.bans)
+                  .sort(([,a], [,b]) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .map(([id, ban]) => (
+                    <div key={id} className="flex items-center justify-between rounded-xl border border-red-500/10 bg-red-500/5 p-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-foreground text-sm truncate">
+                          {ban.browserName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(ban.timestamp).toLocaleDateString('es-ES', {
+                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit'
+                          })}
+                        </div>
+                      </div>
+                      <div className="text-lg font-bold text-red-400 ml-3">
+                        -{formatUSD(ban.amount)}
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Gráfico de Tendencias */}
       <div className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-xl font-bold text-foreground mb-6 flex items-center gap-2">
@@ -221,12 +390,12 @@ export function StatsPanel() {
           {/* Leyenda */}
           <div className="flex flex-wrap gap-4 text-sm">
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-red-500" />
-              <span className="text-muted-foreground">Cuentas Bloqueadas</span>
+              <div className="w-4 h-4 rounded-full bg-green-500" />
+              <span className="text-muted-foreground">Pagos ($)</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="w-4 h-4 rounded-full bg-green-500" />
-              <span className="text-muted-foreground">Renovaciones</span>
+              <div className="w-4 h-4 rounded-full bg-red-500" />
+              <span className="text-muted-foreground">Gastos ($)</span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded-full bg-blue-500" />
@@ -234,33 +403,33 @@ export function StatsPanel() {
             </div>
           </div>
 
-          {/* Gráfico Simple */}
+          {/* Gráfico Simple - Ahora muestra Pagos y Gastos */}
           <div className="relative h-64 flex items-end gap-2">
             {(weeksHistory || []).slice(0, 12).reverse().map((week, idx) => {
               const maxValue = Math.max(
                 ...(weeksHistory || []).map(w => Math.max(
-                  w.bannedAccounts?.length || 0,
-                  w.renewals || 0,
+                  w.totalPayments || 0,
+                  w.totalBanCosts || 0,
                   w.newClients?.length || 0
                 )),
-                1 // Evitar división por 0
+                1
               );
               
-              const bannedHeight = ((week.bannedAccounts?.length || 0) / maxValue) * 100;
-              const renewalsHeight = ((week.renewals || 0) / maxValue) * 100;
+              const paymentsHeight = ((week.totalPayments || 0) / maxValue) * 100;
+              const banCostsHeight = ((week.totalBanCosts || 0) / maxValue) * 100;
               const newClientsHeight = ((week.newClients?.length || 0) / maxValue) * 100;
 
               return (
                 <div key={week.weekId} className="flex-1 flex items-end gap-1">
                   <div 
-                    className="flex-1 bg-gradient-to-t from-red-500 to-red-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
-                    style={{ height: `${bannedHeight}%`, minHeight: '4px' }}
-                    title={`Bans: ${week.bannedAccounts?.length || 0}`}
+                    className="flex-1 bg-gradient-to-t from-green-500 to-green-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
+                    style={{ height: `${paymentsHeight}%`, minHeight: '4px' }}
+                    title={`Pagos: ${formatUSD(week.totalPayments || 0)}`}
                   />
                   <div 
-                    className="flex-1 bg-gradient-to-t from-green-500 to-green-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
-                    style={{ height: `${renewalsHeight}%`, minHeight: '4px' }}
-                    title={`Renovaciones: ${week.renewals || 0}`}
+                    className="flex-1 bg-gradient-to-t from-red-500 to-red-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
+                    style={{ height: `${banCostsHeight}%`, minHeight: '4px' }}
+                    title={`Gastos: ${formatUSD(week.totalBanCosts || 0)}`}
                   />
                   <div 
                     className="flex-1 bg-gradient-to-t from-blue-500 to-blue-400 rounded-t hover:opacity-80 transition-opacity cursor-pointer"
@@ -363,13 +532,14 @@ export function StatsPanel() {
         </div>
       )}
 
-      {/* Historial de Semanas */}
+      {/* Historial de Semanas - 🆕 Ahora con Pagos/Gastos */}
       <div className="rounded-2xl border border-border bg-card p-6">
         <h2 className="text-xl font-bold text-foreground mb-6">📅 Historial de Semanas</h2>
         
         <div className="space-y-3">
           {(weeksHistory || []).slice(0, 8).map((week) => {
             const isCurrentWeek = week.weekId === currentWeek.weekId;
+            const weekNet = (week.totalPayments || 0) - (week.totalBanCosts || 0);
             
             return (
               <div
@@ -395,22 +565,31 @@ export function StatsPanel() {
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-6 text-sm">
+                  <div className="flex items-center gap-4 sm:gap-6 text-sm">
                     <div className="text-center">
+                      <div className="font-bold text-green-400">{formatUSD(week.totalPayments || 0)}</div>
+                      <div className="text-xs text-muted-foreground">Pagos</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="font-bold text-red-400">{formatUSD(week.totalBanCosts || 0)}</div>
+                      <div className="text-xs text-muted-foreground">Gastos</div>
+                    </div>
+                    <div className="text-center">
+                      <div className={cn(
+                        "font-bold",
+                        weekNet >= 0 ? "text-emerald-400" : "text-orange-400"
+                      )}>
+                        {weekNet >= 0 ? '+' : ''}{formatUSD(weekNet)}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Neto</div>
+                    </div>
+                    <div className="text-center hidden sm:block">
                       <div className="font-bold text-red-400">{week.bannedAccounts?.length || 0}</div>
                       <div className="text-xs text-muted-foreground">Bans</div>
                     </div>
-                    <div className="text-center">
-                      <div className="font-bold text-green-400">{week.renewals || 0}</div>
-                      <div className="text-xs text-muted-foreground">Renew</div>
-                    </div>
-                    <div className="text-center">
+                    <div className="text-center hidden sm:block">
                       <div className="font-bold text-blue-400">{week.newClients?.length || 0}</div>
                       <div className="text-xs text-muted-foreground">Nuevos</div>
-                    </div>
-                    <div className="text-center">
-                      <div className="font-bold text-purple-400">{week.totalClients || 0}</div>
-                      <div className="text-xs text-muted-foreground">Total</div>
                     </div>
                   </div>
                 </div>
@@ -442,6 +621,30 @@ export function StatsPanel() {
                         </div>
                       </div>
                     )}
+                    
+                    {/* 🆕 Info financiera en expandido */}
+                    <div className="grid grid-cols-3 gap-3 mt-2">
+                      <div className="text-center p-2 rounded-lg bg-green-500/5 border border-green-500/10">
+                        <div className="text-sm font-bold text-green-400">{formatUSD(week.totalPayments || 0)}</div>
+                        <div className="text-xs text-muted-foreground">{week.paymentCount || 0} pagos</div>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-red-500/5 border border-red-500/10">
+                        <div className="text-sm font-bold text-red-400">{formatUSD(week.totalBanCosts || 0)}</div>
+                        <div className="text-xs text-muted-foreground">{week.banCostCount || 0} bans</div>
+                      </div>
+                      <div className={cn(
+                        "text-center p-2 rounded-lg border",
+                        weekNet >= 0 ? "bg-emerald-500/5 border-emerald-500/10" : "bg-orange-500/5 border-orange-500/10"
+                      )}>
+                        <div className={cn(
+                          "text-sm font-bold",
+                          weekNet >= 0 ? "text-emerald-400" : "text-orange-400"
+                        )}>
+                          {weekNet >= 0 ? '+' : ''}{formatUSD(weekNet)}
+                        </div>
+                        <div className="text-xs text-muted-foreground">neto</div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -450,12 +653,15 @@ export function StatsPanel() {
         </div>
       </div>
 
-      {/* Insights y Recomendaciones */}
+      {/* Insights y Recomendaciones - 🆕 Mejor Semana por Ganancia */}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Mejor Semana */}
         {weeksHistory && weeksHistory.length > 0 && (() => {
-          const bestWeek = [...weeksHistory].sort((a, b) => (b.renewals || 0) - (a.renewals || 0))[0];
+          const bestWeek = [...weeksHistory].sort((a, b) => 
+            ((b.totalPayments || 0) - (b.totalBanCosts || 0)) - ((a.totalPayments || 0) - (a.totalBanCosts || 0))
+          )[0];
           if (!bestWeek) return null;
+          const bestNet = (bestWeek.totalPayments || 0) - (bestWeek.totalBanCosts || 0);
           return (
             <div className="rounded-2xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-transparent p-6">
               <div className="flex items-center gap-3 mb-4">
@@ -467,16 +673,21 @@ export function StatsPanel() {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Renovaciones</span>
-                  <span className="font-bold text-green-400">{bestWeek.renewals || 0}</span>
+                  <span className="text-muted-foreground">Pagos</span>
+                  <span className="font-bold text-green-400">{formatUSD(bestWeek.totalPayments || 0)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Nuevos Clientes</span>
-                  <span className="font-bold text-blue-400">{bestWeek.newClients?.length || 0}</span>
+                  <span className="text-muted-foreground">Gastos</span>
+                  <span className="font-bold text-red-400">{formatUSD(bestWeek.totalBanCosts || 0)}</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Bloqueos</span>
-                  <span className="font-bold text-red-400">{bestWeek.bannedAccounts?.length || 0}</span>
+                <div className="flex items-center justify-between text-sm pt-2 border-t border-green-500/20">
+                  <span className="text-muted-foreground font-semibold">Ganancia Neta</span>
+                  <span className={cn(
+                    "font-bold",
+                    bestNet >= 0 ? "text-emerald-400" : "text-orange-400"
+                  )}>
+                    {bestNet >= 0 ? '+' : ''}{formatUSD(bestNet)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -502,8 +713,8 @@ export function StatsPanel() {
                   <span className="font-bold text-red-400">{worstWeek.bannedAccounts?.length || 0}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Renovaciones</span>
-                  <span className="font-bold text-green-400">{worstWeek.renewals || 0}</span>
+                  <span className="text-muted-foreground">Gasto en Bans</span>
+                  <span className="font-bold text-red-400">{formatUSD(worstWeek.totalBanCosts || 0)}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Nuevos Clientes</span>
@@ -515,27 +726,45 @@ export function StatsPanel() {
         })()}
       </div>
 
-      {/* Promedios Generales */}
+      {/* Promedios Generales - 🆕 Con financieros */}
       {weeksHistory && weeksHistory.length > 0 && (() => {
         const avgBans = Math.round(weeksHistory.reduce((sum, w) => sum + (w.bannedAccounts?.length || 0), 0) / weeksHistory.length);
-        const avgRenewals = Math.round(weeksHistory.reduce((sum, w) => sum + (w.renewals || 0), 0) / weeksHistory.length);
+        const avgPayments = weeksHistory.reduce((sum, w) => sum + (w.totalPayments || 0), 0) / weeksHistory.length;
+        const avgBanCosts = weeksHistory.reduce((sum, w) => sum + (w.totalBanCosts || 0), 0) / weeksHistory.length;
+        const avgNet = avgPayments - avgBanCosts;
         const avgNewClients = Math.round(weeksHistory.reduce((sum, w) => sum + (w.newClients?.length || 0), 0) / weeksHistory.length);
 
         return (
           <div className="rounded-2xl border border-border bg-card p-6">
             <h2 className="text-xl font-bold text-foreground mb-6">📊 Promedios (Últimas {weeksHistory.length} Semanas)</h2>
             
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              <div className="text-center p-4 rounded-xl bg-green-500/5 border border-green-500/20">
+                <div className="text-2xl font-bold text-green-400 mb-1">{formatUSD(avgPayments)}</div>
+                <div className="text-sm text-muted-foreground">Pagos/semana</div>
+              </div>
               <div className="text-center p-4 rounded-xl bg-red-500/5 border border-red-500/20">
-                <div className="text-3xl font-bold text-red-400 mb-1">{avgBans}</div>
+                <div className="text-2xl font-bold text-red-400 mb-1">{formatUSD(avgBanCosts)}</div>
+                <div className="text-sm text-muted-foreground">Gastos/semana</div>
+              </div>
+              <div className={cn(
+                "text-center p-4 rounded-xl border",
+                avgNet >= 0 ? "bg-emerald-500/5 border-emerald-500/20" : "bg-orange-500/5 border-orange-500/20"
+              )}>
+                <div className={cn(
+                  "text-2xl font-bold mb-1",
+                  avgNet >= 0 ? "text-emerald-400" : "text-orange-400"
+                )}>
+                  {avgNet >= 0 ? '+' : ''}{formatUSD(avgNet)}
+                </div>
+                <div className="text-sm text-muted-foreground">Neto/semana</div>
+              </div>
+              <div className="text-center p-4 rounded-xl bg-red-500/5 border border-red-500/20">
+                <div className="text-2xl font-bold text-red-400 mb-1">{avgBans}</div>
                 <div className="text-sm text-muted-foreground">Bloqueos/semana</div>
               </div>
-              <div className="text-center p-4 rounded-xl bg-green-500/5 border border-green-500/20">
-                <div className="text-3xl font-bold text-green-400 mb-1">{avgRenewals}</div>
-                <div className="text-sm text-muted-foreground">Renovaciones/semana</div>
-              </div>
               <div className="text-center p-4 rounded-xl bg-blue-500/5 border border-blue-500/20">
-                <div className="text-3xl font-bold text-blue-400 mb-1">{avgNewClients}</div>
+                <div className="text-2xl font-bold text-blue-400 mb-1">{avgNewClients}</div>
                 <div className="text-sm text-muted-foreground">Nuevos/semana</div>
               </div>
             </div>
