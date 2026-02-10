@@ -1466,7 +1466,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     setShowEditForm(false);
                     setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
                   }}
-                  }}
                   disabled={actionLoading || commandInProgressRef.current}
                   style={{
                     width: '100%',
