@@ -61,33 +61,23 @@ export interface NotificationConfig {
 
 // 🆕 INTERFACE PARA POST INDIVIDUAL
 export interface PostData {
-  postId: string; // ID único del post (ej: "post_50233388")
+  postId: string;
   clientName: string;
   phoneNumber: string;
   city: string;
   location: string;
   postName?: string;
-  
-  // Campos de edición (extraídos del formulario)
   name?: string;
   age?: number;
   headline?: string;
   body?: string;
-  
-  // Estado individual del post
   isPaused: boolean;
   rentalExpiration: string;
   rentalRemaining: RentalRemaining;
-  
-  // Republicación (compartida a nivel navegador, pero se muestra aquí)
   republishStatus?: RepublishStatus;
-  
-  // Metadata
   lastUpdate: string;
   postUrl?: string;
   postIdCapturedAt?: number;
-  
-  // Notificaciones (opcional, por post)
   notificationConfig?: NotificationConfig;
 }
 
@@ -96,22 +86,14 @@ export interface BrowserData {
   browserName: string;
   uniqueId?: string;
   manuallyCreated?: boolean;
-  
-  // 🆕 Multi-post flags
-  isMultiPost?: boolean; // true si tiene múltiples posts
-  postCount?: number; // Cantidad de posts activos (2, 3, etc)
-  currentPostIndex?: number; // Índice actual de rotación
-  postIds?: string[]; // Array de IDs ["post_50233388", "post_50280395"]
-  
-  // 🆕 Posts individuales (solo si isMultiPost = true)
-  posts?: Record<string, PostData>; // { "post_50233388": {...}, "post_50280395": {...} }
-  
-  // Datos compartidos del navegador
-  isPaused: boolean; // Pausa general (afecta todos los posts)
-  republishStatus: RepublishStatus; // Tiempo compartido
+  isMultiPost?: boolean;
+  postCount?: number;
+  currentPostIndex?: number;
+  postIds?: string[];
+  posts?: Record<string, PostData>;
+  isPaused: boolean;
+  republishStatus: RepublishStatus;
   lastUpdate: string;
-  
-  // Estado del sistema
   editInProgress?: boolean;
   editLog?: string;
   editLogType?: "error" | "success" | "info" | "warning";
@@ -130,11 +112,7 @@ export interface BrowserData {
   consecutiveErrors?: number;
   currentUrl?: string;
   pageTitle?: string;
-  
-  // 🆕 Post activo actual (para compatibilidad con sistema anterior)
-  activePostId?: string; // ID del post que se está mostrando/editando
-  
-  // Campos legacy (para navegadores single-post)
+  activePostId?: string;
   clientName?: string;
   phoneNumber?: string;
   city?: string;
@@ -150,19 +128,14 @@ export interface BrowserData {
   postUrl?: string;
   postIdCapturedAt?: number;
   notificationConfig?: NotificationConfig;
-  
-  // Estadísticas
   createdAt?: string;
   isBanned?: boolean;
   bannedAt?: string;
 }
 
-// 🆕 INTERFACE PARA BÚSQUEDA (puede retornar post individual o navegador completo)
 export interface SearchResult {
-  type: "single" | "multi"; // single = navegador antiguo, multi = post dentro de multi-post
+  type: "single" | "multi";
   browserName: string;
-  
-  // Si es single, estos campos están a nivel raíz
   clientName?: string;
   phoneNumber?: string;
   city?: string;
@@ -172,13 +145,38 @@ export interface SearchResult {
   rentalExpiration?: string;
   rentalRemaining?: RentalRemaining;
   republishStatus?: RepublishStatus;
-  
-  // Si es multi, apunta a un post específico
-  postId?: string; // ID del post encontrado
-  postData?: PostData; // Datos del post específico
-  
-  // Data completa (para mostrar en dashboard)
+  postId?: string;
+  postData?: PostData;
   fullData: BrowserData;
+}
+
+// =====================================================================
+// 🆕 INTERFACES FINANCIERAS — Pagos y Costos de Ban
+// Leídos desde /stats/weekly/{weekKey}/ (escritos por MegaBot v9.1)
+// =====================================================================
+export interface PaymentRecord {
+  amount: number;
+  browserName: string;
+  postId: string;
+  clientName: string;
+  timestamp: string;
+}
+
+export interface BanCostRecord {
+  amount: number;
+  browserName: string;
+  timestamp: string;
+  url?: string;
+}
+
+export interface WeeklyFinancials {
+  totalPayments: number;
+  totalBans: number;
+  paymentCount: number;
+  banCount: number;
+  netProfit: number;
+  payments: Record<string, PaymentRecord>;
+  bans: Record<string, BanCostRecord>;
 }
 
 export interface WeeklyStats {
@@ -190,15 +188,22 @@ export interface WeeklyStats {
   newClients: string[];
   totalClients: number;
   totalRevenue?: number;
+  // 🆕 Financieros (desde /stats/weekly/)
+  totalPayments?: number;
+  totalBanCosts?: number;
+  paymentCount?: number;
+  banCostCount?: number;
+  netProfit?: number;
 }
 
 export interface StatsEvent {
-  type: "ban" | "renewal" | "newClient";
+  type: "ban" | "renewal" | "newClient" | "payment" | "banCost";
   browserName: string;
   clientName?: string;
   timestamp: string;
   weekId: string;
   details?: any;
+  amount?: number;
 }
 
 export const FirebaseAPI = {
@@ -206,7 +211,6 @@ export const FirebaseAPI = {
     const diff = new Date(rentalExpiration).getTime() - new Date().getTime();
     
     if (diff <= 0) {
-      // 🆕 DEUDA: Tiempo negativo
       const debtDiff = Math.abs(diff);
       return {
         days: -Math.floor(debtDiff / (1000 * 60 * 60 * 24)),
@@ -255,11 +259,10 @@ export const FirebaseAPI = {
         consecutiveErrors: 0,
         createdAt: now.toISOString(),
         isBanned: false,
-        isMultiPost: false, // 🆕 Por defecto es single-post
+        isMultiPost: false,
       };
 
       await set(ref(database, `browsers/${browserName}`), userData);
-      
       await StatsAPI.registerNewClient(browserName);
       
       return { success: true, uniqueId };
@@ -279,24 +282,19 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 BUSCAR POR NOMBRE DE CLIENTE (NUEVO - SOPORTA MULTI-POST)
   async findBrowserByClientName(clientName: string): Promise<SearchResult | null> {
     try {
       const snapshot = await get(ref(database, "browsers"));
       const browsers = snapshot.val();
-      
       if (!browsers) return null;
 
       const cleanSearch = clientName.trim().toLowerCase();
 
-      // Buscar en todos los navegadores
       for (const [browserName, browserData] of Object.entries(browsers)) {
         const data = browserData as BrowserData;
         
-        // 🔍 CASO 1: Navegador single-post (sistema antiguo)
         if (!data.isMultiPost) {
           const browserClientName = (data.clientName || "").trim().toLowerCase();
-          
           if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
             return {
               type: "single",
@@ -315,12 +313,10 @@ export const FirebaseAPI = {
           }
         }
         
-        // 🔍 CASO 2: Navegador multi-post (buscar en posts)
         if (data.isMultiPost && data.posts) {
           for (const [postId, postData] of Object.entries(data.posts)) {
             const post = postData as PostData;
             const postClientName = (post.clientName || "").trim().toLowerCase();
-            
             if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
               return {
                 type: "multi",
@@ -335,14 +331,13 @@ export const FirebaseAPI = {
                 isPaused: post.isPaused,
                 rentalExpiration: post.rentalExpiration,
                 rentalRemaining: post.rentalRemaining,
-                republishStatus: data.republishStatus, // Compartido del navegador
+                republishStatus: data.republishStatus,
                 fullData: data,
               };
             }
           }
         }
       }
-
       return null;
     } catch (error) {
       console.error("[findBrowserByClientName Error]:", error);
@@ -350,12 +345,10 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 BUSCAR TODOS LOS POSTS DE UN CLIENTE (PUEDE HABER MÚLTIPLES)
   async findAllBrowsersByClientName(clientName: string): Promise<SearchResult[]> {
     try {
       const snapshot = await get(ref(database, "browsers"));
       const browsers = snapshot.val();
-      
       if (!browsers) return [];
 
       const cleanSearch = clientName.trim().toLowerCase();
@@ -364,10 +357,8 @@ export const FirebaseAPI = {
       for (const [browserName, browserData] of Object.entries(browsers)) {
         const data = browserData as BrowserData;
         
-        // 🔍 CASO 1: Navegador single-post
         if (!data.isMultiPost) {
           const browserClientName = (data.clientName || "").trim().toLowerCase();
-          
           if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
             results.push({
               type: "single",
@@ -386,12 +377,10 @@ export const FirebaseAPI = {
           }
         }
         
-        // 🔍 CASO 2: Navegador multi-post
         if (data.isMultiPost && data.posts) {
           for (const [postId, postData] of Object.entries(data.posts)) {
             const post = postData as PostData;
             const postClientName = (post.clientName || "").trim().toLowerCase();
-            
             if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
               results.push({
                 type: "multi",
@@ -413,7 +402,6 @@ export const FirebaseAPI = {
           }
         }
       }
-
       return results;
     } catch (error) {
       console.error("[findAllBrowsersByClientName Error]:", error);
@@ -425,9 +413,7 @@ export const FirebaseAPI = {
     try {
       const snapshot = await get(ref(database, "browsers"));
       const browsers = snapshot.val();
-
       if (!browsers) return null;
-
       for (const [, data] of Object.entries(browsers)) {
         if ((data as BrowserData).uniqueId === uniqueId) {
           return data as BrowserData;
@@ -489,14 +475,12 @@ export const FirebaseAPI = {
           }
         }
       }
-
       return null;
     } catch {
       return null;
     }
   },
 
-  // 🆕 COMANDOS PARA POSTS INDIVIDUALES
   async sendCommand(browserName: string, actionType: string, payload: Record<string, unknown> = {}) {
     try {
       const commandId = Date.now().toString();
@@ -511,42 +495,30 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 PAUSAR POST INDIVIDUAL (MODIFICADO - AHORA ENVÍA COMANDO)
   async togglePausePost(browserName: string, postId: string | undefined, newState: boolean) {
     try {
       const browserData = await this.findBrowserByName(browserName);
-      
       if (!browserData) {
         return { success: false, error: "Navegador no encontrado" };
       }
 
-      // CASO 1: Navegador single-post (sistema antiguo)
       if (!browserData.isMultiPost || !postId) {
         await update(ref(database, `browsers/${browserName}`), {
           isPaused: newState,
           lastUpdate: new Date().toISOString(),
         });
-        
-        // 🆕 ENVIAR COMANDO AL BOT
         await this.sendCommand(browserName, newState ? 'pause' : 'resume');
-        
         return { success: true };
       }
 
-      // CASO 2: Navegador multi-post (pausar post específico)
       await update(ref(database, `browsers/${browserName}/posts/${postId}`), {
         isPaused: newState,
         lastUpdate: new Date().toISOString(),
       });
-
-      // Actualizar timestamp del navegador
       await update(ref(database, `browsers/${browserName}`), {
         lastUpdate: new Date().toISOString(),
       });
-
-      // 🆕 ENVIAR COMANDO AL BOT CON POST ID
       await this.sendCommand(browserName, newState ? 'pause' : 'resume', { postId });
-
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -577,7 +549,6 @@ export const FirebaseAPI = {
         type: "republish",
         timestamp: now.toISOString(),
       });
-
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -596,18 +567,15 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🆕 ACTUALIZAR CAMPO DE POST INDIVIDUAL
   async updatePostField(browserName: string, postId: string, field: string, value: any) {
     try {
       await update(ref(database, `browsers/${browserName}/posts/${postId}`), {
         [field]: value,
         lastUpdate: new Date().toISOString(),
       });
-      
       await update(ref(database, `browsers/${browserName}`), {
         lastUpdate: new Date().toISOString(),
       });
-      
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -629,7 +597,6 @@ export const FirebaseAPI = {
       await set(ref(database, `commands/${browserName}`), null);
       await set(ref(database, `notifications/${browserName}`), null);
       await set(ref(database, `lastNotified/${browserName}`), null);
-      
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
@@ -640,16 +607,11 @@ export const FirebaseAPI = {
     try {
       const notifRef = ref(database, `notifications/${browserName}`);
       const snapshot = await get(notifRef);
-      
       if (snapshot.exists()) {
         return snapshot.val() as NotificationConfig;
       }
-      
       return {
-        email: {
-          active: false,
-          address: "",
-        },
+        email: { active: false, address: "" },
         eventos: {
           republicacion: true,
           error: true,
@@ -665,10 +627,7 @@ export const FirebaseAPI = {
     }
   },
 
-  async saveNotificationConfig(
-    browserName: string,
-    config: NotificationConfig
-  ) {
+  async saveNotificationConfig(browserName: string, config: NotificationConfig) {
     try {
       await set(ref(database, `notifications/${browserName}`), config);
       return { success: true };
@@ -681,18 +640,13 @@ export const FirebaseAPI = {
     try {
       const response = await fetch("/api/send-notification", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           browserName,
           tipo: "test",
-          config: {
-            email,
-          },
+          config: { email },
         }),
       });
-
       const result = await response.json();
       return result;
     } catch (error) {
@@ -708,6 +662,15 @@ export const StatsAPI = {
     const days = Math.floor((now.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000));
     const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
     return `${now.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
+  },
+
+  // 🆕 Generar weekKey compatible con la extensión (misma lógica que getWeekKey() en content.js)
+  getExtensionWeekKey(): string {
+    const now = new Date();
+    const jan1 = new Date(now.getFullYear(), 0, 1);
+    const dayOfYear = Math.ceil((now.getTime() - jan1.getTime()) / (1000 * 60 * 60 * 24));
+    const weekNum = Math.ceil((dayOfYear + jan1.getDay()) / 7);
+    return `${now.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
   },
 
   getWeekRange(weekId: string): { start: Date; end: Date } {
@@ -754,11 +717,8 @@ export const StatsAPI = {
       }
       
       await set(statsRef, currentStats);
-      
-      console.log(`[Stats]: Ban registrado para ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return { success: false, error: (error as Error).message };
     }
   },
@@ -782,15 +742,11 @@ export const StatsAPI = {
       const statsRef = ref(database, `stats/weeks/${weekId}`);
       const snapshot = await get(statsRef);
       const currentStats = snapshot.val() || this.createEmptyWeekStats(weekId);
-      
       currentStats.renewals += 1;
       
       await set(statsRef, currentStats);
-      
-      console.log(`[Stats]: Renovación registrada para ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return { success: false, error: (error as Error).message };
     }
   },
@@ -816,10 +772,8 @@ export const StatsAPI = {
         currentStats.newClients.push(browserName);
       }
       
-      // 🆕 CALCULAR TOTAL CORRECTO INCLUYENDO MULTI-POST
       const allBrowsers = await FirebaseAPI.getAllBrowsers();
       let totalCount = 0;
-      
       Object.values(allBrowsers).forEach(browser => {
         if (browser.isMultiPost && browser.posts) {
           totalCount += browser.postCount || Object.keys(browser.posts).length;
@@ -827,16 +781,189 @@ export const StatsAPI = {
           totalCount += 1;
         }
       });
-      
       currentStats.totalClients = totalCount;
       
       await set(statsRef, currentStats);
-      
-      console.log(`[Stats]: Nuevo cliente registrado: ${browserName} en ${weekId}`);
       return { success: true };
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // =====================================================================
+  // 🆕 FINANCIEROS — Leer pagos y costos de ban desde /stats/weekly/
+  // (escritos por la extensión MegaBot v9.1)
+  // =====================================================================
+
+  async getWeeklyFinancials(weekKey?: string): Promise<WeeklyFinancials> {
+    const key = weekKey || this.getExtensionWeekKey();
+    const empty: WeeklyFinancials = {
+      totalPayments: 0, totalBans: 0, paymentCount: 0,
+      banCount: 0, netProfit: 0, payments: {}, bans: {},
+    };
+
+    try {
+      const snapshot = await get(ref(database, `stats/weekly/${key}`));
+      if (!snapshot.exists()) return empty;
+
+      const data = snapshot.val();
+      const totals = data.totals || {};
+      const payments = data.payments || {};
+      const bans = data.bans || {};
+      const totalPayments = totals.totalPayments || 0;
+      const totalBans = totals.totalBans || 0;
+
+      return {
+        totalPayments,
+        totalBans,
+        paymentCount: totals.paymentCount || Object.keys(payments).length,
+        banCount: totals.banCount || Object.keys(bans).length,
+        netProfit: totalPayments - totalBans,
+        payments,
+        bans,
+      };
+    } catch (error) {
+      console.error("[StatsAPI] Error getting weekly financials:", error);
+      return empty;
+    }
+  },
+
+  listenToWeeklyFinancials(callback: (financials: WeeklyFinancials) => void) {
+    const weekKey = this.getExtensionWeekKey();
+    const weekRef = ref(database, `stats/weekly/${weekKey}`);
+    const unsubscribe = onValue(weekRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        callback({
+          totalPayments: 0, totalBans: 0, paymentCount: 0,
+          banCount: 0, netProfit: 0, payments: {}, bans: {},
+        });
+        return;
+      }
+      const totals = data.totals || {};
+      const payments = data.payments || {};
+      const bans = data.bans || {};
+      const totalPayments = totals.totalPayments || 0;
+      const totalBans = totals.totalBans || 0;
+      callback({
+        totalPayments,
+        totalBans,
+        paymentCount: totals.paymentCount || Object.keys(payments).length,
+        banCount: totals.banCount || Object.keys(bans).length,
+        netProfit: totalPayments - totalBans,
+        payments,
+        bans,
+      });
+    });
+    return unsubscribe;
+  },
+
+  // 🆕 Registrar pago manualmente desde el dashboard
+  async recordPaymentFromDashboard(amount: number, postId?: string, clientName?: string, browserName?: string) {
+    try {
+      const weekKey = this.getExtensionWeekKey();
+      const paymentId = `pay_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      const paymentData: PaymentRecord = {
+        amount,
+        browserName: browserName || 'dashboard',
+        postId: postId || 'manual',
+        clientName: clientName || 'Manual',
+        timestamp: new Date().toISOString(),
+      };
+
+      await set(ref(database, `stats/weekly/${weekKey}/payments/${paymentId}`), paymentData);
+
+      const totalsRef = ref(database, `stats/weekly/${weekKey}/totals`);
+      const totalsSnap = await get(totalsRef);
+      const totals = totalsSnap.val() || {};
+
+      await update(totalsRef, {
+        totalPayments: (totals.totalPayments || 0) + amount,
+        paymentCount: (totals.paymentCount || 0) + 1,
+      });
+
+      await update(ref(database, `stats/weekly/${weekKey}/meta`), {
+        weekKey,
+        lastUpdated: new Date().toISOString(),
+      });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Registrar costo de ban manualmente desde el dashboard
+  async recordBanCostFromDashboard(amount: number, browserName?: string) {
+    try {
+      const weekKey = this.getExtensionWeekKey();
+      const banId = `ban_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+      const banData: BanCostRecord = {
+        amount,
+        browserName: browserName || 'dashboard',
+        timestamp: new Date().toISOString(),
+      };
+
+      await set(ref(database, `stats/weekly/${weekKey}/bans/${banId}`), banData);
+
+      const totalsRef = ref(database, `stats/weekly/${weekKey}/totals`);
+      const totalsSnap = await get(totalsRef);
+      const totals = totalsSnap.val() || {};
+
+      await update(totalsRef, {
+        totalBans: (totals.totalBans || 0) + amount,
+        banCount: (totals.banCount || 0) + 1,
+      });
+
+      await update(ref(database, `stats/weekly/${weekKey}/meta`), {
+        weekKey,
+        lastUpdated: new Date().toISOString(),
+      });
+
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // 🆕 Obtener historial financiero de TODAS las semanas
+  async getFinancialsHistory(count: number = 12): Promise<Array<{ weekKey: string; financials: WeeklyFinancials }>> {
+    try {
+      const snapshot = await get(ref(database, `stats/weekly`));
+      if (!snapshot.exists()) return [];
+
+      const allWeeks = snapshot.val();
+      const results: Array<{ weekKey: string; financials: WeeklyFinancials }> = [];
+
+      for (const [weekKey, weekData] of Object.entries(allWeeks)) {
+        const data = weekData as any;
+        const totals = data.totals || {};
+        const payments = data.payments || {};
+        const bans = data.bans || {};
+        const totalPayments = totals.totalPayments || 0;
+        const totalBans = totals.totalBans || 0;
+
+        results.push({
+          weekKey,
+          financials: {
+            totalPayments,
+            totalBans,
+            paymentCount: totals.paymentCount || Object.keys(payments).length,
+            banCount: totals.banCount || Object.keys(bans).length,
+            netProfit: totalPayments - totalBans,
+            payments,
+            bans,
+          },
+        });
+      }
+
+      results.sort((a, b) => b.weekKey.localeCompare(a.weekKey));
+      return results.slice(0, count);
+    } catch (error) {
+      console.error("[StatsAPI] Error getting financials history:", error);
+      return [];
     }
   },
 
@@ -858,14 +985,24 @@ export const StatsAPI = {
       const weekId = this.getCurrentWeekId();
       const statsRef = ref(database, `stats/weeks/${weekId}`);
       const snapshot = await get(statsRef);
-      
+
+      let stats: WeeklyStats;
       if (snapshot.exists()) {
-        return snapshot.val() as WeeklyStats;
+        stats = snapshot.val() as WeeklyStats;
+      } else {
+        stats = this.createEmptyWeekStats(weekId);
       }
-      
-      return this.createEmptyWeekStats(weekId);
+
+      // 🆕 Enriquecer con datos financieros
+      const financials = await this.getWeeklyFinancials();
+      stats.totalPayments = financials.totalPayments;
+      stats.totalBanCosts = financials.totalBans;
+      stats.paymentCount = financials.paymentCount;
+      stats.banCostCount = financials.banCount;
+      stats.netProfit = financials.netProfit;
+
+      return stats;
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return this.createEmptyWeekStats(this.getCurrentWeekId());
     }
   },
@@ -874,17 +1011,29 @@ export const StatsAPI = {
     try {
       const statsRef = ref(database, `stats/weeks`);
       const snapshot = await get(statsRef);
-      
       if (!snapshot.exists()) return [];
-      
+
       const weeksData = snapshot.val();
       const weeks: WeeklyStats[] = Object.values(weeksData);
-      
+
+      // 🆕 Enriquecer cada semana con datos financieros
+      const financialsHistory = await this.getFinancialsHistory(count);
+      const financialsMap = new Map(financialsHistory.map(f => [f.weekKey, f.financials]));
+
+      for (const week of weeks) {
+        const fin = financialsMap.get(week.weekId);
+        if (fin) {
+          week.totalPayments = fin.totalPayments;
+          week.totalBanCosts = fin.totalBans;
+          week.paymentCount = fin.paymentCount;
+          week.banCostCount = fin.banCount;
+          week.netProfit = fin.netProfit;
+        }
+      }
+
       weeks.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
-      
       return weeks.slice(0, count);
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return [];
     }
   },
@@ -893,17 +1042,13 @@ export const StatsAPI = {
     try {
       const eventsRef = ref(database, `stats/events/${weekId}`);
       const snapshot = await get(eventsRef);
-      
       if (!snapshot.exists()) return [];
-      
+
       const eventsData = snapshot.val();
       const events: StatsEvent[] = Object.values(eventsData);
-      
       events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
       return events;
     } catch (error) {
-      console.error("[Stats Error]:", error);
       return [];
     }
   },
