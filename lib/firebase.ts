@@ -282,6 +282,8 @@ export const FirebaseAPI = {
     }
   },
 
+  // 🔧 FIX: Búsqueda por coincidencia EXACTA (case-insensitive)
+  // Antes usaba .includes() que causaba que "Emi" matcheara con "Jeremi"
   async findBrowserByClientName(clientName: string): Promise<SearchResult | null> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -295,7 +297,7 @@ export const FirebaseAPI = {
         
         if (!data.isMultiPost) {
           const browserClientName = (data.clientName || "").trim().toLowerCase();
-          if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
+          if (browserClientName === cleanSearch) {
             return {
               type: "single",
               browserName: data.browserName,
@@ -317,7 +319,7 @@ export const FirebaseAPI = {
           for (const [postId, postData] of Object.entries(data.posts)) {
             const post = postData as PostData;
             const postClientName = (post.clientName || "").trim().toLowerCase();
-            if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
+            if (postClientName === cleanSearch) {
               return {
                 type: "multi",
                 browserName: data.browserName,
@@ -345,6 +347,8 @@ export const FirebaseAPI = {
     }
   },
 
+  // 🔧 FIX: Búsqueda por coincidencia EXACTA (case-insensitive)
+  // Antes usaba .includes() que causaba que "Emi" matcheara con "Jeremi"
   async findAllBrowsersByClientName(clientName: string): Promise<SearchResult[]> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -359,7 +363,7 @@ export const FirebaseAPI = {
         
         if (!data.isMultiPost) {
           const browserClientName = (data.clientName || "").trim().toLowerCase();
-          if (browserClientName === cleanSearch || browserClientName.includes(cleanSearch)) {
+          if (browserClientName === cleanSearch) {
             results.push({
               type: "single",
               browserName: data.browserName,
@@ -381,7 +385,7 @@ export const FirebaseAPI = {
           for (const [postId, postData] of Object.entries(data.posts)) {
             const post = postData as PostData;
             const postClientName = (post.clientName || "").trim().toLowerCase();
-            if (postClientName === cleanSearch || postClientName.includes(cleanSearch)) {
+            if (postClientName === cleanSearch) {
               results.push({
                 type: "multi",
                 browserName: data.browserName,
