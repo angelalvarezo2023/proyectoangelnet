@@ -125,7 +125,7 @@ function EditStepper({ currentStep }: { currentStep: EditStep }) {
           {currentStep === "waiting_captcha" && "Esperando captcha..."}
           {currentStep === "captcha" && "Ingresa el código de seguridad"}
           {currentStep === "submitting_captcha" && "Verificando código..."}
-          {currentStep === "finishing" && "Finalizando edición..."}
+          {currentStep === "finishing" && "Esperando momento de republicar..."}
           {currentStep === "complete" && "¡Cambios guardados exitosamente!"}
           {currentStep === "error" && "Hubo un error, intenta de nuevo"}
         </p>
@@ -1248,16 +1248,26 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </div>
               )}
 
-              {/* ========== FINISHING ========== */}
+              {/* ========== FINISHING (esperando republish timer) ========== */}
               {editStep === "finishing" && (
                 <div className="py-12 sm:py-16 flex flex-col items-center gap-6 relative z-20">
                   <div className="relative">
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-green-500/30 border-t-green-500 animate-spin" />
-                    <div className="absolute inset-0 flex items-center justify-center"><span className="text-4xl sm:text-5xl">⚡</span></div>
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-4 border-blue-500/30 border-t-blue-500 animate-spin" />
+                    <div className="absolute inset-0 flex items-center justify-center"><span className="text-4xl sm:text-5xl">⏳</span></div>
                   </div>
                   <div className="text-center">
-                    <h3 style={{ fontSize: "clamp(20px, 5vw, 28px)", fontWeight: 900, color: "#FFFF00", textShadow: "3px 3px 6px rgba(0,0,0,0.8)" }}>Finalizando...</h3>
-                    <p style={{ fontSize: "clamp(13px, 3vw, 16px)", color: "#FFFFFF", marginTop: "8px", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>Captcha verificado. El bot esta guardando los cambios finales.</p>
+                    <h3 style={{ fontSize: "clamp(20px, 5vw, 28px)", fontWeight: 900, color: "#FFFF00", textShadow: "3px 3px 6px rgba(0,0,0,0.8)" }}>Esperando publicacion...</h3>
+                    <p style={{ fontSize: "clamp(13px, 3vw, 16px)", color: "#FFFFFF", marginTop: "8px", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
+                      Captcha verificado. El bot publicara cuando llegue el momento de republicar.
+                    </p>
+                    {editLog && (
+                      <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#FFD700", marginTop: "12px", fontStyle: "italic", textShadow: "1px 1px 3px rgba(0,0,0,0.8)" }}>
+                        📋 {editLog}
+                      </p>
+                    )}
+                  </div>
+                  <div style={{ background: "rgba(255, 255, 255, 0.9)", borderRadius: "10px", border: "2px solid #2196F3", padding: "12px 16px" }}>
+                    <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#333", fontWeight: "bold", textAlign: "center", margin: 0 }}>No cierres esta ventana. Se publicara automaticamente.</p>
                   </div>
                 </div>
               )}
