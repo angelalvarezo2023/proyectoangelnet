@@ -341,58 +341,59 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       // --- TRANSICIONES DEL FLUJO DE EDICIÓN ---
       const step = editStepRef.current;
 
-      // Transición: saving/waiting_bot → captcha (captcha apareció)
-      if (newData.captchaWaiting && (step === "saving" || step === "waiting_bot")) {
+      // PRIORIDAD 1: Si captcha aparece durante CUALQUIER paso activo → mostrar captcha
+      // Esto tiene máxima prioridad para que nunca se pierda
+      if (newData.captchaWaiting && 
+          (step === "saving" || step === "waiting_bot" || step === "finishing")) {
         setEditStep("captcha");
         setCaptchaCode("");
       }
 
-      // Transición: submitting_captcha → finishing (captcha resuelto)
+      // PRIORIDAD 2: Captcha resuelto → finishing
       if (!newData.captchaWaiting && step === "submitting_captcha") {
         setEditStep("finishing");
       }
 
-      // Transición: saving → waiting_bot (bot empezó a procesar)
+      // PRIORIDAD 3: Bot empezó a procesar
       if (newData.editInProgress && step === "saving") {
         setEditStep("waiting_bot");
       }
 
-      // Transición: finishing/waiting_bot → complete (edición terminada)
-      if (!newData.editInProgress && (step === "finishing" || step === "waiting_bot")) {
-        if (!newData.captchaWaiting) {
+      // PRIORIDAD 4: Edición terminada (solo si NO hay captcha pendiente)
+      if (!newData.editInProgress && !newData.captchaWaiting) {
+        if (step === "finishing" || step === "waiting_bot") {
           setEditStep("complete");
-          // Limpiar editLog inmediatamente cuando la edición termina
+          // Limpiar editLog
           Promise.all([
             fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
             fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
           ]).catch(() => {});
         }
-      }
-
-      // Edge case: bot terminó tan rápido que no detectamos editInProgress
-      if (step === "saving" && !newData.editInProgress && !newData.captchaWaiting) {
-        setTimeout(() => {
-          if (editStepRef.current === "saving") {
-            setEditStep("complete");
-            Promise.all([
-              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-            ]).catch(() => {});
-          }
-        }, 3000);
-      }
-
-      // Limpieza extra: si editInProgress pasó a false y no hay edición activa en el stepper,
-      // limpiar editLog después de 3 segundos
-      if (!newData.editInProgress && !newData.captchaWaiting && step === "idle") {
-        if (newData.editLog) {
+        // Edge case: bot terminó muy rápido - esperar 8s antes de asumir complete
+        // (da tiempo al captcha de aparecer)
+        if (step === "saving") {
           setTimeout(() => {
-            Promise.all([
-              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-            ]).catch(() => {});
-          }, 3000);
+            const currentStep = editStepRef.current;
+            // Solo completar si seguimos en "saving" (no se movió a captcha u otro paso)
+            if (currentStep === "saving") {
+              setEditStep("complete");
+              Promise.all([
+                fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+                fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+              ]).catch(() => {});
+            }
+          }, 8000);
         }
+      }
+
+      // Limpieza: si no hay edición activa y hay editLog huérfano, limpiarlo
+      if (!newData.editInProgress && !newData.captchaWaiting && step === "idle" && newData.editLog) {
+        setTimeout(() => {
+          Promise.all([
+            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+          ]).catch(() => {});
+        }, 3000);
       }
 
       // --- Actualizar datos en vivo ---
@@ -1113,6 +1114,12 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                     <p style={{ fontSize: "clamp(13px, 3vw, 16px)", color: "#FFFFFF", marginTop: "8px", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>
                       {editStep === "saving" ? "Conectando con el sistema..." : "El bot esta editando tu anuncio. Esto puede tomar unos segundos."}
                     </p>
+                    {/* Mostrar editLog del bot en tiempo real */}
+                    {editLog && (
+                      <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#FFD700", marginTop: "12px", fontStyle: "italic", textShadow: "1px 1px 3px rgba(0,0,0,0.8)" }}>
+                        📋 {editLog}
+                      </p>
+                    )}
                   </div>
                   <div className="w-full max-w-xs">
                     <div className="h-2 rounded-full bg-black/30 overflow-hidden">
@@ -1125,52 +1132,66 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </div>
               )}
 
-              {/* ========== PASO 3: CAPTCHA ========== */}
+              {/* ========== PASO 3: CAPTCHA (diseño limpio) ========== */}
               {(editStep === "captcha" || editStep === "submitting_captcha") && (
-                <div className="py-6 sm:py-8 flex flex-col items-center gap-4 sm:gap-6 relative z-20">
-                  <div className="w-full max-w-md">
-                    <div className="text-center mb-4">
-                      <h3 style={{ fontSize: "clamp(22px, 5vw, 30px)", fontWeight: 900, color: "#FFFF00", textShadow: "3px 3px 6px rgba(0,0,0,0.8)" }}>Codigo de Seguridad</h3>
-                      <p style={{ fontSize: "clamp(13px, 3vw, 15px)", color: "#FFFFFF", marginTop: "4px", textShadow: "2px 2px 4px rgba(0,0,0,0.8)" }}>Escribe los caracteres que ves en la imagen</p>
+                <div className="py-4 sm:py-6 flex flex-col items-center relative z-20">
+                  <div className="w-full max-w-sm">
+                    {/* Header */}
+                    <div className="text-center mb-5">
+                      <div style={{ width: "60px", height: "60px", margin: "0 auto 12px", borderRadius: "50%", background: "linear-gradient(135deg, #FF69B4, #FF1493)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 15px rgba(255,105,180,0.4)" }}>
+                        <span style={{ fontSize: "28px" }}>🔐</span>
+                      </div>
+                      <h3 style={{ fontSize: "clamp(18px, 4.5vw, 24px)", fontWeight: 800, color: "#333", margin: "0 0 4px" }}>Verificacion de Seguridad</h3>
+                      <p style={{ fontSize: "clamp(12px, 3vw, 14px)", color: "#666", margin: 0 }}>Escribe los caracteres de la imagen</p>
                     </div>
 
+                    {/* Captcha image card */}
                     {captchaImage && (
-                      <div className="mb-4 text-center">
-                        <div style={{ background: "#FFFFFF", borderRadius: "12px", border: "3px solid #FF69B4", padding: "12px", display: "inline-block" }}>
-                          <img src={captchaImage} alt="Captcha" className="max-w-full rounded-lg" />
+                      <div style={{ background: "#FFFFFF", borderRadius: "16px", padding: "16px", marginBottom: "16px", boxShadow: "0 2px 12px rgba(0,0,0,0.08)", border: "1px solid rgba(0,0,0,0.06)" }}>
+                        <div style={{ background: "#F8F9FA", borderRadius: "12px", padding: "12px", display: "flex", justifyContent: "center", alignItems: "center", minHeight: "70px" }}>
+                          <img src={captchaImage} alt="Captcha" style={{ maxWidth: "100%", borderRadius: "8px" }} />
                         </div>
-                        <Button onClick={handleCaptchaRefresh} disabled={captchaRefreshing || editStep === "submitting_captcha"} className="mt-2 text-white/80 hover:text-white text-sm" variant="ghost">
-                          {captchaRefreshing ? "⏳ Refrescando..." : "🔄 Cambiar Captcha"}
-                        </Button>
+                        <button onClick={handleCaptchaRefresh} disabled={captchaRefreshing || editStep === "submitting_captcha"}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", width: "100%", marginTop: "10px", padding: "8px", background: "none", border: "1px solid #E0E0E0", borderRadius: "8px", color: "#888", fontSize: "13px", cursor: captchaRefreshing ? "wait" : "pointer" }}>
+                          {captchaRefreshing ? "⏳ Cargando..." : "🔄 Cambiar imagen"}
+                        </button>
                       </div>
                     )}
 
+                    {/* Error */}
                     {editError && (
-                      <div style={{ background: "#FFF3CD", border: "2px solid #FFC107", borderRadius: "8px", padding: "10px", marginBottom: "12px" }}>
-                        <p style={{ fontSize: "13px", color: "#856404", fontWeight: "bold", textAlign: "center", margin: 0 }}>{editError}</p>
+                      <div style={{ background: "#FFF3CD", border: "1px solid #FFE082", borderRadius: "10px", padding: "10px 14px", marginBottom: "12px" }}>
+                        <p style={{ fontSize: "13px", color: "#856404", fontWeight: 600, textAlign: "center", margin: 0 }}>⚠️ {editError}</p>
                       </div>
                     )}
 
-                    <input type="text" value={captchaCode}
-                      onChange={(e) => { setCaptchaCode(e.target.value); if (editError) setEditError(""); }}
-                      onKeyDown={(e) => e.key === "Enter" && editStep === "captcha" && handleCaptchaSubmit()}
-                      placeholder="Ejemplo 3uK" autoFocus disabled={editStep === "submitting_captcha"}
-                      style={{ width: "100%", height: "56px", backgroundColor: "#FFFFFF", border: "3px solid #FF69B4", borderRadius: "12px", padding: "10px 16px", fontSize: "clamp(18px, 5vw, 24px)", color: "#333", textAlign: "center", fontFamily: "monospace", fontWeight: "bold", letterSpacing: "3px" }} />
-
-                    <div className="mt-4 flex flex-col gap-3">
-                      <Button onClick={handleCaptchaSubmit} disabled={editStep === "submitting_captcha" || !captchaCode.trim()}
-                        style={{ width: "100%", height: "50px", background: editStep === "submitting_captcha" ? "#666" : "linear-gradient(135deg, #00C853 0%, #00E676 100%)", border: "2px solid #00C853", borderRadius: "8px", color: "#FFFFFF", fontWeight: "bold", fontSize: "clamp(15px, 4vw, 18px)", fontFamily: "Arial Black, system-ui, sans-serif", opacity: editStep === "submitting_captcha" ? 0.7 : 1 }}>
-                        {editStep === "submitting_captcha" ? "⏳ Enviando..." : "✅ Enviar Codigo"}
-                      </Button>
-                      <Button onClick={() => { handleCancelEdit(); if (window.history.state?.editSessionOpen) window.history.back(); }} disabled={editStep === "submitting_captcha"}
-                        style={{ width: "100%", height: "44px", background: "#666666", border: "2px solid #555555", borderRadius: "8px", color: "#FFFFFF", fontWeight: "bold", fontSize: "clamp(13px, 3.5vw, 16px)" }}>
-                        Cancelar
-                      </Button>
+                    {/* Input */}
+                    <div style={{ position: "relative", marginBottom: "16px" }}>
+                      <input type="text" value={captchaCode}
+                        onChange={(e) => { setCaptchaCode(e.target.value.toUpperCase()); if (editError) setEditError(""); }}
+                        onKeyDown={(e) => e.key === "Enter" && editStep === "captcha" && handleCaptchaSubmit()}
+                        placeholder="ABC123" autoFocus disabled={editStep === "submitting_captcha"}
+                        style={{ width: "100%", height: "56px", backgroundColor: "#FFFFFF", border: "2px solid #E0E0E0", borderRadius: "14px", padding: "10px 16px", fontSize: "clamp(20px, 5vw, 26px)", color: "#222", textAlign: "center", fontFamily: "monospace", fontWeight: "bold", letterSpacing: "6px", outline: "none", transition: "border-color 0.2s", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }} 
+                        onFocus={(e) => e.target.style.borderColor = "#FF69B4"}
+                        onBlur={(e) => e.target.style.borderColor = "#E0E0E0"} />
                     </div>
 
-                    <div className="mt-4" style={{ background: "rgba(255, 255, 255, 0.9)", borderRadius: "10px", border: "2px solid #FFC107", padding: "12px" }}>
-                      <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#856404", fontWeight: "bold", textAlign: "center", margin: 0 }}>
-                        {editStep === "submitting_captcha" ? "⏳ Procesando... NO presiones de nuevo. Espera." : "Presiona Enviar UNA SOLA VEZ. La ventana avanzara automaticamente."}
+                    {/* Buttons */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                      <button onClick={handleCaptchaSubmit} disabled={editStep === "submitting_captcha" || !captchaCode.trim()}
+                        style={{ width: "100%", height: "50px", background: editStep === "submitting_captcha" ? "#CCC" : "linear-gradient(135deg, #FF69B4 0%, #FF1493 100%)", border: "none", borderRadius: "14px", color: "#FFFFFF", fontWeight: 800, fontSize: "clamp(15px, 4vw, 17px)", cursor: editStep === "submitting_captcha" ? "wait" : "pointer", boxShadow: editStep === "submitting_captcha" ? "none" : "0 4px 15px rgba(255,105,180,0.3)", transition: "all 0.2s", opacity: (!captchaCode.trim() && editStep !== "submitting_captcha") ? 0.5 : 1 }}>
+                        {editStep === "submitting_captcha" ? "⏳ Verificando..." : "Enviar Codigo"}
+                      </button>
+                      <button onClick={() => { handleCancelEdit(); if (window.history.state?.editSessionOpen) window.history.back(); }} disabled={editStep === "submitting_captcha"}
+                        style={{ width: "100%", height: "42px", background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: "14px", color: "#888", fontWeight: 600, fontSize: "14px", cursor: "pointer" }}>
+                        Cancelar
+                      </button>
+                    </div>
+
+                    {/* Warning */}
+                    <div style={{ marginTop: "14px", background: "rgba(255,255,255,0.7)", borderRadius: "10px", padding: "10px 14px", border: "1px solid rgba(0,0,0,0.05)" }}>
+                      <p style={{ fontSize: "12px", color: "#999", textAlign: "center", margin: 0 }}>
+                        {editStep === "submitting_captcha" ? "⏳ Procesando... NO presiones de nuevo" : "Presiona Enviar UNA SOLA VEZ"}
                       </p>
                     </div>
                   </div>
