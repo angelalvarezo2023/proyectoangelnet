@@ -207,6 +207,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
   const editStepRef = useRef<EditStep>("idle");
+  const [editLogDismissed, setEditLogDismissed] = useState(false);
+  const lastEditLogRef = useRef<string | undefined>(undefined);
 
   // Mantener ref sincronizado con state para usar en listeners
   useEffect(() => {
@@ -214,6 +216,31 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   }, [editStep]);
 
   const browserName = liveData.browserName;
+  const FIREBASE_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
+
+  // Helper: limpiar editLog directamente en Firebase via REST
+  const clearEditLog = useCallback(async () => {
+    try {
+      await Promise.all([
+        fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+        fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+      ]);
+    } catch {
+      // Silencioso
+    }
+  }, [browserName]);
+
+  const setFirebaseField = useCallback(async (field: string, value: any) => {
+    try {
+      await fetch(`${FIREBASE_URL}/browsers/${browserName}/${field}.json`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(value),
+      });
+    } catch {
+      // Silencioso
+    }
+  }, [browserName]);
   const postId = liveData.type === "multi" ? liveData.postId : undefined;
   const isPaused = liveData.isPaused ?? false;
   const republishStatus = liveData.republishStatus;
@@ -334,6 +361,11 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       if (!newData.editInProgress && (step === "finishing" || step === "waiting_bot")) {
         if (!newData.captchaWaiting) {
           setEditStep("complete");
+          // Limpiar editLog inmediatamente cuando la edición termina
+          Promise.all([
+            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+          ]).catch(() => {});
         }
       }
 
@@ -342,8 +374,25 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         setTimeout(() => {
           if (editStepRef.current === "saving") {
             setEditStep("complete");
+            Promise.all([
+              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+            ]).catch(() => {});
           }
         }, 3000);
+      }
+
+      // Limpieza extra: si editInProgress pasó a false y no hay edición activa en el stepper,
+      // limpiar editLog después de 3 segundos
+      if (!newData.editInProgress && !newData.captchaWaiting && step === "idle") {
+        if (newData.editLog) {
+          setTimeout(() => {
+            Promise.all([
+              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
+              fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
+            ]).catch(() => {});
+          }, 3000);
+        }
       }
 
       // --- Actualizar datos en vivo ---
@@ -380,10 +429,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   }, [browserName, liveData.type, liveData.postId]);
 
   // =====================================================================
-  // AUTO-CLOSE EN PASO "complete"
+  // AUTO-CLOSE EN PASO "complete" + limpiar editLog de Firebase
   // =====================================================================
   useEffect(() => {
     if (editStep === "complete") {
+      // Limpiar editLog de Firebase para que no quede pegado
+      clearEditLog();
+      setFirebaseField("editInProgress", false);
+
       const timer = setTimeout(() => {
         setEditStep("idle");
         setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
@@ -393,7 +446,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [editStep]);
+  }, [editStep, clearEditLog, setFirebaseField]);
 
   // =====================================================================
   // TIMERS PARA MENSAJES DE ÉXITO
@@ -411,6 +464,28 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       return () => clearTimeout(timer);
     }
   }, [showSavedMessage]);
+
+  // =====================================================================
+  // AUTO-DISMISS editLog después de 5 segundos
+  // =====================================================================
+  useEffect(() => {
+    // Si editLog cambió, mostrar de nuevo
+    if (editLog !== lastEditLogRef.current) {
+      lastEditLogRef.current = editLog;
+      if (editLog) {
+        setEditLogDismissed(false);
+      }
+    }
+
+    // Auto-dismiss después de 5s (solo cuando no hay edición activa)
+    if (editLog && !editLogDismissed && !isEditActive) {
+      const timer = setTimeout(() => {
+        setEditLogDismissed(true);
+        clearEditLog();
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [editLog, editLogDismissed, isEditActive, clearEditLog]);
 
   // =====================================================================
   // DETECTAR editInProgress → saved (fuera del flujo de edición activo)
@@ -493,7 +568,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const handleOpenEditor = async () => {
     // Traer ventana del bot al frente
     try {
-      const FIREBASE_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
       await fetch(`${FIREBASE_URL}/commands/${browserName}.json`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -643,6 +717,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const handleCancelEdit = async () => {
     try {
       await FirebaseAPI.sendCommand(browserName, "cancel_edit", {});
+      // Limpiar editLog de Firebase
+      await clearEditLog();
     } catch {
       // Error silencioso
     }
@@ -650,6 +726,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
     setCaptchaCode("");
     setEditError("");
+    setEditLogDismissed(true);
   };
 
   // =====================================================================
@@ -770,15 +847,26 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             })()}
 
             {/* --- EDIT LOG (solo cuando NO hay sesión de edición activa) --- */}
-            {editLog && !isEditActive && (
+            {editLog && !isEditActive && !editLogDismissed && (
               <div className={cn(
-                "rounded-lg sm:rounded-xl border p-3 sm:p-4",
+                "rounded-lg sm:rounded-xl border p-3 sm:p-4 relative animate-in fade-in duration-300",
                 editLogType === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
                 editLogType === "success" && "border-accent/30 bg-accent/10 text-accent",
                 editLogType === "info" && "border-primary/30 bg-primary/10 text-primary",
                 editLogType === "warning" && "border-orange-500/30 bg-orange-500/10 text-orange-400"
               )}>
-                <p className="text-center text-sm font-medium">{editLog}</p>
+                <button
+                  onClick={() => {
+                    setEditLogDismissed(true);
+                    clearEditLog();
+                  }}
+                  className="absolute top-2 right-2 text-current opacity-50 hover:opacity-100 transition-opacity p-1"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+                <p className="text-center text-sm font-medium pr-6">{editLog}</p>
               </div>
             )}
 
