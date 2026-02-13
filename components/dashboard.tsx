@@ -24,6 +24,7 @@ type EditStep =
   | "editing"            // Usuario llenando formulario
   | "saving"             // Comando enviado, esperando que el bot procese
   | "waiting_bot"        // Bot está procesando (editInProgress=true)
+  | "waiting_captcha"    // Bot navegó al captcha, esperando que aparezca la imagen
   | "captcha"            // Captcha apareció, usuario debe ingresar código
   | "submitting_captcha" // Captcha enviado, esperando confirmación
   | "finishing"          // Captcha resuelto, bot finalizando
@@ -42,6 +43,7 @@ function getStepIndex(step: EditStep): number {
     case "editing": return 0;
     case "saving":
     case "waiting_bot": return 1;
+    case "waiting_captcha":
     case "captcha":
     case "submitting_captcha":
     case "finishing": return 2;
@@ -112,6 +114,7 @@ function EditStepper({ currentStep }: { currentStep: EditStep }) {
           isError ? "text-red-400" :
           currentStep === "editing" ? "text-white/70" :
           currentStep === "saving" || currentStep === "waiting_bot" ? "text-yellow-400" :
+          currentStep === "waiting_captcha" ? "text-orange-400" :
           currentStep === "captcha" ? "text-pink-400" :
           currentStep === "submitting_captcha" || currentStep === "finishing" ? "text-blue-400" :
           currentStep === "complete" ? "text-green-400" : "text-white/50"
@@ -119,6 +122,7 @@ function EditStepper({ currentStep }: { currentStep: EditStep }) {
           {currentStep === "editing" && "Modifica los campos que desees cambiar"}
           {currentStep === "saving" && "Enviando cambios al sistema..."}
           {currentStep === "waiting_bot" && "El bot está procesando tu edición..."}
+          {currentStep === "waiting_captcha" && "Esperando captcha..."}
           {currentStep === "captcha" && "Ingresa el código de seguridad"}
           {currentStep === "submitting_captcha" && "Verificando código..."}
           {currentStep === "finishing" && "Finalizando edición..."}
@@ -342,9 +346,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       const step = editStepRef.current;
 
       // PRIORIDAD 1: Si captcha aparece durante CUALQUIER paso activo → mostrar captcha
-      // Esto tiene máxima prioridad para que nunca se pierda
       if (newData.captchaWaiting && 
-          (step === "saving" || step === "waiting_bot" || step === "finishing")) {
+          (step === "saving" || step === "waiting_bot" || step === "waiting_captcha" || step === "finishing")) {
         setEditStep("captcha");
         setCaptchaCode("");
       }
@@ -359,30 +362,28 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         setEditStep("waiting_bot");
       }
 
-      // PRIORIDAD 4: Edición terminada (solo si NO hay captcha pendiente)
+      // PRIORIDAD 4: Bot terminó de editar campos → esperar captcha (NO completar)
       if (!newData.editInProgress && !newData.captchaWaiting) {
-        if (step === "finishing" || step === "waiting_bot") {
+        if (step === "finishing") {
+          // Finishing = ya pasó el captcha → ahora sí completar
           setEditStep("complete");
-          // Limpiar editLog
           Promise.all([
             fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
             fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
           ]).catch(() => {});
         }
-        // Edge case: bot terminó muy rápido - esperar 8s antes de asumir complete
-        // (da tiempo al captcha de aparecer)
+        if (step === "waiting_bot") {
+          // Bot terminó de editar pero captcha aún no llega → esperar
+          setEditStep("waiting_captcha");
+        }
         if (step === "saving") {
+          // Edge case: bot terminó rápido → esperar captcha
           setTimeout(() => {
             const currentStep = editStepRef.current;
-            // Solo completar si seguimos en "saving" (no se movió a captcha u otro paso)
             if (currentStep === "saving") {
-              setEditStep("complete");
-              Promise.all([
-                fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-                fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-              ]).catch(() => {});
+              setEditStep("waiting_captcha");
             }
-          }, 8000);
+          }, 5000);
         }
       }
 
@@ -445,6 +446,17 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         setEditError("");
         setShowSavedMessage(true);
       }, 3000);
+      return () => clearTimeout(timer);
+    }
+
+    // Timeout de seguridad: si waiting_captcha no recibe captcha en 30s → complete
+    if (editStep === "waiting_captcha") {
+      const timer = setTimeout(() => {
+        if (editStepRef.current === "waiting_captcha") {
+          setEditStep("complete");
+          clearEditLog();
+        }
+      }, 30000);
       return () => clearTimeout(timer);
     }
   }, [editStep, clearEditLog, setFirebaseField]);
@@ -1129,6 +1141,44 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <div style={{ background: "rgba(255, 255, 255, 0.9)", borderRadius: "10px", border: "2px solid #FF69B4", padding: "12px 16px" }}>
                     <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#333", fontWeight: "bold", textAlign: "center", margin: 0 }}>No cierres esta ventana. El proceso es automatico.</p>
                   </div>
+                </div>
+              )}
+
+              {/* ========== PASO 2.5: ESPERANDO CAPTCHA ========== */}
+              {editStep === "waiting_captcha" && (
+                <div className="py-10 sm:py-14 flex flex-col items-center gap-5 relative z-20">
+                  <div className="relative">
+                    <div style={{ width: "90px", height: "90px", borderRadius: "50%", background: "linear-gradient(135deg, #FF69B4, #FF1493)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 20px rgba(255,105,180,0.4)", animation: "pulse 2s ease-in-out infinite" }}>
+                      <span style={{ fontSize: "40px" }}>🔐</span>
+                    </div>
+                  </div>
+                  <div className="text-center">
+                    <h3 style={{ fontSize: "clamp(20px, 5vw, 26px)", fontWeight: 800, color: "#333", margin: "0 0 8px" }}>
+                      Esperando Captcha...
+                    </h3>
+                    <p style={{ fontSize: "clamp(13px, 3vw, 15px)", color: "#666", margin: 0 }}>
+                      El bot esta navegando a la pagina de verificacion
+                    </p>
+                    {editLog && (
+                      <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#FF69B4", marginTop: "10px", fontStyle: "italic" }}>
+                        📋 {editLog}
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-full max-w-xs">
+                    <div className="h-2 rounded-full bg-black/10 overflow-hidden">
+                      <div className="h-full rounded-full bg-gradient-to-r from-pink-400 via-pink-500 to-pink-400 animate-pulse" style={{ width: "80%", transition: "width 2s ease" }} />
+                    </div>
+                  </div>
+                  <div style={{ background: "rgba(255, 255, 255, 0.85)", borderRadius: "10px", border: "1px solid rgba(255,105,180,0.3)", padding: "10px 16px" }}>
+                    <p style={{ fontSize: "clamp(11px, 2.5vw, 13px)", color: "#666", textAlign: "center", margin: 0 }}>
+                      La imagen del captcha aparecera aqui en unos segundos...
+                    </p>
+                  </div>
+                  <button onClick={() => { handleCancelEdit(); if (window.history.state?.editSessionOpen) window.history.back(); }}
+                    style={{ marginTop: "4px", background: "transparent", border: "1px solid rgba(0,0,0,0.15)", borderRadius: "14px", color: "#888", fontWeight: 600, fontSize: "14px", padding: "10px 32px", cursor: "pointer" }}>
+                    Cancelar
+                  </button>
                 </div>
               )}
 
