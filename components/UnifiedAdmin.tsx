@@ -5,9 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { ProxyPanel } from "@/components/proxy-panel";
 import { AdminPanel } from "@/components/admin-panel";
 import { StatsPanel } from "@/components/StatsPanel";
+import { SupportQueue } from "@/components/support-queue";
 import { cn } from "@/lib/utils";
 
-type AdminSection = "anuncios" | "estadisticas" | "proxies" | "megabot";
+type AdminSection = "anuncios" | "estadisticas" | "soporte" | "proxies" | "megabot";
 
 interface UnifiedAdminProps {
   isOpen: boolean;
@@ -36,6 +37,12 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
       color: "from-purple-500 to-pink-500",
     },
     {
+      id: "soporte" as AdminSection,
+      label: "🎫 Soporte",
+      description: "Cola de solicitudes de clientes",
+      color: "from-yellow-500 to-orange-500",
+    },
+    {
       id: "proxies" as AdminSection,
       label: "🌐 Proxies",
       description: "Verificación y gestión de proxies",
@@ -49,8 +56,8 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
     },
   ];
 
-  // 🎯 SI ESTÁ EN "ANUNCIOS" O "ESTADISTICAS", RENDERIZAR EN PANTALLA COMPLETA
-  if (activeSection === "anuncios" || activeSection === "estadisticas") {
+  // 🎯 PANTALLA COMPLETA: ANUNCIOS, ESTADISTICAS, SOPORTE
+  if (activeSection === "anuncios" || activeSection === "estadisticas" || activeSection === "soporte") {
     return (
       <>
         {/* Header fijo con navegación */}
@@ -74,14 +81,14 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="border-t border-border bg-secondary/30 px-4">
+          <div className="border-t border-border bg-secondary/30 px-4 overflow-x-auto">
             <nav className="flex gap-2">
               {sections.map((section) => (
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
                   className={cn(
-                    "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-all",
+                    "flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
                     activeSection === section.id
                       ? "border-primary text-foreground bg-background/50"
                       : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
@@ -105,6 +112,10 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
           
           {activeSection === "estadisticas" && (
             <StatsPanel />
+          )}
+
+          {activeSection === "soporte" && (
+            <SupportQueue />
           )}
         </div>
       </>
@@ -143,14 +154,14 @@ export function UnifiedAdmin({ isOpen, onClose }: UnifiedAdminProps) {
           </div>
 
           {/* Navigation Tabs */}
-          <div className="border-b border-border bg-secondary/30 px-6">
+          <div className="border-b border-border bg-secondary/30 px-6 overflow-x-auto">
             <nav className="flex gap-2 -mb-px">
               {sections.map((section) => (
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
                   className={cn(
-                    "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-all",
+                    "flex items-center gap-2 px-6 py-4 text-sm font-medium border-b-2 transition-all whitespace-nowrap",
                     activeSection === section.id
                       ? "border-primary text-foreground bg-background/50"
                       : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
