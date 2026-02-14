@@ -998,14 +998,16 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   className={cn("flex h-auto flex-col gap-1.5 sm:gap-2 py-3 sm:py-4 text-sm", !canEdit ? "bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50" : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20")}>
                   <EditIcon className="h-5 w-5" /><span className="text-xs">{!canEdit ? "Ocupado" : "Editar"}</span>
                 </Button>
-                <Button onClick={() => setShowNotificationSettings(true)} disabled={isEditActive}
-                  className="col-span-3 flex h-auto flex-col gap-1.5 sm:gap-2 bg-blue-500/10 py-3 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30">
-                  <span className="text-xl sm:text-2xl">🔔</span><span className="text-xs">Configurar Notificaciones</span>
-                </Button>
-                <Button onClick={() => setShowTicketModal(true)} disabled={isEditActive}
-                  className="col-span-3 flex h-auto flex-col gap-1.5 sm:gap-2 bg-cyan-500/10 py-3 sm:py-4 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30">
-                  <span className="text-xl sm:text-2xl">🎫</span><span className="text-xs">Solicitar Soporte</span>
-                </Button>
+               <div className="col-span-3 grid grid-cols-2 gap-2">
+                  <Button onClick={() => setShowNotificationSettings(true)} disabled={isEditActive}
+                    className="flex h-auto flex-col gap-1 bg-blue-500/10 py-2.5 sm:py-3 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30">
+                    <span className="text-lg sm:text-xl">🔔</span><span className="text-[10px] sm:text-xs">Notificaciones</span>
+                  </Button>
+                  <Button onClick={() => setShowTicketModal(true)} disabled={isEditActive}
+                    className="flex h-auto flex-col gap-1 bg-cyan-500/10 py-2.5 sm:py-3 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30">
+                    <span className="text-lg sm:text-xl">🎫</span><span className="text-[10px] sm:text-xs">Soporte</span>
+                  </Button>
+                </div>
               </div>
             </div>
 
