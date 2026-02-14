@@ -189,8 +189,7 @@ function HomeContent() {
         )}
       </main>
 
-      {/* Chatbot */}
-      <Chatbot />
+     
 
       {/* ProxyPanel Modal */}
       <ProxyPanel 
