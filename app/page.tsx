@@ -12,7 +12,6 @@ import { ChatGrupal } from "@/components/ui/chat-grupal";
 import { SERVICES, CONTACT } from "@/lib/firebase";
 import { Navigation } from "@/components/navigation";
 import { ServiceCard } from "@/components/service-card";
-import { Chatbot } from "@/components/chatbot";
 import { FlameIcon, CheckIcon } from "@/components/icons";
 import Loading from "./loading";
 import { useState } from "react";
