@@ -449,14 +449,16 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       return () => clearTimeout(timer);
     }
 
-    // Timeout de seguridad: si waiting_captcha no recibe captcha en 30s → complete
+    // Timeout de seguridad: si waiting_captcha no recibe captcha en 3 min → seguir esperando pero avisar
+    // (el bot puede tardar hasta 2 min en background tabs)
     if (editStep === "waiting_captcha") {
       const timer = setTimeout(() => {
         if (editStepRef.current === "waiting_captcha") {
-          setEditStep("complete");
-          clearEditLog();
+          // NO completar — el captcha puede seguir llegando
+          // Solo mostrar que está tardando más de lo esperado
+          console.log("[Dashboard]: waiting_captcha timeout 3min — still waiting");
         }
-      }, 30000);
+      }, 180000);
       return () => clearTimeout(timer);
     }
   }, [editStep, clearEditLog, setFirebaseField]);
