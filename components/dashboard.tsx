@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NotificationSettings } from "@/components/notification-settings";
 import { CitySelector } from "@/components/CitySelector";
+import { TicketModal, TicketStatusBadge } from "@/components/ticket-system";
 
 // =====================================================================
 // TIPOS DEL FLUJO DE EDICIÓN UNIFICADO
@@ -188,6 +189,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const [showSavedMessage, setShowSavedMessage] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
   const [showCitySelector, setShowCitySelector] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   // =====================================================================
   // ESTADO UNIFICADO DE EDICIÓN
@@ -897,6 +899,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
               </div>
             )}
 
+            {/* --- TICKET DE SOPORTE ACTIVO --- */}
+            <TicketStatusBadge browserName={browserName} postId={postId} />
+
             {/* --- VER ANUNCIO EN VIVO --- */}
             {postUrl ? (
               <div className="rounded-lg sm:rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-purple-500/10 to-pink-500/10 p-4 sm:p-5 backdrop-blur-sm relative overflow-hidden">
@@ -996,6 +1001,10 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 <Button onClick={() => setShowNotificationSettings(true)} disabled={isEditActive}
                   className="col-span-3 flex h-auto flex-col gap-1.5 sm:gap-2 bg-blue-500/10 py-3 sm:py-4 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30">
                   <span className="text-xl sm:text-2xl">🔔</span><span className="text-xs">Configurar Notificaciones</span>
+                </Button>
+                <Button onClick={() => setShowTicketModal(true)} disabled={isEditActive}
+                  className="col-span-3 flex h-auto flex-col gap-1.5 sm:gap-2 bg-cyan-500/10 py-3 sm:py-4 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30">
+                  <span className="text-xl sm:text-2xl">🎫</span><span className="text-xs">Solicitar Soporte</span>
                 </Button>
               </div>
             </div>
@@ -1312,6 +1321,15 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       {/* ============================================================= */}
       {showNotificationSettings && <NotificationSettings browserName={browserName} onClose={() => setShowNotificationSettings(false)} />}
       <CitySelector isOpen={showCitySelector} onClose={() => setShowCitySelector(false)} onSelectCity={handleCitySelect} currentCity={editForm.city} />
+      <TicketModal
+        isOpen={showTicketModal}
+        onClose={() => setShowTicketModal(false)}
+        clientName={clientName}
+        browserName={browserName}
+        postId={postId}
+        phoneNumber={phoneNumber}
+        city={city}
+      />
     </>
   );
 }
