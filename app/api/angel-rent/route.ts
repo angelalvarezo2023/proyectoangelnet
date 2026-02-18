@@ -507,11 +507,11 @@ window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-ren
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
-  e.preventDefault();e.stopImmediatePropagation();
+  // Just rewrite the action directly — preserves file inputs, all fields, native behavior
+  e.stopImmediatePropagation();
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
-  var n=document.createElement("form");n.method=f.method||"POST";n.action=P+encodeURIComponent(target);n.style.display="none";
-  var d=new FormData(f);d.forEach(function(v,k){var i=document.createElement("input");i.type="hidden";i.name=k;i.value=v;n.appendChild(i);});
-  document.body.appendChild(n);n.submit();
+  f.setAttribute("action",P+encodeURIComponent(target));
+  // Don't preventDefault — let native submit happen with rewritten action
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
