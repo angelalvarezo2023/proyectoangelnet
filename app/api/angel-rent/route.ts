@@ -50,6 +50,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     resp.setCookies.forEach(c => rh.append("Set-Cookie",
       c.replace(/Domain=[^;]+;?\s*/gi, "").replace(/Secure;?\s*/gi, "").replace(/SameSite=\w+;?\s*/gi, "SameSite=Lax; ")
     ));
+    // Save cookies to Firebase for server-side robot (non-blocking)
+    if (resp.setCookies.length > 0) {
+      saveCookies(username, resp.setCookies, cookies).catch(() => {});
+    }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
@@ -78,6 +82,37 @@ async function getUser(u: string): Promise<ProxyUser | null> {
       r.on("error", rej);
     }).on("error", rej);
   });
+}
+
+// Save session cookies to Firebase so server-side robot can use them
+async function saveCookies(username: string, newCookies: string[], existing: string): Promise<void> {
+  if (!newCookies.length) return;
+  try {
+    // Merge new cookies with existing ones
+    const cookieMap: Record<string, string> = {};
+    // Parse existing cookies
+    if (existing) {
+      existing.split(";").forEach(c => {
+        const [k, ...v] = c.trim().split("=");
+        if (k) cookieMap[k.trim()] = v.join("=").trim();
+      });
+    }
+    // Override with new cookies from Set-Cookie headers
+    newCookies.forEach(c => {
+      const part = c.split(";")[0].trim();
+      const [k, ...v] = part.split("=");
+      if (k) cookieMap[k.trim()] = v.join("=").trim();
+    });
+    const cookieStr = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+    const body = JSON.stringify({ cookies: cookieStr, cookieTs: Date.now() });
+    await new Promise<void>((res, rej) => {
+      const url = new URL(`${FB_URL}/proxyUsers/${username.toLowerCase()}.json`);
+      const req = https.request({ hostname: url.hostname, path: url.pathname, method: "PATCH",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+      }, r => { r.resume(); r.on("end", () => res()); });
+      req.on("error", rej); req.write(body); req.end();
+    });
+  } catch (e) { /* non-critical */ }
 }
 
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
