@@ -471,17 +471,15 @@ function resolveUrl(url: string, base: string, cur: string): string {
 function rewriteHtml(html: string, base: string, pb: string, cur: string): string {
   html = html.replace(/<base[^>]*>/gi, "");
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
-  // Rewrite href — but skip /home/* links that are city selector triggers (have data-cid)
-  html = html.replace(/(<a\s[^>]*href\s*=\s*["'])([^"'#][^"']*)(["'][^>]*>)/gi, (full, pre, u, post) => {
+  html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
-    if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return full;
-    // Detect city/location selector links: href points to /home/* and tag has data-cid
-    if ((t.startsWith("/home/") || t.match(/^https?:\/\/[^/]+\/home\//)) && post.indexOf("data-cid") !== -1) {
-      // Replace href with javascript:void(0) to prevent navigation while keeping data-cid for JS
-      return pre + "javascript:void(0)" + post;
-    }
-    return pre + pb + encodeURIComponent(resolveUrl(t, base, cur)) + post;
+    if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
+    return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
+  // Neutralize city-selector links that have data-cid — megapersonals JS uses data-cid to
+  // set the city field; the href is not needed and causes unwanted navigation
+  html = html.replace(/href="[^"]*"(\s+[^>]*data-cid)/g, 'href="javascript:void(0)"$1');
+  html = html.replace(/href='[^']*'(\s+[^>]*data-cid)/g, "href='javascript:void(0)'$1");
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
     /^(data:|blob:|javascript:)/.test(u) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b);
   html = html.replace(/(action\s*=\s*["'])([^"']*)(["'])/gi, (_, a, u, b) => {
