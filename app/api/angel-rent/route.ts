@@ -499,17 +499,29 @@ function px(u){
   return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);
 }
 document.addEventListener("click",function(e){
-  // Use bubble phase (no capture) so megapersonals JS fires first
-  // If megapersonals already handled the click, skip
+  // Bubble phase — fires AFTER megapersonals JS handlers
   if(e.defaultPrevented)return;
   var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
   if(!h||h==="#"||h.indexOf("javascript:")===0||h.indexOf("/api/angel-rent")!==-1)return;
-  // Skip if link has no real navigation purpose (points to same page or generic home)
+  // Resolve the URL
   var resolved;try{resolved=new URL(h,B);}catch(x){return;}
-  // If the resolved URL is just the home/index page, likely a JS-trigger link — skip
-  if(resolved.pathname==="/home/231"||resolved.pathname==="/"){return;}
+  var rp=resolved.pathname;
+  // Skip /home/* links — megapersonals uses these as city/location picker triggers (not real navigation)
+  if(rp.indexOf("/home/")===0)return;
+  // Skip links that are inside dynamically-created dropdowns/lists (location selectors)
+  var p=el.parentNode;
+  while(p&&p!==document.body){
+    var tn=(p.tagName||"").toUpperCase();
+    var cls=(p.className||"").toLowerCase();
+    var style=(p.getAttribute("style")||"").toLowerCase();
+    // Megapersonals city picker uses a scrollable div overlay
+    if(tn==="UL"||tn==="OL")return;
+    if(style.indexOf("overflow")!==-1&&style.indexOf("scroll")!==-1)return;
+    if(cls.indexOf("location")!==-1||cls.indexOf("city")!==-1||cls.indexOf("area")!==-1)return;
+    p=p.parentNode;
+  }
   e.preventDefault();e.stopImmediatePropagation();
   var d=px(h);if(d)location.href=d;
 });
