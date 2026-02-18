@@ -312,21 +312,19 @@ function autoOK(){
 function handlePage(){
   var u=CUR;
 
-  // If we landed on a /home/N page, it means megapersonals navigated here after city selection
-  // It sets a city cookie then redirects. We auto-return to the edit page.
-  if(u.indexOf("/home/")!==-1&&u.match(/\/home\/\d+/)){
-    var ret=sessionStorage.getItem("ar_ret_"+UNAME);
-    if(ret){
-      sessionStorage.removeItem("ar_ret_"+UNAME);
-      // Give megapersonals time to process/set cookies, then go back
-      setTimeout(function(){location.href=ret;},800);
-    }
+  // FIRST: check if we have a pending return URL (set before city selection)
+  // This fires when megapersonals redirects us to /users/posts/list after /home/N
+  var ret=sessionStorage.getItem("ar_ret_"+UNAME);
+  if(ret){
+    sessionStorage.removeItem("ar_ret_"+UNAME);
+    setTimeout(function(){location.href=ret;},600);
     return;
   }
 
-  // On edit pages, save the URL so we can return after city selection
+  // On edit pages, save URL so we can return after city selection redirects us away
   if(u.indexOf("/users/posts/edit/")!==-1){
     sessionStorage.setItem("ar_ret_"+UNAME,location.href);
+    return;
   }
 
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
@@ -334,7 +332,6 @@ function handlePage(){
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   if(u.indexOf("/users/posts")!==-1){startTick();return;}
   if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
-  if(u.indexOf("/users/posts/edit/")!==-1)return;
   var s2=gst();
   if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
 }
