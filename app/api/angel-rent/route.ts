@@ -1,4 +1,3 @@
-
 // app/api/angel-rent/route.ts
 // ✅ Ruta completamente independiente — no toca /api/proxy ni /api/proxy/check
 
@@ -335,24 +334,50 @@ window.__ar_toggle=function(){var p=document.getElementById("__ar_pop");po=!po;p
 setInterval(function(){st=gs();if(st.on&&!tick)tick=setInterval(tock,1000);ui()},3000);
 rl();ui();if(st.on&&!tick)tick=setInterval(tock,1000);
 var _b64e="${b64email}",_b64p="${b64pass}";
-if(_b64e){setTimeout(function(){
-  try{var e1=atob(_b64e),e2=atob(_b64p);if(!e1)return;
-  var ef=document.querySelector('input[name="email"],input[type="email"],input[name="username"]');
-  var pf=document.querySelector('input[name="password"],input[type="password"]');
-  if(ef&&pf&&!ef.value){
-    ef.value=e1;pf.value=e2;
-    [ef,pf].forEach(function(el){el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))});
-    ef.style.cssText+=";color:transparent;text-shadow:0 0 0 #999";
-    ef.setAttribute("readonly","readonly");pf.setAttribute("readonly","readonly");
-    var form=ef.closest("form")||pf.closest("form");
-    if(form){
-      var unlock=function(){ef.removeAttribute("readonly");pf.removeAttribute("readonly")};
-      form.addEventListener("submit",unlock,true);
-      var sub=form.querySelector('button[type="submit"],input[type="submit"],button:not([type])');
-      if(sub)sub.addEventListener("click",unlock,true);
+if(_b64e){
+  function fillLogin(){
+    try{
+      var e1=atob(_b64e),e2=atob(_b64p);if(!e1)return false;
+      // Megapersonals specific + generic selectors
+      var ef=document.querySelector('input[name="email_address"],input[name="email"],input[type="email"],input[name="username"],input[name="login"],input[name="user_email"],input[name="member_email"]');
+      if(!ef){var allText=document.querySelectorAll('input[type="text"],input:not([type])');for(var i=0;i<allText.length;i++){var pl=(allText[i].placeholder||"").toLowerCase();if(pl.includes("email")||pl.includes("user")||pl.includes("name")){ef=allText[i];break}}}
+      var pf=document.querySelector('input[name="password"],input[type="password"],input[name="user_password"],input[name="member_password"],input[name="pass"]');
+      if(ef&&pf){
+        // Only fill if empty
+        if(ef.value&&pf.value)return true;
+        ef.value=e1;pf.value=e2;
+        var nativeInputValueSetter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+        if(nativeInputValueSetter&&nativeInputValueSetter.set){
+          nativeInputValueSetter.set.call(ef,e1);
+          nativeInputValueSetter.set.call(pf,e2);
+        }
+        ["input","change","blur"].forEach(function(ev){
+          ef.dispatchEvent(new Event(ev,{bubbles:true}));
+          pf.dispatchEvent(new Event(ev,{bubbles:true}));
+        });
+        ef.style.cssText+=";color:transparent;text-shadow:0 0 0 #999";
+        ef.setAttribute("readonly","readonly");pf.setAttribute("readonly","readonly");
+        var form=ef.closest("form")||pf.closest("form");
+        if(form){
+          var unlock=function(){ef.removeAttribute("readonly");pf.removeAttribute("readonly");ef.style.color="";ef.style.textShadow=""};
+          form.addEventListener("submit",unlock,true);
+          var sub=form.querySelector('button[type="submit"],input[type="submit"],input[type="image"],button:not([type])');
+          if(sub)sub.addEventListener("click",unlock,true);
+        }
+        return true;
+      }
+      return false;
+    }catch(x){return false}
+  }
+  // Try immediately, then retry a few times
+  setTimeout(function(){
+    if(!fillLogin()){
+      var tries=0,retry=setInterval(function(){
+        tries++;if(fillLogin()||tries>10)clearInterval(retry);
+      },500);
     }
-  }}catch(x){}
-},1500)}
+  },800);
+}
 })();
 </script>`;
 
