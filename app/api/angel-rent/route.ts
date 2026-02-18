@@ -37,8 +37,12 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const proxyUrl = PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`;
     const agent = new HttpsProxyAgent(proxyUrl);
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
-    let postBody: string | null = null, postCT: string | null = null;
-    if (method === "POST") { postBody = await req.text(); postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded"; }
+    let postBody: Buffer | null = null, postCT: string | null = null;
+    if (method === "POST") {
+      const ab = await req.arrayBuffer();
+      postBody = Buffer.from(ab);
+      postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
+    }
     const cookies = req.headers.get("cookie") || "";
     const resp = await fetchProxy(decoded, agent, method, postBody, postCT, cookies, getUA(user));
     const ct = resp.headers["content-type"] || "";
@@ -408,7 +412,7 @@ function getUA(u: ProxyUser) {
   return UA_MAP[u.userAgentKey || ""] || UA_MAP.iphone;
 }
 
-function fetchProxy(url: string, agent: any, method: string, postBody: string | null, postCT: string | null, cookies: string, ua: string): Promise<FetchResult> {
+function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | null, postCT: string | null, cookies: string, ua: string): Promise<FetchResult> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
@@ -420,7 +424,10 @@ function fetchProxy(url: string, agent: any, method: string, postBody: string | 
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
       headers["Content-Type"] = postCT;
-      if (postBody) headers["Content-Length"] = Buffer.byteLength(postBody).toString();
+      if (postBody) headers["Content-Length"] = postBody.byteLength.toString();
+      // Critical: megapersonals checks Referer/Origin to accept form POSTs
+      headers["Referer"] = url;
+      headers["Origin"] = u.protocol + "//" + u.hostname;
     }
     const req = (lib as typeof https).request({
       hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80),
