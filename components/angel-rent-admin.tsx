@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 const FB = "https://megapersonals-control-default-rtdb.firebaseio.com";
-const ADMIN_PASS = "admin123"; // ← Cambia esto
+const ADMIN_PASS = "rolex"; // ← Cambia esto
 
 interface User {
   name?: string;
@@ -276,7 +276,7 @@ export default function AngelRentAdmin() {
                       <td style={{ padding: "10px 14px", fontSize: 12 }}>
                         {u.phoneNumber
                           ? <span style={{ fontFamily: "monospace", color: "#c084fc", fontWeight: 700 }}>{u.phoneNumber}</span>
-                          : <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Sin número</span>}
+                          : <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Auto-detectando...</span>}
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <div style={{ display: "flex", gap: 4 }}>
