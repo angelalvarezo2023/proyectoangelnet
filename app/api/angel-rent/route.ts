@@ -474,12 +474,11 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
+    // Don't rewrite /home/\d+ links — megapersonals JS uses these as city picker triggers
+    // by matching the href pattern. If we proxy them, megapersonals won't recognize them.
+    if (/^\/home\/\d+/.test(t)) return _;
     return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
-  // Neutralize city-selector links that have data-cid — megapersonals JS uses data-cid to
-  // set the city field; the href is not needed and causes unwanted navigation
-  html = html.replace(/href="[^"]*"(\s+[^>]*data-cid)/g, 'href="javascript:void(0)"$1');
-  html = html.replace(/href='[^']*'(\s+[^>]*data-cid)/g, "href='javascript:void(0)'$1");
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
     /^(data:|blob:|javascript:)/.test(u) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b);
   html = html.replace(/(action\s*=\s*["'])([^"']*)(["'])/gi, (_, a, u, b) => {
@@ -503,31 +502,15 @@ function px(u){
   return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);
 }
 document.addEventListener("click",function(e){
-  // Bubble phase — fires AFTER megapersonals JS handlers
   if(e.defaultPrevented)return;
   var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
   if(!h||h==="#"||h.indexOf("javascript:")===0||h.indexOf("/api/angel-rent")!==-1)return;
-  // Resolve the URL
-  var resolved;try{resolved=new URL(h,B);}catch(x){return;}
-  var rp=resolved.pathname;
-  // Skip /home/* links — megapersonals uses these as city/location picker triggers (not real navigation)
-  if(rp.indexOf("/home/")===0)return;
-  // Skip links that are inside dynamically-created dropdowns/lists (location selectors)
-  var p=el.parentNode;
-  while(p&&p!==document.body){
-    var tn=(p.tagName||"").toUpperCase();
-    var cls=(p.className||"").toLowerCase();
-    var style=(p.getAttribute("style")||"").toLowerCase();
-    // Megapersonals city picker uses a scrollable div overlay
-    if(tn==="UL"||tn==="OL")return;
-    if(style.indexOf("overflow")!==-1&&style.indexOf("scroll")!==-1)return;
-    if(cls.indexOf("location")!==-1||cls.indexOf("city")!==-1||cls.indexOf("area")!==-1)return;
-    p=p.parentNode;
-  }
-  e.preventDefault();e.stopImmediatePropagation();
-  var d=px(h);if(d)location.href=d;
+  // Skip /home/\d+ — megapersonals city picker identifies these links by href pattern
+  // We must NOT proxy them or megapersonals won't recognize them as city triggers
+  if(/^\/home\/\d+/.test(h))return;
+  e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
 });
 var _fe=window.fetch;
 if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
