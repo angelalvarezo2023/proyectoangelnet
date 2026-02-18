@@ -1,0 +1,33 @@
+name: Angel Rent - Robot Server-Side
+
+on:
+  schedule:
+    # Runs every 20 minutes
+    - cron: '0,20,40 * * * *'
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Run bumps for all active users
+        run: |
+          echo "🤖 Angel Rent Robot - $(date)"
+          
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            "https://angelrentmg.vercel.app/api/bump-all?secret=${{ secrets.BUMP_SECRET }}" \
+            --max-time 55)
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          echo "HTTP Status: $HTTP_CODE"
+          echo "Response: $BODY"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Error: HTTP $HTTP_CODE"
+            exit 1
+          fi
+          
+          echo "✅ Done"
