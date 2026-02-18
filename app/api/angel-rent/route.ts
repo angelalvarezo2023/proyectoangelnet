@@ -518,61 +518,13 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
 
-// ── document.write polyfill ──────────────────────────────────────────────────
-// Megapersonals uses document.write extensively. The browser blocks it for
-// cross-origin scripts. We replace it with a DOM-based equivalent BEFORE
-// any megapersonals script runs, so everything works normally.
-(function(){
-  var _buf="";
-  var _flushing=false;
-  function flushBuf(){
-    if(_flushing||!_buf)return;
-    _flushing=true;
-    try{
-      var tmp=document.createElement("div");
-      tmp.innerHTML=_buf;
-      _buf="";
-      var scripts=[];
-      // Move all nodes to body, collect scripts for re-execution
-      while(tmp.firstChild){
-        var n=tmp.firstChild;
-        if(n.tagName==="SCRIPT"){
-          scripts.push({src:n.src,text:n.textContent||n.innerText||""});
-          tmp.removeChild(n);
-        } else {
-          document.body?document.body.appendChild(n):document.head.appendChild(n);
-          tmp.removeChild(n);
-        }
-      }
-      // Re-run inline scripts
-      scripts.forEach(function(s){
-        var el=document.createElement("script");
-        if(s.src)el.src=s.src;else el.textContent=s.text;
-        (document.body||document.head).appendChild(el);
-      });
-    }catch(e){}
-    _flushing=false;
-  }
-  var _origWrite=document.write.bind(document);
-  var _origWriteLn=document.writeln?document.writeln.bind(document):null;
-  document.write=function(){
-    for(var i=0;i<arguments.length;i++)_buf+=arguments[i];
-    if(document.readyState==="loading"){
-      try{_origWrite.apply(document,arguments);}catch(e){flushBuf();}
-    } else {
-      flushBuf();
-    }
-  };
-  if(_origWriteLn)document.writeln=function(){
-    for(var i=0;i<arguments.length;i++)_buf+=arguments[i]+"\n";
-    if(document.readyState==="loading"){
-      try{_origWriteLn.apply(document,arguments);}catch(e){flushBuf();}
-    } else {
-      flushBuf();
-    }
-  };
-})();
-// ─────────────────────────────────────────────────────────────────────────────
+// Silently suppress document.write errors from ad scripts (itransitauthority etc)
+// that fail when called asynchronously through a proxy
+try{
+  var _dw=document.write.bind(document);
+  document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
+  if(document.writeln){var _dwl=document.writeln.bind(document);document.writeln=function(){try{_dwl.apply(document,arguments);}catch(e){};};}
+}catch(e){}
 
 function px(u){
   if(!u||typeof u!=="string")return null;
