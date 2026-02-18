@@ -474,6 +474,10 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
+    // Don't proxy /home/\d+ — megapersonals city picker JS reads this href
+    // and navigates to it internally. If we proxy it, it loads the home page.
+    // Our click interceptor handles preventDefault for these links.
+    if (/\/home\/\d+/.test(t)) return _;
     return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
@@ -503,11 +507,13 @@ document.addEventListener("click",function(e){
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
   if(!h||h==="#"||h.indexOf("javascript:")===0)return;
-  // City-picker links have data-cid — megapersonals JS reads this attr to set the city field.
-  // We only call preventDefault (stops browser nav) but NOT stopPropagation,
-  // so megapersonals click handlers still fire and handle the city selection.
-  if(el.getAttribute("data-cid")){e.preventDefault();return;}
-  // Already proxied — skip
+  // City picker links: have data-cid OR href matches /home/\d+
+  // Call preventDefault so browser doesn't navigate, but don't stopPropagation
+  // so megapersonals JS still fires and fills the city field using data-cid
+  if(el.getAttribute("data-cid")||/\/home\/\d+/.test(h)){
+    e.preventDefault();
+    return;
+  }
   if(h.indexOf("/api/angel-rent")!==-1)return;
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
 },true);
