@@ -15,6 +15,9 @@ interface User {
   siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean;
   createdAt?: string; updatedAt?: string;
+  robotOn?: boolean; robotPaused?: boolean;
+  cookies?: string; cookieTs?: number;
+  phoneNumber?: string;
 }
 
 const UA_OPTS = [
@@ -121,6 +124,7 @@ export default function AngelRentAdmin() {
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
+      phoneNumber: (form as any).phoneNumber || "",
       updatedAt: new Date().toISOString(),
       ...(editing ? {} : { createdAt: new Date().toISOString() }),
     };
@@ -224,7 +228,7 @@ export default function AngelRentAdmin() {
           ) : (
             <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 600 }}>
               <thead>
-                <tr>{["Usuario", "Nombre", "Proxy / Device", "Renta", "Estado", "Acciones"].map(h => (
+                <tr>{["Usuario", "Nombre", "Proxy / Device", "Renta", "Estado", "🤖 Robot", "📞 Teléfono", "Acciones"].map(h => (
                   <th key={h} style={{ background: "rgba(255,255,255,.03)", textAlign: "left", padding: "10px 14px", fontSize: 9, textTransform: "uppercase", letterSpacing: ".5px", color: "rgba(255,255,255,.3)", whiteSpace: "nowrap" }}>{h}</th>
                 ))}</tr>
               </thead>
@@ -256,6 +260,23 @@ export default function AngelRentAdmin() {
                         <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: u.active ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)", color: u.active ? "#22c55e" : "#ef4444", border: `1px solid ${u.active ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)"}` }}>
                           {u.active ? "Activo" : "Inactivo"}
                         </span>
+                      </td>
+                      <td style={{ padding: "10px 14px" }}>
+                        {u.robotOn === true ? (
+                          u.robotPaused ? (
+                            <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(245,158,11,.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.2)" }}>⏸ Pausado</span>
+                          ) : (
+                            <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(34,197,94,.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,.2)" }}>⚡ ON</span>
+                          )
+                        ) : (
+                          <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.25)", border: "1px solid rgba(255,255,255,.08)" }}>OFF</span>
+                        )}
+                        {u.cookieTs && <div style={{ fontSize: 8, color: "rgba(255,255,255,.2)", marginTop: 2 }}>Cookie: {Math.round((Date.now() - u.cookieTs) / 3600000)}h atrás</div>}
+                      </td>
+                      <td style={{ padding: "10px 14px", fontSize: 12 }}>
+                        {u.phoneNumber
+                          ? <span style={{ fontFamily: "monospace", color: "#c084fc", fontWeight: 700 }}>{u.phoneNumber}</span>
+                          : <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Sin número</span>}
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <div style={{ display: "flex", gap: 4 }}>
@@ -360,6 +381,9 @@ export default function AngelRentAdmin() {
 
             <label style={F.label}>Notas</label>
             <input style={F.input} value={form.notes || ""} onChange={e => set("notes", e.target.value)} placeholder="VIP, deuda, etc." />
+
+            <label style={F.label}>📞 Teléfono del anuncio</label>
+            <input style={F.input} value={(form as any).phoneNumber || ""} onChange={e => set("phoneNumber", e.target.value)} placeholder="+1 754 703 6858" />
 
             <label style={F.label}>Estado</label>
             <select style={{ ...F.input, marginTop: 0 }} value={form.active ? "true" : "false"} onChange={e => set("active", e.target.value === "true")}>
