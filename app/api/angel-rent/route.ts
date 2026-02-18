@@ -259,6 +259,22 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">&#x23F1; Bump en</span><span class="arv arp2" id="ar-cd">--:--</span></div>
   <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">&#x1F504; Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
 </div>
+<div id="ar-promo" style="
+  position:fixed;top:42px;left:0;right:0;z-index:2147483646;
+  background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
+  padding:5px 16px;text-align:center;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:11px;font-weight:700;color:#fff;letter-spacing:.2px;
+  box-shadow:0 2px 8px rgba(0,0,0,.4);
+  animation:arpi .4s ease;display:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+">
+  <span id="ar-promo-txt"></span>
+</div>
+<style>
+@keyframes arpi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes arpo{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
+</style>
 <div id="ar-btns">
   <button id="ar-rb" class="arbtn"><span id="ar-ri">&#x26A1;</span><span id="ar-rl">Robot OFF</span></button>
   <button id="ar-pb" class="arbtn"><span id="ar-pi">&#x23F8;</span><span id="ar-pl">Pausar</span></button>
@@ -273,6 +289,75 @@ var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
+
+// ── Promo banner ──────────────────────────────────────────────────────────────
+var PROMOS=[
+  "🌟 ¡Gracias por preferirnos! Comparte nuestro contacto: 829-383-7695",
+  "🚀 ¡Somos el mejor servicio de bump automático que existe!",
+  "💜 Angel Rent — Tu anuncio, siempre arriba. ¡Gracias por tu confianza!",
+  "📲 ¿Conoces a alguien que necesite este servicio? ¡Recomiéndanos! 829-383-7695",
+  "⚡ Robot activo 24/7 — Tu anuncio no descansa, ¡y nosotros tampoco!",
+  "🏆 El servicio #1 de posicionamiento en MegaPersonals. ¡Cuéntale a tus amigos!",
+];
+var _promoIdx=Math.floor(Math.random()*PROMOS.length);
+var _promoTimer=null;
+function showNextPromo(){
+  var el=document.getElementById("ar-promo");
+  var txt=document.getElementById("ar-promo-txt");
+  if(!el||!txt)return;
+  txt.textContent=PROMOS[_promoIdx % PROMOS.length];
+  _promoIdx++;
+  el.style.animation="arpi .4s ease";
+  el.style.display="block";
+  // Adjust top padding of page so content isn't hidden under banner
+  document.body.style.paddingTop="64px";
+  // Hide after 10 seconds
+  _promoTimer=setTimeout(function(){
+    el.style.animation="arpo .4s ease forwards";
+    setTimeout(function(){
+      el.style.display="none";
+      document.body.style.paddingTop="42px";
+      // Show next promo after 30 seconds pause
+      _promoTimer=setTimeout(showNextPromo,30000);
+    },400);
+  },10000);
+}
+// Start first promo after 5 seconds
+setTimeout(showNextPromo,5000);
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Modal "sin permisos de edición" ──────────────────────────────────────────
+(function(){
+  var modal=document.createElement("div");
+  modal.id="ar-noedit-modal";
+  modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);align-items:center;justify-content:center;";
+  modal.innerHTML='\
+<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;max-width:320px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7);position:relative;">\
+  <div style="font-size:38px;margin-bottom:10px;">🔒</div>\
+  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3;">Sin permisos de edición</div>\
+  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:20px;">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>\
+  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4);">📲 Contactar por Telegram</a>\
+  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;cursor:pointer;width:100%;">Cerrar</button>\
+</div>';
+  document.body.appendChild(modal);
+  document.getElementById("ar-noedit-close").addEventListener("click",function(){
+    modal.style.display="none";
+  });
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});
+
+  // Intercept any click on edit links
+  document.addEventListener("click",function(e){
+    var el=e.target;
+    while(el&&el.tagName!=="A")el=el.parentNode;
+    if(!el||el.tagName!=="A")return;
+    var h=(el.getAttribute("href")||"").toLowerCase();
+    if(h.indexOf("/users/posts/edit/")!==-1||h.indexOf("%2Fusers%2Fposts%2Fedit%2F")!==-1){
+      e.preventDefault();e.stopImmediatePropagation();
+      modal.style.display="flex";
+    }
+  },true);
+})();
+// ─────────────────────────────────────────────────────────────────────────────
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
 function p2(n){return String(n).padStart(2,"0");}
