@@ -311,26 +311,29 @@ function autoOK(){
 
 function handlePage(){
   var u=CUR;
-  var RK="ar_ret_"+UNAME;
-  var JK="ar_jr_"+UNAME;
+  var RK="ar_ret_"+UNAME;  // stored in localStorage
+  var now=Date.now();
 
-  // If we have a pending return URL, redirect back to edit page
-  var ret=sessionStorage.getItem(RK);
-  if(ret){
-    sessionStorage.removeItem(RK);
-    sessionStorage.setItem(JK,"1"); // mark: we just returned, don't save URL again
-    setTimeout(function(){location.href=ret;},400);
+  // On edit pages: save URL with timestamp for city-picker return
+  if(u.indexOf("/users/posts/edit/")!==-1){
+    try{localStorage.setItem(RK,JSON.stringify({url:location.href,ts:now}));}catch(e){}
     return;
   }
 
-  // On edit pages, save URL for city-picker return — but NOT if we just returned here
-  if(u.indexOf("/users/posts/edit/")!==-1){
-    var justReturned=sessionStorage.getItem(JK);
-    sessionStorage.removeItem(JK);
-    if(!justReturned){
-      sessionStorage.setItem(RK,location.href);
+  // On any other page: check if we have a recent edit return URL (within last 60s)
+  var retRaw=null;
+  try{retRaw=localStorage.getItem(RK);}catch(e){}
+  if(retRaw){
+    var retObj=null;
+    try{retObj=JSON.parse(retRaw);}catch(e){}
+    if(retObj&&retObj.url&&(now-retObj.ts)<60000){
+      // Clear it so we don't loop
+      try{localStorage.removeItem(RK);}catch(e){}
+      setTimeout(function(){location.href=retObj.url;},500);
+      return;
     }
-    return;
+    // Expired — clear it
+    try{localStorage.removeItem(RK);}catch(e){}
   }
 
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
@@ -514,6 +517,63 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const pbJ = JSON.stringify(pb), baseJ = JSON.stringify(base), curJ = JSON.stringify(cur);
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
+
+// ── document.write polyfill ──────────────────────────────────────────────────
+// Megapersonals uses document.write extensively. The browser blocks it for
+// cross-origin scripts. We replace it with a DOM-based equivalent BEFORE
+// any megapersonals script runs, so everything works normally.
+(function(){
+  var _buf="";
+  var _flushing=false;
+  function flushBuf(){
+    if(_flushing||!_buf)return;
+    _flushing=true;
+    try{
+      var tmp=document.createElement("div");
+      tmp.innerHTML=_buf;
+      _buf="";
+      var scripts=[];
+      // Move all nodes to body, collect scripts for re-execution
+      while(tmp.firstChild){
+        var n=tmp.firstChild;
+        if(n.tagName==="SCRIPT"){
+          scripts.push({src:n.src,text:n.textContent||n.innerText||""});
+          tmp.removeChild(n);
+        } else {
+          document.body?document.body.appendChild(n):document.head.appendChild(n);
+          tmp.removeChild(n);
+        }
+      }
+      // Re-run inline scripts
+      scripts.forEach(function(s){
+        var el=document.createElement("script");
+        if(s.src)el.src=s.src;else el.textContent=s.text;
+        (document.body||document.head).appendChild(el);
+      });
+    }catch(e){}
+    _flushing=false;
+  }
+  var _origWrite=document.write.bind(document);
+  var _origWriteLn=document.writeln?document.writeln.bind(document):null;
+  document.write=function(){
+    for(var i=0;i<arguments.length;i++)_buf+=arguments[i];
+    if(document.readyState==="loading"){
+      try{_origWrite.apply(document,arguments);}catch(e){flushBuf();}
+    } else {
+      flushBuf();
+    }
+  };
+  if(_origWriteLn)document.writeln=function(){
+    for(var i=0;i<arguments.length;i++)_buf+=arguments[i]+"\n";
+    if(document.readyState==="loading"){
+      try{_origWriteLn.apply(document,arguments);}catch(e){flushBuf();}
+    } else {
+      flushBuf();
+    }
+  };
+})();
+// ─────────────────────────────────────────────────────────────────────────────
+
 function px(u){
   if(!u||typeof u!=="string")return null;
   if(u==="#"||u.indexOf("javascript:")===0||u.indexOf("data:")===0||u.indexOf("blob:")===0)return null;
