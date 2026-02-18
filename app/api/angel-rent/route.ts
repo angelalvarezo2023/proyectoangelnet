@@ -57,10 +57,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     // Auto-extract phone number from posts/list page and save to Firebase
     if (ct.includes("text/html") && decoded.includes("/users/posts/list")) {
       const rawHtml = resp.body.toString("utf-8");
-      const phoneMatch = rawHtml.match(/\b(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+      const phoneMatch = rawHtml.match(/[Pp]hone\s*:?\s*([+\d][\d\s\-().]{7,15}\d)/);
       if (phoneMatch) {
-        const phone = phoneMatch[0].trim();
-        fbPatch(username, { phoneNumber: phone }).catch(() => {});
+        fbPatch(username, { phoneNumber: phoneMatch[1].trim() }).catch(() => {});
       }
     }
     if (ct.includes("text/html")) {
