@@ -54,6 +54,15 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (resp.setCookies.length > 0) {
       saveCookies(username, resp.setCookies, cookies).catch(() => {});
     }
+    // Auto-extract phone number from posts/list page and save to Firebase
+    if (ct.includes("text/html") && decoded.includes("/users/posts/list")) {
+      const rawHtml = resp.body.toString("utf-8");
+      const phoneMatch = rawHtml.match(/\b(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+      if (phoneMatch) {
+        const phone = phoneMatch[0].trim();
+        fbPatch(username, { phoneNumber: phone }).catch(() => {});
+      }
+    }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
@@ -81,6 +90,18 @@ async function getUser(u: string): Promise<ProxyUser | null> {
       r.on("end", () => { try { res(JSON.parse(d)); } catch { res(null); } });
       r.on("error", rej);
     }).on("error", rej);
+  });
+}
+
+// Patch a field in Firebase proxyUsers
+async function fbPatch(username: string, data: object): Promise<void> {
+  const body = JSON.stringify(data);
+  await new Promise<void>((res, rej) => {
+    const url = new URL(`${FB_URL}/proxyUsers/${username.toLowerCase()}.json`);
+    const req = https.request({ hostname: url.hostname, path: url.pathname, method: "PATCH",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+    }, r => { r.resume(); r.on("end", () => res()); });
+    req.on("error", rej); req.write(body); req.end();
   });
 }
 
