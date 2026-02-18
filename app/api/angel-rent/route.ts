@@ -474,9 +474,6 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
-    // Don't rewrite /home/\d+ links — megapersonals JS uses these as city picker triggers
-    // by matching the href pattern. If we proxy them, megapersonals won't recognize them.
-    if (/^\/home\/\d+/.test(t)) return _;
     return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
@@ -502,16 +499,18 @@ function px(u){
   return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);
 }
 document.addEventListener("click",function(e){
-  if(e.defaultPrevented)return;
   var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
-  if(!h||h==="#"||h.indexOf("javascript:")===0||h.indexOf("/api/angel-rent")!==-1)return;
-  // Skip /home/\d+ — megapersonals city picker identifies these links by href pattern
-  // We must NOT proxy them or megapersonals won't recognize them as city triggers
-  if(/^\/home\/\d+/.test(h))return;
+  if(!h||h==="#"||h.indexOf("javascript:")===0)return;
+  // City-picker links have data-cid — megapersonals JS reads this attr to set the city field.
+  // We only call preventDefault (stops browser nav) but NOT stopPropagation,
+  // so megapersonals click handlers still fire and handle the city selection.
+  if(el.getAttribute("data-cid")){e.preventDefault();return;}
+  // Already proxied — skip
+  if(h.indexOf("/api/angel-rent")!==-1)return;
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
-});
+},true);
 var _fe=window.fetch;
 if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
 var _xo=XMLHttpRequest.prototype.open;
