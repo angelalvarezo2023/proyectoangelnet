@@ -109,6 +109,13 @@ async function bumpUser(username: string, user: ProxyUser): Promise<BumpResult> 
       return { user: username, success: false, message: "No se encontraron posts en la lista", postsFound: 0, bumped: 0 };
     }
 
+    // Auto-extract phone number from page and save to Firebase
+    const phoneMatch = listResp.body.match(/\b(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+    if (phoneMatch) {
+      mergeCookies(username, [], cookies); // keep cookies fresh
+      fbPatch(username, { phoneNumber: phoneMatch[0].trim() }).catch(() => {});
+    }
+
     // Step 2: Bump each post
     let bumped = 0;
     for (const pid of postIds) {
@@ -210,6 +217,17 @@ async function getAllUsers(): Promise<Record<string, ProxyUser> | null> {
       r.on("end", () => { try { res(JSON.parse(d)); } catch { res(null); } });
       r.on("error", rej);
     }).on("error", rej);
+  });
+}
+
+async function fbPatch(username: string, data: object): Promise<void> {
+  const body = JSON.stringify(data);
+  await new Promise<void>((res, rej) => {
+    const url = new URL(`${FB_URL}/proxyUsers/${username.toLowerCase()}.json`);
+    const req = https.request({ hostname: url.hostname, path: url.pathname, method: "PATCH",
+      headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+    }, r => { r.resume(); r.on("end", () => res()); });
+    req.on("error", rej); req.write(body); req.end();
   });
 }
 
