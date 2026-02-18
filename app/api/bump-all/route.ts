@@ -47,10 +47,18 @@ export async function GET(req: Request) {
     for (const [username, user] of Object.entries(users)) {
       // Skip inactive users
       if (!user.active) continue;
-      // Skip if robot not enabled server-side
-      if (!user.robotEnabled) continue;
       // Skip expired rentals
       if (user.rentalEnd && now > new Date(user.rentalEnd + "T23:59:59")) continue;
+      // Skip if client has robot OFF (robotOn === false explicitly set)
+      if (user.robotOn === false) {
+        // Don't add to results — robot is intentionally off, not an error
+        continue;
+      }
+      // Skip if paused (client paused or admin paused)
+      if (user.robotPaused === true) {
+        results.push({ user: username, success: false, message: "⏸ Pausado", postsFound: 0, bumped: 0 });
+        continue;
+      }
       // Skip if no cookies saved
       if (!user.cookies) {
         results.push({ user: username, success: false, message: "No hay cookies guardadas - el cliente debe abrir el proxy primero", postsFound: 0, bumped: 0 });
