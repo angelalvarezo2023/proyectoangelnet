@@ -109,11 +109,10 @@ async function bumpUser(username: string, user: ProxyUser): Promise<BumpResult> 
       return { user: username, success: false, message: "No se encontraron posts en la lista", postsFound: 0, bumped: 0 };
     }
 
-    // Auto-extract phone number from page and save to Firebase
-    const phoneMatch = listResp.body.match(/\b(\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b/);
+    // Auto-extract phone number — only match numbers explicitly labeled as "Phone:" on the page
+    const phoneMatch = listResp.body.match(/[Pp]hone\s*:?\s*([+\d][\d\s\-().]{7,15}\d)/);
     if (phoneMatch) {
-      mergeCookies(username, [], cookies); // keep cookies fresh
-      fbPatch(username, { phoneNumber: phoneMatch[0].trim() }).catch(() => {});
+      fbPatch(username, { phoneNumber: phoneMatch[1].trim() }).catch(() => {});
     }
 
     // Step 2: Bump each post
