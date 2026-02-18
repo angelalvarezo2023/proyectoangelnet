@@ -311,6 +311,24 @@ function autoOK(){
 
 function handlePage(){
   var u=CUR;
+
+  // If we landed on a /home/N page, it means megapersonals navigated here after city selection
+  // It sets a city cookie then redirects. We auto-return to the edit page.
+  if(u.indexOf("/home/")!==-1&&u.match(/\/home\/\d+/)){
+    var ret=sessionStorage.getItem("ar_ret_"+UNAME);
+    if(ret){
+      sessionStorage.removeItem("ar_ret_"+UNAME);
+      // Give megapersonals time to process/set cookies, then go back
+      setTimeout(function(){location.href=ret;},800);
+    }
+    return;
+  }
+
+  // On edit pages, save the URL so we can return after city selection
+  if(u.indexOf("/users/posts/edit/")!==-1){
+    sessionStorage.setItem("ar_ret_"+UNAME,location.href);
+  }
+
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
   if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
@@ -507,13 +525,8 @@ document.addEventListener("click",function(e){
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
   if(!h||h==="#"||h.indexOf("javascript:")===0)return;
-  // City picker links: have data-cid OR href matches /home/\d+
-  // Call preventDefault so browser doesn't navigate, but don't stopPropagation
-  // so megapersonals JS still fires and fills the city field using data-cid
-  if(el.getAttribute("data-cid")||/\/home\/\d+/.test(h)){
-    e.preventDefault();
-    return;
-  }
+  // City picker links have data-cid — only preventDefault, let megapersonals JS fire
+  if(el.getAttribute("data-cid")){e.preventDefault();return;}
   if(h.indexOf("/api/angel-rent")!==-1)return;
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
 },true);
