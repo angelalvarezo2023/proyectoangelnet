@@ -330,13 +330,22 @@ async function doBump(){
 
 function startTick(){if(TICK)return;TICK=setInterval(function(){var s=gst();if(!s.on||s.paused)return;updateUI();if(s.nextAt>0&&Date.now()>=s.nextAt)doBump();},1000);}
 
+function saveRobotState(on,paused){
+  try{
+    fetch("/api/angel-rent-state?u="+UNAME,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({robotOn:on,robotPaused:paused})
+    });
+  }catch(e){}
+}
 function toggleRobot(){
   var s=gst();
-  if(s.on){s.on=false;s.nextAt=0;sst(s);if(TICK){clearInterval(TICK);TICK=null;}addLog("in","Robot OFF");}
-  else{s.on=true;s.paused=false;s.cnt=0;sst(s);addLog("ok","Robot ON - bumps 16-20 min");schedNext();startTick();doBump();}
+  if(s.on){s.on=false;s.nextAt=0;sst(s);if(TICK){clearInterval(TICK);TICK=null;}addLog("in","Robot OFF");saveRobotState(false,false);}
+  else{s.on=true;s.paused=false;s.cnt=0;sst(s);addLog("ok","Robot ON - bumps 16-20 min");saveRobotState(true,false);schedNext();startTick();doBump();}
   updateUI();
 }
-function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);addLog("in",s.paused?"Pausado":"Reanudado");updateUI();}
+function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);addLog("in",s.paused?"Pausado":"Reanudado");saveRobotState(true,s.paused);updateUI();}
 
 function autoOK(){
   var done=false;
