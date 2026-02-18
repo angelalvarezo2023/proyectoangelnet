@@ -8,6 +8,10 @@ const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// In-memory cache for user data — avoids hitting Firebase on every request
+const userCache: Record<string, { user: ProxyUser; ts: number }> = {};
+const CACHE_TTL = 60000; // 60 seconds
+
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
@@ -83,10 +87,19 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
 }
 
 async function getUser(u: string): Promise<ProxyUser | null> {
+  const key = u.toLowerCase();
+  const cached = userCache[key];
+  if (cached && (Date.now() - cached.ts) < CACHE_TTL) return cached.user;
   return new Promise((res, rej) => {
-    https.get(`${FB_URL}/proxyUsers/${u.toLowerCase()}.json`, r => {
+    https.get(`${FB_URL}/proxyUsers/${key}.json`, r => {
       let d = ""; r.on("data", c => d += c);
-      r.on("end", () => { try { res(JSON.parse(d)); } catch { res(null); } });
+      r.on("end", () => {
+        try {
+          const user = JSON.parse(d);
+          if (user) userCache[key] = { user, ts: Date.now() };
+          res(user);
+        } catch { res(null); }
+      });
       r.on("error", rej);
     }).on("error", rej);
   });
