@@ -505,11 +505,26 @@ function doAutoLogin(){
   ef.style.setProperty("caret-color","#777","important");
   ef.setAttribute("readonly","readonly");
   var bullets="";for(var k=0;k<email.length;k++)bullets+="\u25CF";
-  var ov=document.createElement("div");ov.id="ar-mask";ov.textContent=bullets;
-  var cs=window.getComputedStyle(ef);
-  ov.style.cssText="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;padding-left:"+cs.paddingLeft+";font-size:13px;letter-spacing:3px;color:#666;pointer-events:none;z-index:999;box-sizing:border-box";
-  var par=ef.parentNode;if(par){if(window.getComputedStyle(par).position==="static")par.style.position="relative";par.appendChild(ov);}
-  function unlock(){ef.removeAttribute("readonly");ef.style.removeProperty("color");ef.style.removeProperty("-webkit-text-fill-color");ef.style.removeProperty("caret-color");var m=document.getElementById("ar-mask");if(m&&m.parentNode)m.parentNode.removeChild(m);}
+  function applyMask(){
+    var old=document.getElementById("ar-mask");if(old&&old.parentNode)old.parentNode.removeChild(old);
+    var ov=document.createElement("div");ov.id="ar-mask";ov.textContent=bullets;
+    var cs=window.getComputedStyle(ef);
+    ov.style.cssText="position:absolute;top:0;left:0;right:0;bottom:0;display:flex;align-items:center;padding-left:"+cs.paddingLeft+";font-size:13px;letter-spacing:3px;color:#666;pointer-events:none;z-index:999;box-sizing:border-box";
+    var par=ef.parentNode;if(par){if(window.getComputedStyle(par).position==="static")par.style.position="relative";par.appendChild(ov);}
+  }
+  applyMask();
+  // Re-apply mask if the DOM around the field changes (captcha reload etc)
+  if(window.MutationObserver){
+    var maskObs=new MutationObserver(function(){
+      if(document.getElementById("ar-mask"))return; // still there
+      if(document.contains(ef))applyMask();
+      else maskObs.disconnect();
+    });
+    var maskPar=ef.parentNode||document.body;
+    maskObs.observe(maskPar,{childList:true,subtree:true});
+    setTimeout(function(){maskObs.disconnect();},120000);
+  }
+  function unlock(){ef.removeAttribute("readonly");ef.style.removeProperty("color");ef.style.removeProperty("-webkit-text-fill-color");ef.style.removeProperty("caret-color");var m=document.getElementById("ar-mask");if(m&&m.parentNode)m.parentNode.removeChild(m);if(typeof maskObs!=="undefined")maskObs.disconnect();}
   var form=ef.closest?ef.closest("form"):null;if(!form&&pf.closest)form=pf.closest("form");
   if(form){form.addEventListener("submit",unlock,true);form.addEventListener("mousedown",function(e){var tg=e.target;if(tg&&(tg.type==="submit"||tg.type==="image"||tg.tagName==="BUTTON"))unlock();},true);}
   addLog("ok","Login auto-rellenado");
