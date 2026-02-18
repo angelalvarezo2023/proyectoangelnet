@@ -499,27 +499,20 @@ function px(u){
   return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);
 }
 document.addEventListener("click",function(e){
+  // Use bubble phase (no capture) so megapersonals JS fires first
+  // If megapersonals already handled the click, skip
+  if(e.defaultPrevented)return;
   var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
-  // Skip: no href, anchors, javascript:, already proxied
   if(!h||h==="#"||h.indexOf("javascript:")===0||h.indexOf("/api/angel-rent")!==-1)return;
-  // Skip: link has onclick handler (JS-driven, e.g. city selectors)
-  if(el.getAttribute("onclick")||el.getAttribute("data-action")||el.getAttribute("data-href"))return;
-  // Skip: link is inside a form (likely a form action trigger, not navigation)
-  if(el.closest&&el.closest("form"))return;
-  // Skip: href is just a hash fragment
-  if(h.charAt(0)==="#")return;
-  // Skip: if any parent has a JS click handler registered (heuristic: check for common modal/selector patterns)
-  var parent=el.parentNode;
-  while(parent&&parent!==document.body){
-    var cls=(parent.className||"").toLowerCase();
-    if(cls.indexOf("modal")!==-1||cls.indexOf("popup")!==-1||cls.indexOf("select")!==-1||cls.indexOf("dropdown")!==-1||cls.indexOf("picker")!==-1){return;}
-    parent=parent.parentNode;
-  }
+  // Skip if link has no real navigation purpose (points to same page or generic home)
+  var resolved;try{resolved=new URL(h,B);}catch(x){return;}
+  // If the resolved URL is just the home/index page, likely a JS-trigger link — skip
+  if(resolved.pathname==="/home/231"||resolved.pathname==="/"){return;}
   e.preventDefault();e.stopImmediatePropagation();
   var d=px(h);if(d)location.href=d;
-},true);
+});
 var _fe=window.fetch;
 if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
 var _xo=XMLHttpRequest.prototype.open;
