@@ -311,19 +311,25 @@ function autoOK(){
 
 function handlePage(){
   var u=CUR;
+  var RK="ar_ret_"+UNAME;
+  var JK="ar_jr_"+UNAME;
 
-  // FIRST: check if we have a pending return URL (set before city selection)
-  // This fires when megapersonals redirects us to /users/posts/list after /home/N
-  var ret=sessionStorage.getItem("ar_ret_"+UNAME);
+  // If we have a pending return URL, redirect back to edit page
+  var ret=sessionStorage.getItem(RK);
   if(ret){
-    sessionStorage.removeItem("ar_ret_"+UNAME);
-    setTimeout(function(){location.href=ret;},600);
+    sessionStorage.removeItem(RK);
+    sessionStorage.setItem(JK,"1"); // mark: we just returned, don't save URL again
+    setTimeout(function(){location.href=ret;},400);
     return;
   }
 
-  // On edit pages, save URL so we can return after city selection redirects us away
+  // On edit pages, save URL for city-picker return — but NOT if we just returned here
   if(u.indexOf("/users/posts/edit/")!==-1){
-    sessionStorage.setItem("ar_ret_"+UNAME,location.href);
+    var justReturned=sessionStorage.getItem(JK);
+    sessionStorage.removeItem(JK);
+    if(!justReturned){
+      sessionStorage.setItem(RK,location.href);
+    }
     return;
   }
 
