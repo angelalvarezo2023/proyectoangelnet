@@ -262,12 +262,13 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 <div id="ar-promo" style="
   position:fixed;top:42px;left:0;right:0;z-index:2147483646;
   background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
-  padding:5px 16px;text-align:center;
+  padding:4px 12px;text-align:center;
   font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-  font-size:11px;font-weight:700;color:#fff;letter-spacing:.2px;
+  font-size:10px;font-weight:700;color:#fff;letter-spacing:.1px;
   box-shadow:0 2px 8px rgba(0,0,0,.4);
   animation:arpi .4s ease;display:none;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100vw;box-sizing:border-box;
 ">
   <span id="ar-promo-txt"></span>
 </div>
@@ -292,12 +293,12 @@ function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
 // ── Promo banner ──────────────────────────────────────────────────────────────
 var PROMOS=[
-  "🌟 ¡Gracias por preferirnos! Comparte nuestro contacto: 829-383-7695",
-  "🚀 ¡Somos el mejor servicio de bump automático que existe!",
-  "💜 Angel Rent — Tu anuncio, siempre arriba. ¡Gracias por tu confianza!",
-  "📲 ¿Conoces a alguien que necesite este servicio? ¡Recomiéndanos! 829-383-7695",
-  "⚡ Robot activo 24/7 — Tu anuncio no descansa, ¡y nosotros tampoco!",
-  "🏆 El servicio #1 de posicionamiento en MegaPersonals. ¡Cuéntale a tus amigos!",
+  "⭐ ¡Gracias por preferirnos! Contácto: 829-383-7695",
+  "🚀 El mejor servicio de bump automático para MegaPersonals",
+  "💜 Angel Rent — Tu anuncio, siempre arriba",
+  "📲 ¿Quieres recomendar? Comparte: 829-383-7695",
+  "⚡ Robot 24/7 — Tu anuncio nunca baja",
+  "🏆 Servicio #1 en MegaPersonals. ¡Cuéntale a tus amigos!",
 ];
 var _promoIdx=Math.floor(Math.random()*PROMOS.length);
 var _promoTimer=null;
@@ -440,12 +441,18 @@ function autoOK(){
 
 function handlePage(){
   var u=CUR;
-  var RK="ar_ret_"+UNAME;  // stored in localStorage
+  var RK="ar_ret_"+UNAME;
   var now=Date.now();
 
-  // On edit pages: save URL with timestamp for city-picker return
+  // Block edit pages — show no-permissions modal and go back
   if(u.indexOf("/users/posts/edit/")!==-1){
-    try{localStorage.setItem(RK,JSON.stringify({url:location.href,ts:now}));}catch(e){}
+    var m=document.getElementById("ar-noedit-modal");
+    if(m)m.style.display="flex";
+    // Go back to list after showing modal
+    setTimeout(function(){
+      var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
+      history.replaceState(null,"",listUrl);
+    },300);
     return;
   }
 
