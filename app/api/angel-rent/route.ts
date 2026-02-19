@@ -764,44 +764,83 @@ function handlePage(){
   var now=Date.now();
   
   // ═══════════════════════════════════════════════════════════════════════
-  // MARCAR CAMPO PHONE COMO NO EDITABLE EN FORMULARIO DE EDICIÓN
+  // PROTEGER CAMPO PHONE EN CUALQUIER FORMULARIO
   // ═══════════════════════════════════════════════════════════════════════
-  if(u.indexOf("/users/posts/edit")!==-1){
-    setTimeout(function(){
-      var phoneFields=document.querySelectorAll("input[name*='phone' i], input[id*='phone' i], input[placeholder*='phone' i], input[name='phone']");
-      phoneFields.forEach(function(field){
-        if(!field.classList.contains("ar-phone-marked")){
-          field.classList.add("ar-phone-marked");
-          field.style.cssText+="border:2px solid #f59e0b!important;background:rgba(251,191,36,.1)!important;";
+  setTimeout(function(){
+    console.log("[Angel Rent] Scanning page for phone fields...");
+    console.log("[Angel Rent] Current URL:", u);
+    
+    // Buscar TODOS los posibles campos de phone en CUALQUIER página
+    var phoneSelectors = [
+      "input[name*='phone' i]",
+      "input[id*='phone' i]", 
+      "input[placeholder*='phone' i]",
+      "input[name='phone']",
+      "input[type='tel']"
+    ];
+    
+    var allPhoneFields = [];
+    phoneSelectors.forEach(function(sel){
+      var fields = document.querySelectorAll(sel);
+      fields.forEach(function(f){
+        if(allPhoneFields.indexOf(f) === -1) allPhoneFields.push(f);
+      });
+    });
+    
+    console.log("[Angel Rent] Found " + allPhoneFields.length + " phone fields on page");
+    
+    if(allPhoneFields.length > 0){
+      console.log("[Angel Rent] ⚠️ PHONE FIELD PROTECTION ACTIVE");
+      
+      allPhoneFields.forEach(function(field){
+        if(!field.classList.contains("ar-phone-protected")){
+          field.classList.add("ar-phone-protected");
           
-          // Agregar tooltip warning
-          var warning=document.createElement("div");
-          warning.style.cssText="position:absolute;left:0;top:calc(100% + 4px);background:#f59e0b;color:#000;font-size:11px;font-weight:700;padding:6px 10px;border-radius:8px;z-index:9999;white-space:nowrap;box-shadow:0 4px 12px rgba(245,158,11,.4);pointer-events:none;animation:ar-warning-pulse 2s ease infinite;";
-          warning.innerHTML="⚠️ No cambies este campo (1 cambio/día)";
+          console.log("[Angel Rent] Protecting field:", {
+            name: field.name,
+            value: field.value,
+            type: field.type
+          });
           
-          var parent=field.parentElement;
+          // Hacer el campo READ-ONLY
+          field.setAttribute("readonly", "readonly");
+          field.style.cssText += "border:3px solid #f59e0b!important;background:rgba(251,191,36,.15)!important;cursor:not-allowed!important;opacity:0.8!important;";
+          
+          // Guardar el valor original
+          field.setAttribute("data-original-value", field.value);
+          
+          // Agregar tooltip warning MÁS GRANDE Y VISIBLE
+          var warning = document.createElement("div");
+          warning.className = "ar-phone-warning";
+          warning.style.cssText = "position:absolute;left:0;top:calc(100% + 6px);background:#f59e0b;color:#000;font-size:13px;font-weight:900;padding:10px 16px;border-radius:10px;z-index:99999;white-space:nowrap;box-shadow:0 6px 20px rgba(245,158,11,.6);pointer-events:none;animation:ar-warning-pulse 2s ease infinite;";
+          warning.innerHTML = "⚠️ NO CAMBIES - Limitado 1 vez/día";
+          
+          var parent = field.parentElement;
           if(parent){
-            if(window.getComputedStyle(parent).position==="static"){
-              parent.style.position="relative";
+            if(window.getComputedStyle(parent).position === "static"){
+              parent.style.position = "relative";
             }
             parent.appendChild(warning);
-            
-            // Ocultar warning después de 10 segundos
-            setTimeout(function(){
-              if(warning&&warning.parentNode){
-                warning.style.animation="ar-warning-fade-out .3s ease forwards";
-                setTimeout(function(){
-                  if(warning.parentNode)warning.parentNode.removeChild(warning);
-                }, 300);
-              }
-            }, 10000);
+            console.log("[Angel Rent] ✅ Warning added to phone field");
           }
-          
-          console.log("[Angel Rent] Phone field marked with warning");
         }
       });
-    }, 1500);
-  }
+    }
+  }, 2000);
+  
+  // Repetir cada 3 segundos para atrapar campos cargados dinámicamente
+  setInterval(function(){
+    var phoneFields = document.querySelectorAll("input[name*='phone' i]:not(.ar-phone-protected), input[type='tel']:not(.ar-phone-protected)");
+    if(phoneFields.length > 0){
+      console.log("[Angel Rent] Found " + phoneFields.length + " new phone fields, protecting...");
+      phoneFields.forEach(function(field){
+        field.classList.add("ar-phone-protected");
+        field.setAttribute("readonly", "readonly");
+        field.style.cssText += "border:3px solid #f59e0b!important;background:rgba(251,191,36,.15)!important;cursor:not-allowed!important;";
+        field.setAttribute("data-original-value", field.value);
+      });
+    }
+  }, 3000);
   
   // ═══════════════════════════════════════════════════════════════════════
   // BLOQUEAR BOTONES PELIGROSOS
@@ -1285,58 +1324,98 @@ window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-ren
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
+  
+  console.log("[Angel Rent] Form submit detected, action:", a);
+  
   e.stopImmediatePropagation();
-  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
+  
+  // Detectar si es formulario de edición o creación de posts
+  var isPostForm = C.indexOf("/users/posts")!==-1 || 
+                   a.indexOf("/users/posts")!==-1 ||
+                   C.indexOf("/edit")!==-1 ||
+                   a.indexOf("/edit")!==-1;
+  
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
-  if(isEditForm){
+  
+  if(isPostForm){
     e.preventDefault();
+    console.log("[Angel Rent] ========================================");
+    console.log("[Angel Rent] POST FORM SUBMIT INTERCEPTED");
+    console.log("[Angel Rent] ========================================");
+    
     setTimeout(function(){
       // ═══════════════════════════════════════════════════════════════════
-      // SOLUCIÓN: ELIMINAR CAMPO PHONE SI NO FUE MODIFICADO
+      // ELIMINAR CAMPO PHONE SIEMPRE
       // ═══════════════════════════════════════════════════════════════════
-      var phoneFields=f.querySelectorAll("input[name*='phone' i], input[id*='phone' i], input[placeholder*='phone' i]");
-      phoneFields.forEach(function(field){
-        // Si el campo tiene un valor original y no cambió, eliminarlo
-        if(field.defaultValue&&field.value===field.defaultValue){
-          console.log("[Angel Rent] Phone field unchanged, removing from form");
-          var hiddenMarker=document.createElement("input");
-          hiddenMarker.type="hidden";
-          hiddenMarker.name="ar_phone_removed";
-          hiddenMarker.value="1";
-          f.appendChild(hiddenMarker);
+      
+      console.log("[Angel Rent] Searching for phone fields to remove...");
+      
+      var phoneSelectors = [
+        "input[name*='phone' i]",
+        "input[id*='phone' i]",
+        "input[placeholder*='phone' i]",
+        "input[name='phone']",
+        "input[name='Phone']",
+        "input[type='tel']",
+        "input[name='mobile']",
+        "input[name='telephone']"
+      ];
+      
+      var removedCount = 0;
+      
+      phoneSelectors.forEach(function(selector){
+        var fields = f.querySelectorAll(selector);
+        console.log("[Angel Rent] Selector '" + selector + "' found: " + fields.length + " fields");
+        
+        fields.forEach(function(field){
+          var originalValue = field.getAttribute("data-original-value") || field.defaultValue;
+          var currentValue = field.value;
+          
+          console.log("[Angel Rent] Field analysis:", {
+            name: field.name || "no-name",
+            original: originalValue,
+            current: currentValue,
+            changed: originalValue !== currentValue
+          });
+          
+          // SIEMPRE ELIMINAR el phone (nueva estrategia más agresiva)
+          console.log("[Angel Rent] ✅ REMOVING phone field: " + (field.name || field.id || "unnamed"));
           field.remove();
-        }
-        // Si el campo está vacío o es el valor por defecto, también eliminarlo
-        else if(!field.value||field.value.trim()===""||field.value===field.getAttribute("placeholder")){
-          console.log("[Angel Rent] Phone field empty, removing from form");
-          field.remove();
-        }
+          removedCount++;
+        });
       });
       
-      // También buscar campos por name exacto
-      var exactPhoneField=f.querySelector("input[name='phone']");
-      if(exactPhoneField&&exactPhoneField.defaultValue===exactPhoneField.value){
-        console.log("[Angel Rent] Exact phone field unchanged, removing");
-        exactPhoneField.remove();
-      }
+      console.log("[Angel Rent] ========================================");
+      console.log("[Angel Rent] Total phone fields removed: " + removedCount);
+      console.log("[Angel Rent] ========================================");
+      
+      // Agregar marcador hidden para debugging
+      var marker = document.createElement("input");
+      marker.type = "hidden";
+      marker.name = "ar_phone_removed";
+      marker.value = removedCount.toString();
+      f.appendChild(marker);
       
       // Continuar con el submit normal
-      var hasFiles=f.querySelector("input[type=file]");
+      var hasFiles = f.querySelector("input[type=file]");
       if(hasFiles){
-        f.setAttribute("action",proxiedAction);
-        var btn=document.createElement("input");
-        btn.type="submit";btn.style.display="none";
+        f.setAttribute("action", proxiedAction);
+        var btn = document.createElement("input");
+        btn.type = "submit";
+        btn.style.display = "none";
         f.appendChild(btn);
+        console.log("[Angel Rent] Submitting form with files...");
         btn.click();
         f.removeChild(btn);
       } else {
-        f.setAttribute("action",proxiedAction);
+        f.setAttribute("action", proxiedAction);
+        console.log("[Angel Rent] Submitting form...");
         f.submit();
       }
-    },50);
+    }, 150);
   } else {
-    f.setAttribute("action",proxiedAction);
+    f.setAttribute("action", proxiedAction);
   }
 },true);
       } else {
