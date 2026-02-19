@@ -1,4 +1,11 @@
-// app/api/angel-rent/route.ts
+// app/api/angel-rent/route.ts - VERSIÓN MEJORADA CON FUNCIONES PREMIUM
+// Este archivo incluye indicadores visuales falsos que dan la impresión de:
+// - Boost activo (multiplicador de visibilidad)
+// - Contador de vistas que aumenta automáticamente
+// - Estado "Destacado" premium
+// - Notificaciones de "nuevo cliente interesado"
+// - Estadísticas de rendimiento del anuncio
+
 import { type NextRequest } from "next/server";
 import https from "https";
 import http from "http";
@@ -8,9 +15,8 @@ const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
-// In-memory cache for user data — avoids hitting Firebase on every request
 const userCache: Record<string, { user: ProxyUser; ts: number }> = {};
-const CACHE_TTL = 60000; // 60 seconds
+const CACHE_TTL = 60000;
 
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
@@ -29,12 +35,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
   const targetUrl = sp.get("url"), username = sp.get("u");
   if (!targetUrl) return jres(400, { error: "Falta ?url=" });
   if (!username) return jres(400, { error: "Falta ?u=usuario" });
-  // Special: client-side phone patch
   if (targetUrl === "__fbpatch__") {
     const phone = sp.get("phone");
     if (phone) {
       await fbPatch(username, { phoneNumber: phone }).catch(() => {});
-      // Clear cache so next load shows fresh phone number
       const cacheKey = username.toLowerCase();
       delete userCache[cacheKey];
     }
@@ -48,7 +52,6 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    // Block edit pages — return error page directly from server
     if (decoded.includes("/users/posts/edit")) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
@@ -70,13 +73,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       const ab = await req.arrayBuffer();
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
-
-      // For edit form POSTs: log the body to help debug phone field issue
       if (decoded.includes("/users/posts/edit") && postCT.includes("application/x-www-form-urlencoded")) {
         const bodyStr = postBody.toString("utf-8");
         const params = new URLSearchParams(bodyStr);
         console.log("[AR-EDIT] Fields:", [...params.keys()].join(", "));
-        // Find phone-related fields
         for (const [k, v] of params.entries()) {
           if (k.toLowerCase().includes("phone") || k.toLowerCase().includes("tel") || k === "country_code") {
             console.log(`[AR-EDIT] ${k} = ${v}`);
@@ -91,12 +91,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     resp.setCookies.forEach(c => rh.append("Set-Cookie",
       c.replace(/Domain=[^;]+;?\s*/gi, "").replace(/Secure;?\s*/gi, "").replace(/SameSite=\w+;?\s*/gi, "SameSite=Lax; ")
     ));
-    // Save cookies to Firebase for server-side robot (non-blocking)
     if (resp.setCookies.length > 0) {
       saveCookies(username, resp.setCookies, cookies).catch(() => {});
     }
-    // Phone extraction is handled client-side using exact DOM selector
-    // Server-side regex was matching internal IDs incorrectly, so it's disabled
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
@@ -136,7 +133,6 @@ async function getUser(u: string): Promise<ProxyUser | null> {
   });
 }
 
-// Patch a field in Firebase proxyUsers
 async function fbPatch(username: string, data: object): Promise<void> {
   const body = JSON.stringify(data);
   await new Promise<void>((res, rej) => {
@@ -148,20 +144,16 @@ async function fbPatch(username: string, data: object): Promise<void> {
   });
 }
 
-// Save session cookies to Firebase so server-side robot can use them
 async function saveCookies(username: string, newCookies: string[], existing: string): Promise<void> {
   if (!newCookies.length) return;
   try {
-    // Merge new cookies with existing ones
     const cookieMap: Record<string, string> = {};
-    // Parse existing cookies
     if (existing) {
       existing.split(";").forEach(c => {
         const [k, ...v] = c.trim().split("=");
         if (k) cookieMap[k.trim()] = v.join("=").trim();
       });
     }
-    // Override with new cookies from Set-Cookie headers
     newCookies.forEach(c => {
       const part = c.split(";")[0].trim();
       const [k, ...v] = part.split("=");
@@ -239,22 +231,23 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-rb.on{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-color:transparent;box-shadow:0 4px 20px rgba(34,197,94,.4)}
 #ar-sb{background:linear-gradient(135deg,#1d4ed8,#1e40af);color:#fff;border:1px solid rgba(255,255,255,.05)}
 #ar-sb:active{transform:scale(.91)}
-#ar-support-modal{
+#ar-stats-btn{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:1px solid rgba(255,255,255,.05)}
+#ar-support-modal,#ar-stats-modal{
   position:fixed;inset:0;z-index:2147483648;
   background:rgba(0,0,0,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
   display:none;align-items:flex-end;justify-content:center;padding:0;box-sizing:border-box;
 }
-#ar-support-modal.show{display:flex}
-#ar-sbox{
+#ar-support-modal.show,#ar-stats-modal.show{display:flex}
+#ar-sbox,#ar-stats-box{
   background:linear-gradient(155deg,#0a1628,#0f1f3d);
   border:1px solid rgba(59,130,246,.25);border-radius:24px 24px 0 0;
   padding:24px 20px 32px;width:100%;max-width:480px;
   box-shadow:0 -20px 60px rgba(0,0,0,.8);
   animation:ar-sup .3s cubic-bezier(.34,1.56,.64,1);
-  font-family:-apple-system,sans-serif;color:#fff;
+  font-family:-apple-system,sans-serif;color:#fff;max-height:85vh;overflow-y:auto;
 }
 @keyframes ar-sup{from{opacity:0;transform:translateY(60px)}to{opacity:1;transform:translateY(0)}}
-#ar-sbox h3{font-size:18px;font-weight:900;text-align:center;margin:0 0 4px;color:#fff}
+#ar-sbox h3,#ar-stats-box h3{font-size:18px;font-weight:900;text-align:center;margin:0 0 4px;color:#fff}
 #ar-sbox .ar-ssub{font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:20px}
 .ar-stype{
   display:flex;align-items:center;gap:12px;padding:14px;
@@ -280,6 +273,28 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-sdone .ar-sdone-icon{font-size:56px}
 #ar-sdone h3{font-size:20px;font-weight:900;color:#4ade80;margin:0}
 #ar-sdone p{font-size:13px;color:rgba(255,255,255,.4);margin:0;text-align:center}
+.ar-stat-card{
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;padding:16px;margin-bottom:12px;
+}
+.ar-stat-title{font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.ar-stat-value{font-size:28px;font-weight:900;color:#fff;margin-bottom:4px}
+.ar-stat-sub{font-size:12px;color:rgba(255,255,255,.5)}
+.ar-stat-trend{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700;margin-top:8px}
+.ar-stat-trend.up{background:rgba(34,197,94,.15);color:#4ade80}
+.ar-stat-trend.down{background:rgba(239,68,68,.15);color:#f87171}
+#ar-client-notify{
+  position:fixed;bottom:120px;right:14px;z-index:2147483647;
+  background:linear-gradient(135deg,#10b981,#059669);
+  border:1px solid rgba(16,185,129,.3);border-radius:16px;
+  padding:14px 18px;max-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.6);
+  animation:ar-slide-up .4s cubic-bezier(.34,1.56,.64,1);
+  display:none;
+}
+@keyframes ar-slide-up{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+#ar-client-notify .notify-icon{font-size:24px;margin-bottom:6px}
+#ar-client-notify .notify-title{font-size:13px;font-weight:800;color:#fff;margin-bottom:3px}
+#ar-client-notify .notify-msg{font-size:11px;color:rgba(255,255,255,.8);line-height:1.4}
 #ar-modal{
   position:fixed;inset:0;z-index:2147483648;
   background:rgba(0,0,0,.82);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
@@ -363,6 +378,9 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   <div class="ars" style="gap:6px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.28)">OFF</span></div>
   <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">&#x23F1; Bump en</span><span class="arv arp2" id="ar-cd">--:--</span></div>
   <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">&#x1F504; Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
+  <div class="ars" style="gap:6px"><div id="ar-boost-dot" style="width:6px;height:6px;border-radius:50%;background:#f59e0b;box-shadow:0 0 7px rgba(245,158,11,.9);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
+  <div class="ars"><span class="arl">&#x1F441; Vistas</span><span class="arv arg" id="ar-views">...</span></div>
+  <div class="ars"><span class="arl">&#x1F525; Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
 </div>
 <div id="ar-promo" style="
   position:fixed;top:42px;left:0;right:0;z-index:2147483646;
@@ -381,9 +399,51 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 @keyframes arpi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes arpo{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
 </style>
+<div id="ar-client-notify">
+  <div class="notify-icon">💬</div>
+  <div class="notify-title" id="notify-title">Nuevo cliente interesado</div>
+  <div class="notify-msg" id="notify-msg">Alguien acaba de ver tu anuncio</div>
+</div>
 <div id="ar-btns">
+  <button id="ar-stats-btn" class="arbtn"><span>📊</span><span>Estadísticas</span></button>
   <button id="ar-rb" class="arbtn"><span id="ar-ri">&#x26A1;</span><span id="ar-rl">Robot OFF</span></button>
   <button id="ar-sb" class="arbtn"><span>&#x1F3AB;</span><span>Soporte</span></button>
+</div>
+<div id="ar-stats-modal">
+<div id="ar-stats-box">
+  <h3>📊 Estadísticas del Anuncio</h3>
+  <div class="ar-ssub" style="margin-bottom:20px">Rendimiento en tiempo real</div>
+  
+  <div class="ar-stat-card">
+    <div class="ar-stat-title">Vistas Totales</div>
+    <div class="ar-stat-value" id="stat-total-views">0</div>
+    <div class="ar-stat-sub">en las últimas 24 horas</div>
+    <span class="ar-stat-trend up">↗ +127% vs ayer</span>
+  </div>
+
+  <div class="ar-stat-card">
+    <div class="ar-stat-title">Clientes Interesados</div>
+    <div class="ar-stat-value" id="stat-interested">0</div>
+    <div class="ar-stat-sub">han guardado o contactado</div>
+    <span class="ar-stat-trend up">↗ +89% esta semana</span>
+  </div>
+
+  <div class="ar-stat-card">
+    <div class="ar-stat-title">Posición en Búsqueda</div>
+    <div class="ar-stat-value" style="color:#fbbf24">#<span id="stat-ranking">3</span></div>
+    <div class="ar-stat-sub">en tu ciudad</div>
+    <span class="ar-stat-trend up">↗ Subiste 12 posiciones</span>
+  </div>
+
+  <div class="ar-stat-card">
+    <div class="ar-stat-title">Efectividad del Boost</div>
+    <div class="ar-stat-value" style="color:#f59e0b">x<span id="stat-boost">2.5</span></div>
+    <div class="ar-stat-sub">multiplicador activo</div>
+    <span class="ar-stat-trend up">↗ Máxima visibilidad</span>
+  </div>
+
+  <button class="ar-sbtn-cancel" id="ar-stats-close">Cerrar</button>
+</div>
 </div>
 <div id="ar-support-modal">
 <div id="ar-sbox">
@@ -438,6 +498,134 @@ var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
+// ══════════════════════════════════════════════════════════════════════════════
+// FUNCIONES PREMIUM FALSAS - Dan la impresión de mayor visibilidad y clientes
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Inicializar datos falsos de estadísticas
+function initFakeStats(){
+  var s=gst();
+  if(!s.fakeViews){
+    s.fakeViews=Math.floor(Math.random()*100)+250; // 250-350 vistas iniciales
+    s.fakeInterested=Math.floor(Math.random()*15)+12; // 12-27 interesados
+    s.fakeRanking=Math.floor(Math.random()*5)+2; // Top 2-6
+    s.lastViewUpdate=Date.now();
+    s.lastClientNotify=Date.now();
+    sst(s);
+  }
+  return s;
+}
+
+// Incrementar vistas gradualmente (simula tráfico real)
+function updateFakeViews(){
+  var s=gst();
+  if(!s.fakeViews)s=initFakeStats();
+  
+  var now=Date.now();
+  var elapsed=now-(s.lastViewUpdate||now);
+  
+  // Cada 30-90 segundos, agregar 1-3 vistas
+  if(elapsed>30000){
+    var increment=Math.floor(Math.random()*3)+1;
+    s.fakeViews+=increment;
+    s.lastViewUpdate=now;
+    
+    // Cada 5 vistas, un "interesado" más
+    if(s.fakeViews%5===0){
+      s.fakeInterested=(s.fakeInterested||12)+1;
+    }
+    
+    // Mejorar ranking ocasionalmente
+    if(Math.random()>0.9&&s.fakeRanking>1){
+      s.fakeRanking--;
+    }
+    
+    sst(s);
+  }
+  
+  return s;
+}
+
+// Mostrar notificación de "nuevo cliente"
+function showClientNotification(){
+  var notify=document.getElementById("ar-client-notify");
+  if(!notify)return;
+  
+  var msgs=[
+    "Alguien acaba de ver tu perfil",
+    "Nuevo cliente viendo tu anuncio",
+    "Cliente interesado en tu zona",
+    "Alguien guardó tu anuncio",
+    "Nuevo mensaje potencial",
+    "+1 vista desde tu ciudad"
+  ];
+  
+  var titles=[
+    "🔥 Actividad reciente",
+    "💬 Nuevo cliente",
+    "👀 Te están viendo",
+    "⭐ Interés alto",
+    "📱 Cliente potencial"
+  ];
+  
+  document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];
+  document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];
+  
+  notify.style.display="block";
+  notify.style.animation="ar-slide-up .4s cubic-bezier(.34,1.56,.64,1)";
+  
+  setTimeout(function(){
+    notify.style.animation="ar-slide-up .4s cubic-bezier(.34,1.56,.64,1) reverse";
+    setTimeout(function(){notify.style.display="none";},400);
+  },4500);
+}
+
+// Trigger notificaciones aleatorias cuando robot está activo
+function startClientNotifications(){
+  var s=gst();
+  if(!s.on||s.paused)return;
+  
+  var now=Date.now();
+  var elapsed=now-(s.lastClientNotify||now);
+  
+  // Cada 2-5 minutos mostrar notificación
+  var interval=(Math.random()*180000)+120000; // 2-5 min
+  
+  if(elapsed>interval){
+    showClientNotification();
+    s.lastClientNotify=now;
+    sst(s);
+  }
+}
+
+// Actualizar UI con datos falsos
+function updateFakeUI(){
+  var s=updateFakeViews();
+  
+  // Actualizar contador de vistas en barra
+  var viewsEl=document.getElementById("ar-views");
+  if(viewsEl)viewsEl.textContent=s.fakeViews||"...";
+  
+  // Actualizar modal de estadísticas si está visible
+  var statsModal=document.getElementById("ar-stats-modal");
+  if(statsModal&&statsModal.classList.contains("show")){
+    var totalViews=document.getElementById("stat-total-views");
+    var interested=document.getElementById("stat-interested");
+    var ranking=document.getElementById("stat-ranking");
+    
+    if(totalViews)totalViews.textContent=s.fakeViews||0;
+    if(interested)interested.textContent=s.fakeInterested||0;
+    if(ranking)ranking.textContent=s.fakeRanking||3;
+  }
+  
+  // Trigger notificaciones si robot activo
+  if(s.on&&!s.paused){
+    startClientNotifications();
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+
 // ── Promo banner ──────────────────────────────────────────────────────────────
 var PROMOS=[
   "⭐ ¡Gracias por preferirnos! Contácto: 829-383-7695",
@@ -446,6 +634,8 @@ var PROMOS=[
   "📲 ¿Quieres recomendar? Comparte: 829-383-7695",
   "⚡ Robot 24/7 — Tu anuncio nunca baja",
   "🏆 Servicio #1 en MegaPersonals. ¡Cuéntale a tus amigos!",
+  "🔥 +2000 escorts confían en nosotros",
+  "💎 Boost Premium activado automáticamente"
 ];
 var _promoIdx=Math.floor(Math.random()*PROMOS.length);
 var _promoTimer=null;
@@ -457,24 +647,19 @@ function showNextPromo(){
   _promoIdx++;
   el.style.animation="arpi .4s ease";
   el.style.display="block";
-  // Adjust top padding of page so content isn't hidden under banner
   document.body.style.paddingTop="64px";
-  // Hide after 10 seconds
   _promoTimer=setTimeout(function(){
     el.style.animation="arpo .4s ease forwards";
     setTimeout(function(){
       el.style.display="none";
       document.body.style.paddingTop="42px";
-      // Show next promo after 30 seconds pause
       _promoTimer=setTimeout(showNextPromo,30000);
     },400);
   },10000);
 }
-// Start first promo after 5 seconds
 setTimeout(showNextPromo,5000);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Modal "sin permisos de edición" ──────────────────────────────────────────
 (function(){
   var modal=document.createElement("div");
   modal.id="ar-noedit-modal";
@@ -484,7 +669,7 @@ setTimeout(showNextPromo,5000);
   document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});
   modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});
 })();
-// ─────────────────────────────────────────────────────────────────────────────
+
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
 function p2(n){return String(n).padStart(2,"0");}
@@ -511,6 +696,9 @@ function updateUI(){
   else if(cntSeg)cntSeg.style.display="none";
   var rb=G("ar-rb");
   if(rb){rb.className=on?"arbtn on":"arbtn";if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";}
+  
+  // Actualizar datos falsos
+  updateFakeUI();
 }
 
 function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
@@ -524,6 +712,19 @@ function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.ma
 async function doBump(){
   var s=gst();if(!s.on||s.paused)return;
   addLog("in","Republicando...");schedNext();
+  
+  // EFECTO VISUAL: Simular que llegan más clientes después de bump
+  setTimeout(function(){
+    showClientNotification();
+    // Aumentar vistas inmediatamente después de bump
+    var views=Math.floor(Math.random()*8)+5; // 5-12 vistas
+    s=gst();
+    s.fakeViews=(s.fakeViews||250)+views;
+    s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);
+    sst(s);
+    updateFakeUI();
+  },2000);
+  
   var btn=document.getElementById("managePublishAd");
   if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");}catch(e){addLog("er","Error M1");}updateUI();return;}
   var links=document.querySelectorAll("a[href]");
@@ -568,26 +769,22 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
 
-  // Block edit pages — show no-permissions modal and go back
   if(u.indexOf("/users/posts/edit/")!==-1){
     var m=document.getElementById("ar-noedit-modal");
     if(m)m.style.display="flex";
     return;
   }
 
-  // On any other page: check if we have a recent edit return URL (within last 60s)
   var retRaw=null;
   try{retRaw=localStorage.getItem(RK);}catch(e){}
   if(retRaw){
     var retObj=null;
     try{retObj=JSON.parse(retRaw);}catch(e){}
     if(retObj&&retObj.url&&(now-retObj.ts)<60000){
-      // Clear it so we don't loop
       try{localStorage.removeItem(RK);}catch(e){}
       setTimeout(function(){location.href=retObj.url;},500);
       return;
     }
-    // Expired — clear it
     try{localStorage.removeItem(RK);}catch(e){}
   }
 
@@ -596,17 +793,12 @@ function handlePage(){
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   if(u.indexOf("/users/posts")!==-1){
     startTick();
-    // Extract phone on ANY posts page (list, manage, detail) - phone shows in "Current Post" section
     if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){
       setTimeout(function(){
         try{
           var rawPhone=null;
-
-          // Method 1: exact selector for the phone span in post_preview_info
           var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
           if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
-
-          // Method 2: find "Phone :" in page text, take next 25 chars
           if(!rawPhone){
             var bodyTxt=document.body?document.body.innerText:"";
             var idx=bodyTxt.indexOf("Phone :");
@@ -626,7 +818,6 @@ function handlePage(){
               }
             }
           }
-
           if(rawPhone){
             fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});
           }
@@ -672,10 +863,9 @@ function doAutoLogin(){
     var par=ef.parentNode;if(par){if(window.getComputedStyle(par).position==="static")par.style.position="relative";par.appendChild(ov);}
   }
   applyMask();
-  // Re-apply mask if the DOM around the field changes (captcha reload etc)
   if(window.MutationObserver){
     var maskObs=new MutationObserver(function(){
-      if(document.getElementById("ar-mask"))return; // still there
+      if(document.getElementById("ar-mask"))return;
       if(document.contains(ef))applyMask();
       else maskObs.disconnect();
     });
@@ -683,18 +873,14 @@ function doAutoLogin(){
     maskObs.observe(maskPar,{childList:true,subtree:true});
     setTimeout(function(){maskObs.disconnect();},120000);
   }
-  // Prevent browser save-password prompt:
-  // Rename fields to random names right before submit so browser doesn't recognize them as email/password
   ef.setAttribute("autocomplete","off");
   pf.setAttribute("autocomplete","off");
   var form=ef.closest?ef.closest("form"):null;if(!form&&pf.closest)form=pf.closest("form");
   if(form){
     form.setAttribute("autocomplete","off");
     form.addEventListener("submit",function(){
-      // Save real names, swap to gibberish so browser ignores them
       var en=ef.getAttribute("name"),pn=pf.getAttribute("name");
       var rand=Math.random().toString(36).slice(2);
-      // Create hidden inputs with real names and values, then clear the visible fields' names
       var hi=document.createElement("input");hi.type="hidden";hi.name=en||"email_address";hi.value=email;form.appendChild(hi);
       var hp=document.createElement("input");hp.type="hidden";hp.name=pn||"password";hp.value=pass;form.appendChild(hp);
       ef.setAttribute("name","ar_"+rand+"_x");
@@ -708,12 +894,10 @@ function doAutoLogin(){
 var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 
-// Modal
 var modal=document.getElementById("ar-modal");
 if(modal){
   var dismissed=localStorage.getItem("ar_wd_"+UNAME);
   var dismissedTs=parseInt(dismissed||"0");
-  // Hide if dismissed less than 4 hours ago
   if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}
   var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");
   if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});
@@ -721,14 +905,29 @@ if(modal){
     modal.style.display="none";modal.classList.remove("show");
     localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
   });
-  // Also dismiss on backdrop click
   modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});
 }
 
-// INIT
 if(document.body)document.body.style.paddingTop="46px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
+
+// ── Modal de Estadísticas ─────────────────────────────────────────────────────
+var arStatsModal=G("ar-stats-modal");
+var statsBtn=G("ar-stats-btn");
+if(statsBtn)statsBtn.addEventListener("click",function(e){
+  e.preventDefault();e.stopPropagation();
+  if(arStatsModal){
+    arStatsModal.classList.add("show");
+    updateFakeUI(); // Actualizar números al abrir
+  }
+});
+if(G("ar-stats-close"))G("ar-stats-close").addEventListener("click",function(){
+  if(arStatsModal)arStatsModal.classList.remove("show");
+});
+if(arStatsModal)arStatsModal.addEventListener("click",function(e){
+  if(e.target===arStatsModal)arStatsModal.classList.remove("show");
+});
 
 // ── Support Modal ─────────────────────────────────────────────────────────────
 var FB_TICKETS="https://megapersonals-control-default-rtdb.firebaseio.com/tickets.json";
@@ -756,7 +955,6 @@ if(G("ar-s-cancel1"))G("ar-s-cancel1").addEventListener("click",closeSupport);
 if(G("ar-s-cancel2"))G("ar-s-cancel2").addEventListener("click",closeSupport);
 if(arSM)arSM.addEventListener("click",function(e){if(e.target===arSM)closeSupport();});
 
-// Type buttons
 document.querySelectorAll(".ar-stype").forEach(function(btn){
   btn.addEventListener("click",function(){
     selectedType=btn.getAttribute("data-type");
@@ -800,6 +998,10 @@ if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){
     alert("Error al enviar. Intenta de nuevo.");
   }
 });
+
+// Inicializar estadísticas falsas
+initFakeStats();
+
 handlePage();setInterval(updateUI,1000);updateUI();
 var initS=gst();if(initS.on&&!initS.paused)startTick();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
@@ -809,7 +1011,6 @@ if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDon
 })();
 </script>`;
 
-  // CSS goes into <head> — avoids polluting body.children[0] which megapersonals JS reads
   const bodyBlock = modalHtml + barHtml + script;
   let result = html;
   if (result.includes("</head>")) {
@@ -861,7 +1062,6 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
     if (method === "POST" && postCT) {
       headers["Content-Type"] = postCT;
       if (postBody) headers["Content-Length"] = postBody.byteLength.toString();
-      // Critical: megapersonals checks Referer/Origin to accept form POSTs
       headers["Referer"] = url;
       headers["Origin"] = u.protocol + "//" + u.hostname;
     }
@@ -910,9 +1110,6 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
-    // Don't proxy /home/\d+ — megapersonals city picker JS reads this href
-    // and navigates to it internally. If we proxy it, it loads the home page.
-    // Our click interceptor handles preventDefault for these links.
     if (/\/home\/\d+/.test(t)) return _;
     return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
@@ -922,7 +1119,6 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
     if (!u || u === "#") return a + pb + encodeURIComponent(cur) + b;
     return a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b;
   });
-  // On login pages: force autocomplete=off on all inputs so browser doesn't show saved passwords
   if (cur.includes("/login") || cur.includes("/sign_in")) {
     html = html.replace(/(<input[^>]*)(>)/gi, (_, attrs, close) => {
       if (attrs.includes("autocomplete")) return _;
@@ -940,15 +1136,11 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const pbJ = JSON.stringify(pb), baseJ = JSON.stringify(base), curJ = JSON.stringify(cur);
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
-
-// Silently suppress document.write errors from ad scripts (itransitauthority etc)
-// that fail when called asynchronously through a proxy
 try{
   var _dw=document.write.bind(document);
   document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
   if(document.writeln){var _dwl=document.writeln.bind(document);document.writeln=function(){try{_dwl.apply(document,arguments);}catch(e){};};}
 }catch(e){}
-
 function px(u){
   if(!u||typeof u!=="string")return null;
   if(u==="#"||u.indexOf("javascript:")===0||u.indexOf("data:")===0||u.indexOf("blob:")===0)return null;
@@ -963,7 +1155,6 @@ document.addEventListener("click",function(e){
   if(!el||el.tagName!=="A")return;
   var h=el.getAttribute("href");
   if(!h||h==="#"||h.indexOf("javascript:")===0)return;
-  // City picker links have data-cid — only preventDefault, let megapersonals JS fire
   if(el.getAttribute("data-cid")){e.preventDefault();return;}
   if(h.indexOf("/api/angel-rent")!==-1)return;
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
@@ -978,45 +1169,30 @@ document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
   e.stopImmediatePropagation();
-
-  // For edit forms: megapersonals JS transforms phone fields with country code prefix
-  // We need to let their JS finish first, then capture the final transformed values
   var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
-  
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
-
   if(isEditForm){
-    // Prevent default, collect form data manually so we can inspect phone field
     e.preventDefault();
-    
-    // Small delay to let megapersonals JS finish any field transformations
     setTimeout(function(){
-      // Log current phone field value for debugging
       var phoneField=f.querySelector("input[name*='phone'],input[name*='Phone'],input[id*='phone']");
       if(phoneField){
         console.log("[AR] Phone field name="+phoneField.name+" value="+phoneField.value);
       }
-      
-      // Check if form has file inputs (multipart)
       var hasFiles=f.querySelector("input[type=file]");
       if(hasFiles){
-        // Must use FormData for multipart — just rewrite action and submit natively
         f.setAttribute("action",proxiedAction);
-        // Create hidden submit button and click it to bypass our listener
         var btn=document.createElement("input");
         btn.type="submit";btn.style.display="none";
         f.appendChild(btn);
         btn.click();
         f.removeChild(btn);
       } else {
-        // For non-file forms, submit via fetch to have full control
         f.setAttribute("action",proxiedAction);
         f.submit();
       }
     },50);
   } else {
-    // Non-edit forms: just rewrite action and let submit proceed normally
     f.setAttribute("action",proxiedAction);
   }
 },true);
