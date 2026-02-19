@@ -76,18 +76,25 @@ export default function AngelRentLogin() {
         <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", filter: "blur(80px)", background: "#a855f7", top: -60, left: -40, opacity: .15, pointerEvents: "none", zIndex: -1 }} />
         <div style={{ position: "absolute", width: 200, height: 200, borderRadius: "50%", filter: "blur(80px)", background: "#ec4899", bottom: -60, right: -40, opacity: .15, pointerEvents: "none", zIndex: -1 }} />
 
-        <div style={{ fontSize: 56, marginBottom: 12, filter: "drop-shadow(0 4px 12px rgba(168,85,247,.3))" }}>👼</div>
+        <div style={{ marginBottom: 16, display: "flex", justifyContent: "center" }}>
+          <img src="/icon-128.png" alt="Angel Rent" style={{ width: 88, height: 88, borderRadius: 22, boxShadow: "0 8px 30px rgba(168,85,247,.35), 0 0 0 1px rgba(168,85,247,.15)", objectFit: "cover" }} />
+        </div>
+
+        <div style={{ fontSize: 10, color: "rgba(168,85,247,.5)", textTransform: "uppercase", letterSpacing: "2px", fontWeight: 700, marginBottom: 8 }}>
+          ✦ Plataforma de Republica Automática ✦
+        </div>
 
         <h1 style={{
-          fontSize: 26, marginBottom: 4,
+          fontSize: 28, marginBottom: 4,
           background: "linear-gradient(135deg, #a855f7, #ec4899)",
           WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-          fontWeight: 800, letterSpacing: "-.5px",
+          fontWeight: 900, letterSpacing: "-.5px",
         }}>
-          Angel Rent
+          Bienvenido a Angel Rent
         </h1>
-        <p style={{ color: "rgba(255,255,255,.35)", fontSize: 12, marginBottom: 32 }}>
-          Ingresa tu usuario para continuar
+        <p style={{ color: "rgba(255,255,255,.3)", fontSize: 12, marginBottom: 32, lineHeight: 1.5 }}>
+          Tu anuncio, siempre arriba 🚀<br/>
+          <span style={{ color: "rgba(255,255,255,.18)", fontSize: 11 }}>Ingresa tu usuario para continuar</span>
         </p>
 
         {/* Input */}
