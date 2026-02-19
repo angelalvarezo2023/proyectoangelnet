@@ -50,19 +50,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
     if (decoded.includes("/users/posts/edit")) {
-      return new Response(
-        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
-<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
-  <div style="font-size:48px;margin-bottom:12px">🔒</div>
-  <div style="font-size:17px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3">Sin permisos de edición</div>
-  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:22px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>
-  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4)">📲 Contactar por Telegram</a>
-  <a href="javascript:history.back()" style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;text-decoration:none">Volver</a>
-</div></body></html>`,
-        { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
-      );
+      // MODO TESTING: Permitir acceso directo a edición
+      // El modal ya no se muestra, solo se procesa normalmente
     }
+    
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
@@ -719,7 +710,8 @@ var _promoTimer=null;
 function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
 setTimeout(showNextPromo,5000);
 
-(function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
+// MODAL DE SIN PERMISOS DESHABILITADO PARA TESTING
+// (function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";...})();
 
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -830,8 +822,7 @@ function handlePage(){
         overlay.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
+          alert("⚠️ Esta función está deshabilitada. Contacta soporte si necesitas ayuda.");
         });
         
         var parent=btn.parentElement;
@@ -889,8 +880,7 @@ function handlePage(){
         el.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
+          alert("⚠️ Edición deshabilitada. Contacta soporte por Telegram si necesitas editar.");
         },true);
       }
       
@@ -908,8 +898,8 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
+            // modal disabled
+            
           },true);
         }
       }
@@ -942,8 +932,8 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
+            // modal disabled
+            
           },true);
         }
       }
