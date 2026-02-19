@@ -955,8 +955,13 @@ function handlePage(){
   // ═══════════════════════════════════════════════════════════════════════
   
   if(u.indexOf("/users/posts/edit/")!==-1){
-    // Agregar debug visual para ver qué campos tiene el formulario
+    // ═══════════════════════════════════════════════════════════════════════
+    // MODO DE PRUEBA: Permitir edición con advertencia en consola
+    // ═══════════════════════════════════════════════════════════════════════
     setTimeout(function(){
+      console.log("[Angel Rent] ⚠️ EDIT MODE ENABLED - Testing phone field removal");
+      console.log("[Angel Rent] The phone field will be automatically removed if unchanged");
+      
       var forms=document.querySelectorAll("form");
       if(forms.length>0){
         console.log("[Angel Rent] Edit form detected, analyzing fields...");
@@ -980,18 +985,7 @@ function handlePage(){
       }
     }, 1000);
     
-    // Mostrar modal de "sin permisos" (mantenido para info)
-    var m=document.getElementById("ar-noedit-modal");
-    if(m){
-      // Modificar el mensaje para que sea más claro
-      var content=m.querySelector("div > div:nth-child(3)");
-      if(content){
-        content.innerHTML='Puedes editar el nombre, descripción y otros campos.<br><br><strong style="color:#fbbf24">⚠️ NO cambies el número de teléfono</strong> (limitado a 1 vez por día por MegaPersonals)<br><br>Si necesitas cambiar el teléfono, contáctanos.';
-      }
-      m.style.display="flex";
-      // Auto-cerrar después de 8 segundos
-      setTimeout(function(){m.style.display="none";}, 8000);
-    }
+    // NO MOSTRAR MODAL - Permitir edición para testing
     return;
   }
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
