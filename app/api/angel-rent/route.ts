@@ -50,34 +50,6 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
     if (decoded.includes("/users/posts/edit")) {
-      // ═══════════════════════════════════════════════════════════════════
-      // CONTRASEÑA REQUERIDA SOLO PARA EDITAR POSTS
-      // ═══════════════════════════════════════════════════════════════════
-      const editPassword = sp.get("pwd");
-      const EDIT_PASSWORD = "admin123";
-      
-      if (!editPassword || editPassword !== EDIT_PASSWORD) {
-        return new Response(
-          `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Contraseña Requerida</title></head>
-<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
-<div style="max-width:420px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:40px 32px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
-  <div style="font-size:64px;margin-bottom:20px">🔐</div>
-  <div style="font-size:24px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Edición Protegida</div>
-  <div style="font-size:15px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:32px">
-    La función de edición está temporalmente restringida para pruebas de seguridad.
-  </div>
-  <div style="font-size:13px;color:rgba(255,255,255,.5);padding:18px;background:rgba(255,255,255,.05);border-radius:14px;border:1px solid rgba(255,255,255,.1);text-align:left;line-height:1.8">
-    <div style="color:#a855f7;font-weight:800;margin-bottom:8px">💡 Para administradores:</div>
-    Agrega <code style="background:rgba(168,85,247,.2);padding:3px 8px;border-radius:6px;color:#c084fc;font-weight:700">?pwd=admin123</code> al final de la URL
-  </div>
-  <a href="javascript:history.back()" style="display:block;margin-top:24px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 24px;border-radius:50px;text-decoration:none;transition:all .2s">← Volver</a>
-</div></body></html>`,
-          { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
-        );
-      }
-    }
-    
-    if (decoded.includes("/users/posts/edit")) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
