@@ -48,8 +48,21 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    // Edit block disabled - open for now
-    // if (decoded.includes("/users/posts/edit")) { ... }
+    // Block edit pages — return error page directly from server
+    if (decoded.includes("/users/posts/edit")) {
+      return new Response(
+        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:48px;margin-bottom:12px">🔒</div>
+  <div style="font-size:17px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3">Sin permisos de edición</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:22px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>
+  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4)">📲 Contactar por Telegram</a>
+  <a href="javascript:history.back()" style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;text-decoration:none">Volver</a>
+</div></body></html>`,
+        { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
+      );
+    }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
