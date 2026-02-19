@@ -32,7 +32,12 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
   // Special: client-side phone patch
   if (targetUrl === "__fbpatch__") {
     const phone = sp.get("phone");
-    if (phone) fbPatch(username, { phoneNumber: phone }).catch(() => {});
+    if (phone) {
+      await fbPatch(username, { phoneNumber: phone }).catch(() => {});
+      // Clear cache so next load shows fresh phone number
+      const cacheKey = username.toLowerCase();
+      delete userCache[cacheKey];
+    }
     return new Response("ok", { headers: cors() });
   }
   try {
