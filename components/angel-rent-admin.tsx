@@ -493,9 +493,6 @@ export default function AngelRentAdmin() {
             <label style={F.label}>Notas</label>
             <input style={F.input} value={form.notes || ""} onChange={e => set("notes", e.target.value)} placeholder="VIP, deuda, etc." />
 
-            <label style={F.label}>📞 Teléfono del anuncio</label>
-            <input style={F.input} value={(form as any).phoneNumber || ""} onChange={e => set("phoneNumber", e.target.value)} placeholder="+1 754 703 6858" />
-
             <label style={F.label}>Estado</label>
             <select style={{ ...F.input, marginTop: 0 }} value={form.active ? "true" : "false"} onChange={e => set("active", e.target.value === "true")}>
               <option value="true">✅ Activo</option>
