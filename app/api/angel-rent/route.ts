@@ -206,8 +206,49 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .arbtn:active{transform:scale(.91)}
 #ar-rb{background:linear-gradient(135deg,#27272a,#18181b);color:rgba(255,255,255,.45);border:1px solid rgba(255,255,255,.07)}
 #ar-rb.on{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-color:transparent;box-shadow:0 4px 20px rgba(34,197,94,.4)}
-#ar-pb{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:1px solid rgba(255,255,255,.05)}
-#ar-pb.paused{background:linear-gradient(135deg,#d97706,#b45309);box-shadow:0 4px 20px rgba(245,158,11,.4)}
+#ar-sb{background:linear-gradient(135deg,#1d4ed8,#1e40af);color:#fff;border:1px solid rgba(255,255,255,.05)}
+#ar-sb:active{transform:scale(.91)}
+#ar-support-modal{
+  position:fixed;inset:0;z-index:2147483648;
+  background:rgba(0,0,0,.85);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  display:none;align-items:flex-end;justify-content:center;padding:0;box-sizing:border-box;
+}
+#ar-support-modal.show{display:flex}
+#ar-sbox{
+  background:linear-gradient(155deg,#0a1628,#0f1f3d);
+  border:1px solid rgba(59,130,246,.25);border-radius:24px 24px 0 0;
+  padding:24px 20px 32px;width:100%;max-width:480px;
+  box-shadow:0 -20px 60px rgba(0,0,0,.8);
+  animation:ar-sup .3s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;color:#fff;
+}
+@keyframes ar-sup{from{opacity:0;transform:translateY(60px)}to{opacity:1;transform:translateY(0)}}
+#ar-sbox h3{font-size:18px;font-weight:900;text-align:center;margin:0 0 4px;color:#fff}
+#ar-sbox .ar-ssub{font-size:12px;color:rgba(255,255,255,.4);text-align:center;margin-bottom:20px}
+.ar-stype{
+  display:flex;align-items:center;gap:12px;padding:14px;
+  border:1px solid rgba(255,255,255,.08);border-radius:14px;
+  background:rgba(255,255,255,.04);cursor:pointer;width:100%;
+  margin-bottom:10px;transition:background .15s,border-color .15s;
+  font-family:-apple-system,sans-serif;
+}
+.ar-stype:active{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.4)}
+.ar-stype .ar-si{font-size:24px;width:44px;height:44px;border-radius:12px;background:rgba(59,130,246,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ar-stype .ar-stxt{text-align:left;flex:1}
+.ar-stype .ar-stl{display:block;font-size:14px;font-weight:700;color:#fff}
+.ar-stype .ar-sds{display:block;font-size:11px;color:rgba(255,255,255,.35);margin-top:2px}
+.ar-urg{font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;background:rgba(239,68,68,.2);color:#f87171;border:1px solid rgba(239,68,68,.3);flex-shrink:0}
+#ar-sdesc{width:100%;padding:12px;border:1px solid rgba(255,255,255,.1);border-radius:12px;background:rgba(255,255,255,.05);color:#fff;font-size:13px;font-family:-apple-system,sans-serif;resize:none;outline:none;margin-bottom:14px;box-sizing:border-box}
+#ar-sdesc:focus{border-color:rgba(59,130,246,.5)}
+#ar-sdesc::placeholder{color:rgba(255,255,255,.25)}
+.ar-sbtn-send{width:100%;padding:14px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:800;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:10px}
+.ar-sbtn-send:disabled{opacity:.4}
+.ar-sbtn-cancel{width:100%;padding:10px;background:transparent;color:rgba(255,255,255,.3);border:1px solid rgba(255,255,255,.08);border-radius:12px;font-size:13px;cursor:pointer;font-family:-apple-system,sans-serif}
+#ar-sback{background:none;border:none;color:rgba(255,255,255,.4);font-size:13px;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:16px;padding:0;display:flex;align-items:center;gap:4px}
+#ar-sdone{display:flex;flex-direction:column;align-items:center;gap:12px;padding:20px 0}
+#ar-sdone .ar-sdone-icon{font-size:56px}
+#ar-sdone h3{font-size:20px;font-weight:900;color:#4ade80;margin:0}
+#ar-sdone p{font-size:13px;color:rgba(255,255,255,.4);margin:0;text-align:center}
 #ar-modal{
   position:fixed;inset:0;z-index:2147483648;
   background:rgba(0,0,0,.82);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
@@ -311,8 +352,50 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 </style>
 <div id="ar-btns">
   <button id="ar-rb" class="arbtn"><span id="ar-ri">&#x26A1;</span><span id="ar-rl">Robot OFF</span></button>
-  <button id="ar-pb" class="arbtn"><span id="ar-pi">&#x23F8;</span><span id="ar-pl">Pausar</span></button>
-</div>`;
+  <button id="ar-sb" class="arbtn"><span>&#x1F3AB;</span><span>Soporte</span></button>
+</div>
+<div id="ar-support-modal">
+<div id="ar-sbox">
+  <div id="ar-s-select">
+    <h3>&#x1F3AB; Solicitar Soporte</h3>
+    <div class="ar-ssub">¿Qué necesitas?</div>
+    <button class="ar-stype" data-type="activation" data-label="Activacion nueva" data-priority="urgent">
+      <div class="ar-si">🚀</div><div class="ar-stxt"><span class="ar-stl">Activacion nueva</span><span class="ar-sds">Crear anuncio por primera vez</span></div><span class="ar-urg">URGENTE</span>
+    </button>
+    <button class="ar-stype" data-type="photo_change" data-label="Cambiar fotos" data-priority="normal">
+      <div class="ar-si">📸</div><div class="ar-stxt"><span class="ar-stl">Cambiar fotos</span><span class="ar-sds">Actualizar las fotos del anuncio</span></div>
+    </button>
+    <button class="ar-stype" data-type="number_change" data-label="Cambiar numero" data-priority="urgent">
+      <div class="ar-si">📱</div><div class="ar-stxt"><span class="ar-stl">Cambiar numero</span><span class="ar-sds">Cambiar el numero de telefono del anuncio</span></div><span class="ar-urg">URGENTE</span>
+    </button>
+    <button class="ar-stype" data-type="other" data-label="Otro" data-priority="normal">
+      <div class="ar-si">💬</div><div class="ar-stxt"><span class="ar-stl">Otro</span><span class="ar-sds">Otra solicitud o consulta</span></div>
+    </button>
+    <button class="ar-sbtn-cancel" id="ar-s-cancel1">Cancelar</button>
+  </div>
+  <div id="ar-s-details" style="display:none">
+    <button id="ar-sback">&#8592; Volver</button>
+    <h3 id="ar-s-dtitle"></h3>
+    <div class="ar-ssub" id="ar-s-dsub"></div>
+    <div id="ar-s-photo-hint" style="display:none;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12px;text-align:center;color:#93c5fd">
+      📸 Cuando te atiendan, envia tus fotos a <a href="https://t.me/Soportetecnico2323" target="_blank" style="color:#60a5fa;font-weight:700">@Soportetecnico2323</a>
+    </div>
+    <textarea id="ar-sdesc" rows="3" placeholder="Describe tu solicitud (opcional)..."></textarea>
+    <button class="ar-sbtn-send" id="ar-s-send">Enviar Solicitud</button>
+    <button class="ar-sbtn-cancel" id="ar-s-cancel2">Cancelar</button>
+  </div>
+  <div id="ar-s-sending" style="display:none;text-align:center;padding:30px 0">
+    <div style="width:40px;height:40px;border:4px solid rgba(59,130,246,.3);border-top-color:#3b82f6;border-radius:50%;animation:ar-spin 1s linear infinite;margin:0 auto 12px"></div>
+    <p style="color:rgba(255,255,255,.4);font-size:13px;margin:0">Enviando solicitud...</p>
+  </div>
+  <div id="ar-sdone" style="display:none">
+    <div class="ar-sdone-icon">✅</div>
+    <h3>Solicitud enviada</h3>
+    <p>Te avisaremos cuando te estemos atendiendo</p>
+  </div>
+</div>
+</div>
+<style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
   const script = `<script>
 (function(){
@@ -418,8 +501,6 @@ function updateUI(){
   else if(cntSeg)cntSeg.style.display="none";
   var rb=G("ar-rb");
   if(rb){rb.className=on?"arbtn on":"arbtn";if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";}
-  var pb=G("ar-pb");
-  if(pb){pb.className=paused?"arbtn paused":"arbtn";if(G("ar-pi"))G("ar-pi").textContent=paused?"\u25B6":"\u23F8";if(G("ar-pl"))G("ar-pl").textContent=paused?"Reanudar":"Pausar";}
 }
 
 function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
@@ -585,9 +666,79 @@ if(modal){
 
 // INIT
 if(document.body)document.body.style.paddingTop="46px";
-var rb2=G("ar-rb");var pb2=G("ar-pb");
+var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
-if(pb2)pb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();togglePause();});
+
+// ── Support Modal ─────────────────────────────────────────────────────────────
+var FB_TICKETS="https://megapersonals-control-default-rtdb.firebaseio.com/tickets.json";
+var arSM=G("ar-support-modal");
+var arSSelect=G("ar-s-select");
+var arSDetails=G("ar-s-details");
+var arSSending=G("ar-s-sending");
+var arSDone=G("ar-sdone");
+var selectedType=null,selectedLabel=null,selectedPriority="normal";
+
+function showSupportStep(step){
+  [arSSelect,arSDetails,arSSending,arSDone].forEach(function(el){if(el)el.style.display="none";});
+  if(step==="select"&&arSSelect)arSSelect.style.display="";
+  if(step==="details"&&arSDetails)arSDetails.style.display="";
+  if(step==="sending"&&arSSending)arSSending.style.display="";
+  if(step==="done"&&arSDone)arSDone.style.display="flex";
+}
+
+function openSupport(){if(arSM)arSM.classList.add("show");showSupportStep("select");}
+function closeSupport(){if(arSM)arSM.classList.remove("show");selectedType=null;}
+
+var sb=G("ar-sb");
+if(sb)sb.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();openSupport();});
+if(G("ar-s-cancel1"))G("ar-s-cancel1").addEventListener("click",closeSupport);
+if(G("ar-s-cancel2"))G("ar-s-cancel2").addEventListener("click",closeSupport);
+if(arSM)arSM.addEventListener("click",function(e){if(e.target===arSM)closeSupport();});
+
+// Type buttons
+document.querySelectorAll(".ar-stype").forEach(function(btn){
+  btn.addEventListener("click",function(){
+    selectedType=btn.getAttribute("data-type");
+    selectedLabel=btn.getAttribute("data-label");
+    selectedPriority=btn.getAttribute("data-priority")||"normal";
+    var icon=btn.querySelector(".ar-si")?btn.querySelector(".ar-si").textContent:"";
+    if(G("ar-s-dtitle"))G("ar-s-dtitle").textContent=icon+" "+selectedLabel;
+    if(G("ar-s-dsub"))G("ar-s-dsub").textContent=selectedType==="other"?"Describe tu solicitud":"Agrega detalles si quieres (opcional)";
+    var ph=G("ar-s-photo-hint");if(ph)ph.style.display=selectedType==="photo_change"?"":"none";
+    if(G("ar-sdesc"))G("ar-sdesc").value="";
+    showSupportStep("details");
+  });
+});
+
+if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportStep("select");});
+
+if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){
+  if(!selectedType)return;
+  showSupportStep("sending");
+  try{
+    var s=gst();
+    var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;
+    var now=Date.now();
+    var ticket={
+      clientName:DNAME||UNAME,
+      browserName:UNAME,
+      type:selectedType,
+      typeLabel:selectedLabel,
+      description:desc,
+      priority:selectedPriority,
+      status:"pending",
+      createdAt:now,
+      updatedAt:now
+    };
+    var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});
+    if(!resp.ok)throw new Error("error");
+    showSupportStep("done");
+    setTimeout(function(){closeSupport();},4000);
+  }catch(e){
+    showSupportStep("select");
+    alert("Error al enviar. Intenta de nuevo.");
+  }
+});
 handlePage();setInterval(updateUI,1000);updateUI();
 var initS=gst();if(initS.on&&!initS.paused)startTick();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
