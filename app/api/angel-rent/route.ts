@@ -43,6 +43,11 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
+    // Block edit pages server-side — redirect to list instead
+    if (decoded.includes("/users/posts/edit")) {
+      const listUrl = `/api/angel-rent?u=${enc(username)}&url=${enc("https://megapersonals.eu/users/posts/list")}`;
+      return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="color:#a855f7;font-weight:700;text-decoration:none">← Volver a mis anuncios</a>`);
+    }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
@@ -664,7 +669,7 @@ function handlePage(){
           // Method 3: page text scan with strict pattern
           if(!rawPhone){
             var pText=document.body?document.body.innerText:"";
-            var pm2=pText.match(/Phone\s*:?\s*(\+?1[\s.-]?\(?\d{3}\)?[\s.(-]\s*\d{3}[\s.-]\d{4})/i);
+            var pm2=pText.match(/Phone\s*:?\s*(\+?1[\s.\-]?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4})/i);
             if(pm2) rawPhone=pm2[1].trim();
           }
 
