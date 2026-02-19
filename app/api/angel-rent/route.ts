@@ -461,7 +461,16 @@ function showNextPromo(){
 setTimeout(showNextPromo,5000);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Modal "sin permisos de edición" — DISABLED FOR TESTING ───────────────────
+// ── Modal "sin permisos de edición" ──────────────────────────────────────────
+(function(){
+  var modal=document.createElement("div");
+  modal.id="ar-noedit-modal";
+  modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);align-items:center;justify-content:center;";
+  modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;max-width:320px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7);position:relative;">  <div style="font-size:38px;margin-bottom:10px;">🔒</div>  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3;">Sin permisos de edición</div>  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:20px;">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4);">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;cursor:pointer;width:100%;">Cerrar</button></div>';
+  document.body.appendChild(modal);
+  document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});
+})();
 // ─────────────────────────────────────────────────────────────────────────────
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -546,8 +555,16 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
 
-  // DISABLED FOR TESTING — edit block off
-  // if(u.indexOf("/users/posts/edit/")!==-1){ ... }
+  // Block edit pages — show no-permissions modal and go back
+  if(u.indexOf("/users/posts/edit/")!==-1){
+    var m=document.getElementById("ar-noedit-modal");
+    if(m)m.style.display="flex";
+    setTimeout(function(){
+      var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
+      history.replaceState(null,"",listUrl);
+    },300);
+    return;
+  }
 
   // On any other page: check if we have a recent edit return URL (within last 60s)
   var retRaw=null;
