@@ -767,8 +767,16 @@ if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDon
 })();
 </script>`;
 
-  const block = css + modalHtml + barHtml + script;
-  return html.includes("<body") ? html.replace(/(<body[^>]*>)/i, "$1" + block) : block + html;
+  // CSS goes into <head> — avoids polluting body.children[0] which megapersonals JS reads
+  const bodyBlock = modalHtml + barHtml + script;
+  let result = html;
+  if (result.includes("</head>")) {
+    result = result.replace("</head>", css + "</head>");
+  } else if (/<head[^>]*>/i.test(result)) {
+    result = result.replace(/<head[^>]*>/i, (m) => m + css);
+  }
+  result = result.includes("<body") ? result.replace(/(<body[^>]*>)/i, "$1" + bodyBlock) : bodyBlock + result;
+  return result;
 }
 
 function enc(s: string) { return encodeURIComponent(s || ""); }
