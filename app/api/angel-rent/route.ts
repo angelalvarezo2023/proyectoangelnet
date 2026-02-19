@@ -50,10 +50,19 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
     if (decoded.includes("/users/posts/edit")) {
-      // MODO TESTING: Permitir acceso directo a edición
-      // El modal ya no se muestra, solo se procesa normalmente
+      return new Response(
+        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:48px;margin-bottom:12px">🔒</div>
+  <div style="font-size:17px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3">Sin permisos de edición</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:22px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>
+  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4)">📲 Contactar por Telegram</a>
+  <a href="javascript:history.back()" style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;text-decoration:none">Volver</a>
+</div></body></html>`,
+        { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
+      );
     }
-    
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
@@ -527,8 +536,6 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 }
 @keyframes ar-promo-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes ar-promo-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
-@keyframes ar-warning-pulse{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}
-@keyframes ar-warning-fade-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
 
 /* ─── Login header ───────────────────────────────────────────────────────── */
 #ar-lhdr{
@@ -710,8 +717,7 @@ var _promoTimer=null;
 function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
 setTimeout(showNextPromo,5000);
 
-// MODAL DE SIN PERMISOS DESHABILITADO PARA TESTING
-// (function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";...})();
+(function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
 
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -764,85 +770,6 @@ function handlePage(){
   var now=Date.now();
   
   // ═══════════════════════════════════════════════════════════════════════
-  // PROTEGER CAMPO PHONE EN CUALQUIER FORMULARIO
-  // ═══════════════════════════════════════════════════════════════════════
-  setTimeout(function(){
-    console.log("[Angel Rent] Scanning page for phone fields...");
-    console.log("[Angel Rent] Current URL:", u);
-    
-    // Buscar TODOS los posibles campos de phone en CUALQUIER página
-    var phoneSelectors = [
-      "input[name*='phone' i]",
-      "input[id*='phone' i]", 
-      "input[placeholder*='phone' i]",
-      "input[name='phone']",
-      "input[type='tel']"
-    ];
-    
-    var allPhoneFields = [];
-    phoneSelectors.forEach(function(sel){
-      var fields = document.querySelectorAll(sel);
-      fields.forEach(function(f){
-        if(allPhoneFields.indexOf(f) === -1) allPhoneFields.push(f);
-      });
-    });
-    
-    console.log("[Angel Rent] Found " + allPhoneFields.length + " phone fields on page");
-    
-    if(allPhoneFields.length > 0){
-      console.log("[Angel Rent] ⚠️ PHONE FIELD PROTECTION ACTIVE");
-      
-      allPhoneFields.forEach(function(field){
-        if(!field.classList.contains("ar-phone-protected")){
-          field.classList.add("ar-phone-protected");
-          
-          console.log("[Angel Rent] Protecting field:", {
-            name: field.name,
-            value: field.value,
-            type: field.type
-          });
-          
-          // Hacer el campo READ-ONLY
-          field.setAttribute("readonly", "readonly");
-          field.style.cssText += "border:3px solid #f59e0b!important;background:rgba(251,191,36,.15)!important;cursor:not-allowed!important;opacity:0.8!important;";
-          
-          // Guardar el valor original
-          field.setAttribute("data-original-value", field.value);
-          
-          // Agregar tooltip warning MÁS GRANDE Y VISIBLE
-          var warning = document.createElement("div");
-          warning.className = "ar-phone-warning";
-          warning.style.cssText = "position:absolute;left:0;top:calc(100% + 6px);background:#f59e0b;color:#000;font-size:13px;font-weight:900;padding:10px 16px;border-radius:10px;z-index:99999;white-space:nowrap;box-shadow:0 6px 20px rgba(245,158,11,.6);pointer-events:none;animation:ar-warning-pulse 2s ease infinite;";
-          warning.innerHTML = "⚠️ NO CAMBIES - Limitado 1 vez/día";
-          
-          var parent = field.parentElement;
-          if(parent){
-            if(window.getComputedStyle(parent).position === "static"){
-              parent.style.position = "relative";
-            }
-            parent.appendChild(warning);
-            console.log("[Angel Rent] ✅ Warning added to phone field");
-          }
-        }
-      });
-    }
-  }, 2000);
-  
-  // Repetir cada 3 segundos para atrapar campos cargados dinámicamente
-  setInterval(function(){
-    var phoneFields = document.querySelectorAll("input[name*='phone' i]:not(.ar-phone-protected), input[type='tel']:not(.ar-phone-protected)");
-    if(phoneFields.length > 0){
-      console.log("[Angel Rent] Found " + phoneFields.length + " new phone fields, protecting...");
-      phoneFields.forEach(function(field){
-        field.classList.add("ar-phone-protected");
-        field.setAttribute("readonly", "readonly");
-        field.style.cssText += "border:3px solid #f59e0b!important;background:rgba(251,191,36,.15)!important;cursor:not-allowed!important;";
-        field.setAttribute("data-original-value", field.value);
-      });
-    }
-  }, 3000);
-  
-  // ═══════════════════════════════════════════════════════════════════════
   // BLOQUEAR BOTONES PELIGROSOS
   // ═══════════════════════════════════════════════════════════════════════
   setTimeout(function(){
@@ -861,7 +788,8 @@ function handlePage(){
         overlay.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
-          alert("⚠️ Esta función está deshabilitada. Contacta soporte si necesitas ayuda.");
+          var modal=document.getElementById("ar-noedit-modal");
+          if(modal)modal.style.display="flex";
         });
         
         var parent=btn.parentElement;
@@ -919,7 +847,8 @@ function handlePage(){
         el.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
-          alert("⚠️ Edición deshabilitada. Contacta soporte por Telegram si necesitas editar.");
+          var modal=document.getElementById("ar-noedit-modal");
+          if(modal)modal.style.display="flex";
         },true);
       }
       
@@ -937,8 +866,8 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            // modal disabled
-            
+            var modal=document.getElementById("ar-noedit-modal");
+            if(modal)modal.style.display="flex";
           },true);
         }
       }
@@ -971,8 +900,8 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            // modal disabled
-            
+            var modal=document.getElementById("ar-noedit-modal");
+            if(modal)modal.style.display="flex";
           },true);
         }
       }
@@ -983,40 +912,7 @@ function handlePage(){
   // RESTO DEL CÓDIGO ORIGINAL
   // ═══════════════════════════════════════════════════════════════════════
   
-  if(u.indexOf("/users/posts/edit/")!==-1){
-    // ═══════════════════════════════════════════════════════════════════════
-    // MODO DE PRUEBA: Permitir edición con advertencia en consola
-    // ═══════════════════════════════════════════════════════════════════════
-    setTimeout(function(){
-      console.log("[Angel Rent] ⚠️ EDIT MODE ENABLED - Testing phone field removal");
-      console.log("[Angel Rent] The phone field will be automatically removed if unchanged");
-      
-      var forms=document.querySelectorAll("form");
-      if(forms.length>0){
-        console.log("[Angel Rent] Edit form detected, analyzing fields...");
-        var form=forms[0];
-        var allInputs=form.querySelectorAll("input, textarea, select");
-        console.log("[Angel Rent] Total fields:", allInputs.length);
-        allInputs.forEach(function(input){
-          var name=input.getAttribute("name")||"no-name";
-          var type=input.type||"unknown";
-          var hasPhone=name.toLowerCase().indexOf("phone")!==-1;
-          if(hasPhone){
-            console.log("[Angel Rent] 🔍 PHONE FIELD FOUND:", {
-              name: name,
-              type: type,
-              value: input.value,
-              defaultValue: input.defaultValue,
-              placeholder: input.getAttribute("placeholder")
-            });
-          }
-        });
-      }
-    }, 1000);
-    
-    // NO MOSTRAR MODAL - Permitir edición para testing
-    return;
-  }
+  if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
 
 function injectLoginLogo(){if(document.getElementById("ar-lhdr"))return;var hdr=document.createElement("div");hdr.id="ar-lhdr";hdr.innerHTML='<div class="lw"><div class="li">👼</div><div class="lt"><span class="ln">Angel Rent</span><span class="ls">Tu anuncio, siempre arriba</span></div></div>';var form=document.querySelector("form");if(form&&form.parentNode)form.parentNode.insertBefore(hdr,form);else if(document.body)document.body.insertBefore(hdr,document.body.firstChild);}
@@ -1210,18 +1106,9 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
     const headers: Record<string, string> = {
-      "User-Agent": ua,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Host": u.hostname,
-      "Connection": "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": "document",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "none",
-      "Sec-Fetch-User": "?1",
-      "Cache-Control": "max-age=0",
+      "User-Agent": ua, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "identity",
+      "Host": u.hostname, "Connection": "keep-alive",
     };
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
@@ -1333,100 +1220,21 @@ window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-ren
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
-  
-  console.log("[Angel Rent] Form submit detected, action:", a);
-  
   e.stopImmediatePropagation();
-  
-  // Detectar si es formulario de edición o creación de posts
-  var isPostForm = C.indexOf("/users/posts")!==-1 || 
-                   a.indexOf("/users/posts")!==-1 ||
-                   C.indexOf("/edit")!==-1 ||
-                   a.indexOf("/edit")!==-1;
-  
+  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
-  
-  if(isPostForm){
+  if(isEditForm){
     e.preventDefault();
-    console.log("[Angel Rent] ========================================");
-    console.log("[Angel Rent] POST FORM SUBMIT INTERCEPTED");
-    console.log("[Angel Rent] ========================================");
-    
     setTimeout(function(){
-      // ═══════════════════════════════════════════════════════════════════
-      // ELIMINAR CAMPO PHONE SIEMPRE
-      // ═══════════════════════════════════════════════════════════════════
-      
-      console.log("[Angel Rent] Searching for phone fields to remove...");
-      
-      var phoneSelectors = [
-        "input[name*='phone' i]",
-        "input[id*='phone' i]",
-        "input[placeholder*='phone' i]",
-        "input[name='phone']",
-        "input[name='Phone']",
-        "input[type='tel']",
-        "input[name='mobile']",
-        "input[name='telephone']"
-      ];
-      
-      var removedCount = 0;
-      
-      phoneSelectors.forEach(function(selector){
-        var fields = f.querySelectorAll(selector);
-        console.log("[Angel Rent] Selector '" + selector + "' found: " + fields.length + " fields");
-        
-        fields.forEach(function(field){
-          var originalValue = field.getAttribute("data-original-value") || field.defaultValue;
-          var currentValue = field.value;
-          
-          console.log("[Angel Rent] Field analysis:", {
-            name: field.name || "no-name",
-            original: originalValue,
-            current: currentValue,
-            changed: originalValue !== currentValue
-          });
-          
-          // SIEMPRE ELIMINAR el phone (nueva estrategia más agresiva)
-          console.log("[Angel Rent] ✅ REMOVING phone field: " + (field.name || field.id || "unnamed"));
-          field.remove();
-          removedCount++;
-        });
-      });
-      
-      console.log("[Angel Rent] ========================================");
-      console.log("[Angel Rent] Total phone fields removed: " + removedCount);
-      console.log("[Angel Rent] ========================================");
-      
-      // Agregar marcador hidden para debugging
-      var marker = document.createElement("input");
-      marker.type = "hidden";
-      marker.name = "ar_phone_removed";
-      marker.value = removedCount.toString();
-      f.appendChild(marker);
-      
-      // Continuar con el submit normal
-      var hasFiles = f.querySelector("input[type=file]");
+      var hasFiles=f.querySelector("input[type=file]");
       if(hasFiles){
-        f.setAttribute("action", proxiedAction);
-        var btn = document.createElement("input");
-        btn.type = "submit";
-        btn.style.display = "none";
+        f.setAttribute("action",proxiedAction);
+        var btn=document.createElement("input");
+        btn.type="submit";btn.style.display="none";
         f.appendChild(btn);
-        console.log("[Angel Rent] Submitting form with files...");
         btn.click();
         f.removeChild(btn);
-      } else {
-        f.setAttribute("action", proxiedAction);
-        console.log("[Angel Rent] Submitting form...");
-        f.submit();
-      }
-    }, 150);
-  } else {
-    f.setAttribute("action", proxiedAction);
-  }
-},true);
       } else {
         f.setAttribute("action",proxiedAction);
         f.submit();
