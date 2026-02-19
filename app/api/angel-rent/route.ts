@@ -36,10 +36,8 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (user.rentalEnd && new Date() > new Date(user.rentalEnd + "T23:59:59"))
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
-    if (!PH || !PT) return jres(400, { error: "Proxy no configurado" });
     const decoded = decodeURIComponent(targetUrl);
-    const proxyUrl = PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`;
-    const agent = new HttpsProxyAgent(proxyUrl);
+    const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
     if (method === "POST") {
