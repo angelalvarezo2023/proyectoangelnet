@@ -649,28 +649,34 @@ function handlePage(){
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   if(u.indexOf("/users/posts")!==-1){
     startTick();
-    // Only extract phone on post detail/manage page (not on list/bump pages)
-    if(u.indexOf("/users/posts/list")===-1&&u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){
+    // Extract phone on ANY posts page (list, manage, detail) - phone shows in "Current Post" section
+    if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){
       setTimeout(function(){
         try{
           var rawPhone=null;
 
-          // Method 1: exact selector
+          // Method 1: exact selector for the phone span in post_preview_info
           var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
           if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
 
-          // Method 2: split on "Phone :" text - no regex, fast
+          // Method 2: find "Phone :" in page text, take next 25 chars
           if(!rawPhone){
             var bodyTxt=document.body?document.body.innerText:"";
             var idx=bodyTxt.indexOf("Phone :");
             if(idx===-1)idx=bodyTxt.indexOf("Phone:");
             if(idx!==-1){
-              var after=bodyTxt.substring(idx+7).trim();
-              var line=after.split("\n")[0].trim();
-              // Clean up and validate
-              var digs=line.replace(/[^\d]/g,"");
-              if(digs.length===10&&digs.substring(0,3)!=="177") rawPhone=line;
-              else if(digs.length===11&&digs[0]==="1"&&digs.substring(1,4)!=="177") rawPhone=line;
+              var after=bodyTxt.substring(idx+7,idx+35).trim();
+              var end2=0;
+              for(var ci=0;ci<after.length;ci++){
+                var cc=after.charCodeAt(ci);
+                if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;
+                end2=ci+1;
+              }
+              var cand=after.substring(0,end2).trim();
+              var digs2=cand.replace(/[^0-9]/g,"");
+              if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){
+                rawPhone=cand;
+              }
             }
           }
 
