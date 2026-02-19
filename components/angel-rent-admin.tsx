@@ -70,9 +70,15 @@ const BLANK = {
   siteEmail: "", sitePass: "", notes: "", active: true,
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ✅ FUNCIÓN CORREGIDA - Cálculo preciso de días restantes
+// ═══════════════════════════════════════════════════════════════════════════
 function rentalDays(u: User) {
   if (!u.rentalEnd) return 9999;
-  return Math.ceil((new Date(u.rentalEnd + "T23:59:59").getTime() - Date.now()) / 86400000);
+  // Usar T00:00:00 en lugar de T23:59:59 para evitar añadir ~24h extra
+  const endDate = new Date(u.rentalEnd + "T00:00:00");
+  const diffMs = endDate.getTime() - Date.now();
+  return Math.ceil(diffMs / 86400000);
 }
 
 // ─── small reusable input ───────────────────────────────────────────────────
@@ -145,7 +151,7 @@ export default function AngelRentAdmin() {
     setDeviceType(key.startsWith("android") || key === "android" ? "android" : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc" : "iphone");
     // Compute remaining days from rentalEnd
     if (u.rentalEnd) {
-      const diff = Math.max(0, new Date(u.rentalEnd + "T23:59:59").getTime() - Date.now());
+      const diff = Math.max(0, new Date(u.rentalEnd + "T00:00:00").getTime() - Date.now());
       setRentDays(String(Math.floor(diff / 86400000)));
       setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
     } else { setRentDays("30"); setRentHours("0"); }
