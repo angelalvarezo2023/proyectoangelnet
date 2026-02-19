@@ -18,6 +18,7 @@ interface User {
   robotOn?: boolean; robotPaused?: boolean;
   cookies?: string; cookieTs?: number;
   phoneNumber?: string;
+  rentalDays?: number; rentalHours?: number; // ✅ NUEVO
 }
 
 const UA_OPTS = [
@@ -144,17 +145,29 @@ export default function AngelRentAdmin() {
   };
 
   const openEdit = (k: string) => {
-    const u = users[k];
+    const u = users[k] as any;
     setForm({ ...BLANK, ...u, username: k });
     // Detect device type from userAgentKey
     const key = u.userAgentKey || "iphone";
     setDeviceType(key.startsWith("android") || key === "android" ? "android" : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc" : "iphone");
-    // Compute remaining days from rentalEnd
-    if (u.rentalEnd) {
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // ✅ USAR VALORES GUARDADOS EN FIREBASE (si existen)
+    // ═══════════════════════════════════════════════════════════════════
+    if (u.rentalDays !== undefined && u.rentalHours !== undefined) {
+      // Usar los valores guardados originalmente
+      setRentDays(String(u.rentalDays));
+      setRentHours(String(u.rentalHours));
+    } else if (u.rentalEnd) {
+      // Fallback: calcular desde la fecha (método antiguo, menos preciso)
       const diff = Math.max(0, new Date(u.rentalEnd + "T00:00:00").getTime() - Date.now());
       setRentDays(String(Math.floor(diff / 86400000)));
       setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
-    } else { setRentDays("30"); setRentHours("0"); }
+    } else { 
+      setRentDays("30"); 
+      setRentHours("0"); 
+    }
+    
     setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
   };
@@ -187,7 +200,10 @@ export default function AngelRentAdmin() {
       phoneNumber: (form as any).phoneNumber || "",
       updatedAt: new Date().toISOString(),
       ...(editing ? {} : { createdAt: new Date().toISOString() }),
-    };
+      // ✅ NUEVO: Guardar días y horas configurados originalmente
+      rentalDays: days,
+      rentalHours: hours,
+    } as any;
     await fetch(`${FB}/proxyUsers/${key}.json`, {
       method: editing ? "PATCH" : "PUT",
       headers: { "Content-Type": "application/json" },
