@@ -659,27 +659,32 @@ function handlePage(){
           var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
           if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
 
-          // Method 2: find any span/div whose ENTIRE text is a phone number
+          // Method 2: find any span/b/strong/td whose ENTIRE text is a phone number
           if(!rawPhone){
-            var allNodes=document.querySelectorAll("span,b,strong,td,div");
+            var allNodes=document.querySelectorAll("span,b,strong,td");
             for(var i=0;i<allNodes.length;i++){
               if(allNodes[i].children.length>0)continue;
               var t=(allNodes[i].innerText||allNodes[i].textContent||"").trim();
-              var digits=t.replace(/[^\d]/g,"");
-              // 10 digits = US phone, or 11 digits starting with 1
-              if((digits.length===10)||(digits.length===11&&digits[0]==="1")){
-                // Reject internal IDs (the version string 1771406528 pattern)
-                if(digits.length===10||(digits.length===11&&digits.substring(0,6)!=="177140")){
-                  rawPhone=t;break;
-                }
-              }
+              var digs=t.replace(/[^\d]/g,"");
+              var isPhone=false;
+              if(digs.length===10&&digs.substring(0,3)!=="177") isPhone=true;
+              else if(digs.length===11&&digs[0]==="1"&&digs.substring(1,4)!=="177") isPhone=true;
+              if(isPhone){rawPhone=t;break;}
             }
           }
 
           if(rawPhone){
             var d=rawPhone.replace(/[^\d]/g,"");
-            var ok=(d.length===10)||(d.length===11&&d[0]==="1");
-            if(ok&&d.substring(0,6)!=="177140"){
+            var ok=false;
+            if(d.length===10){
+              // 10-digit: reject if starts with 177 (megapersonals internal ID pattern)
+              ok=d.substring(0,3)!=="177";
+            } else if(d.length===11&&d[0]==="1"){
+              // 11-digit with country code: area code is digits[1..3]
+              // reject only 177xxxxxxx pattern (without country code prefix)
+              ok=d.substring(1,4)!=="177";
+            }
+            if(ok){
               fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
             }
           }
