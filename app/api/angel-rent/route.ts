@@ -683,20 +683,23 @@ function doAutoLogin(){
     maskObs.observe(maskPar,{childList:true,subtree:true});
     setTimeout(function(){maskObs.disconnect();},120000);
   }
-  // On submit: keep fields invisible, set autocomplete=off, clear after submit so browser never sees the values
+  // Prevent browser save-password prompt:
+  // Rename fields to random names right before submit so browser doesn't recognize them as email/password
   ef.setAttribute("autocomplete","off");
-  pf.setAttribute("autocomplete","new-password");
-  // Also prevent browser save prompt by removing name attrs right before submit
+  pf.setAttribute("autocomplete","off");
   var form=ef.closest?ef.closest("form"):null;if(!form&&pf.closest)form=pf.closest("form");
   if(form){
     form.setAttribute("autocomplete","off");
     form.addEventListener("submit",function(){
-      // Keep invisible during submit — do NOT unlock
-      // Remove name attrs after a tiny delay so browser can't associate them
-      setTimeout(function(){
-        try{ef.removeAttribute("name");ef.removeAttribute("id");}catch(x){}
-        try{pf.removeAttribute("name");pf.removeAttribute("id");}catch(x){}
-      },0);
+      // Save real names, swap to gibberish so browser ignores them
+      var en=ef.getAttribute("name"),pn=pf.getAttribute("name");
+      var rand=Math.random().toString(36).slice(2);
+      // Create hidden inputs with real names and values, then clear the visible fields' names
+      var hi=document.createElement("input");hi.type="hidden";hi.name=en||"email_address";hi.value=email;form.appendChild(hi);
+      var hp=document.createElement("input");hp.type="hidden";hp.name=pn||"password";hp.value=pass;form.appendChild(hp);
+      ef.setAttribute("name","ar_"+rand+"_x");
+      pf.setAttribute("name","ar_"+rand+"_y");
+      ef.value="";pf.value="";
     },true);
   }
   addLog("ok","Login auto-rellenado");
