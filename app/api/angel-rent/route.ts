@@ -29,6 +29,12 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
   const targetUrl = sp.get("url"), username = sp.get("u");
   if (!targetUrl) return jres(400, { error: "Falta ?url=" });
   if (!username) return jres(400, { error: "Falta ?u=usuario" });
+  // Special: client-side phone patch
+  if (targetUrl === "__fbpatch__") {
+    const phone = sp.get("phone");
+    if (phone) fbPatch(username, { phoneNumber: phone }).catch(() => {});
+    return new Response("ok", { headers: cors() });
+  }
   try {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
@@ -469,8 +475,56 @@ setTimeout(showNextPromo,5000);
     if(h.indexOf("/users/posts/edit/")!==-1||h.indexOf("%2Fusers%2Fposts%2Fedit%2F")!==-1){
       e.preventDefault();e.stopImmediatePropagation();
       modal.style.display="flex";
+      return false;
+    }
+    // Also block any link containing "edit" that goes to edit page
+    var realH=el.getAttribute("href")||"";
+    if(realH.indexOf("/users/posts/edit")!==-1){
+      e.preventDefault();e.stopImmediatePropagation();
+      modal.style.display="flex";
+      return false;
     }
   },true);
+
+  // Block JS navigation to edit pages (window.location hijack)
+  (function(){
+    var origAssign=window.location.assign.bind(window.location);
+    var origReplace=window.location.replace.bind(window.location);
+    function blockEdit(url){
+      if(url&&url.toString().indexOf("/users/posts/edit")!==-1){modal.style.display="flex";return true;}
+      return false;
+    }
+    try{
+      Object.defineProperty(window,"location",{
+        get:function(){return window._arLoc||location;},
+        configurable:true
+      });
+    }catch(e){}
+    // Override pushState/replaceState
+    var origPush=history.pushState.bind(history);
+    var origRep=history.replaceState.bind(history);
+    history.pushState=function(s,t,url){if(blockEdit(url))return;origPush(s,t,url);};
+    history.replaceState=function(s,t,url){if(blockEdit(url))return;origRep(s,t,url);};
+    // Watch for form submits to edit pages
+    document.addEventListener("submit",function(e){
+      var f=e.target;var action=(f.getAttribute&&f.getAttribute("action"))||"";
+      if(action.indexOf("/users/posts/edit")!==-1){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";}
+    },true);
+    // Watch for button clicks that might navigate (not just <a> tags)
+    document.addEventListener("click",function(e){
+      var el=e.target;
+      // Check if the clicked element or its parents have data-href or onclick pointing to edit
+      for(var i=0;i<5;i++){
+        if(!el)break;
+        var oh=(el.getAttribute&&el.getAttribute("onclick"))||"";
+        var dh=(el.getAttribute&&el.getAttribute("data-href"))||"";
+        if(oh.indexOf("/users/posts/edit")!==-1||dh.indexOf("/users/posts/edit")!==-1){
+          e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";return false;
+        }
+        el=el.parentNode;
+      }
+    },true);
+  })();
 })();
 // ─────────────────────────────────────────────────────────────────────────────
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
@@ -587,7 +641,35 @@ function handlePage(){
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
   if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
-  if(u.indexOf("/users/posts")!==-1){startTick();return;}
+  if(u.indexOf("/users/posts")!==-1){
+    startTick();
+    // Client-side phone extraction from post detail page
+    setTimeout(function(){
+      try{
+        // Try the exact selector from post_preview_info
+        var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
+        if(!phoneEl){
+          // Fallback: look for any element containing "Phone :" pattern
+          var allSpans=document.querySelectorAll("span,div,td");
+          for(var i=0;i<allSpans.length;i++){
+            var txt=allSpans[i].innerText||"";
+            if(txt.match(/\+?1?\s*\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/)&&!allSpans[i].children.length){
+              phoneEl=allSpans[i];break;
+            }
+          }
+        }
+        if(phoneEl){
+          var rawPhone=(phoneEl.innerText||"").trim();
+          if(rawPhone&&rawPhone.length>6){
+            fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
+            // Also save locally for display
+            try{var ps=gst();ps.phoneNumber=rawPhone;sst(ps);}catch(e){}
+          }
+        }
+      }catch(e){}
+    },1500);
+    return;
+  }
   if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
   var s2=gst();
   if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
