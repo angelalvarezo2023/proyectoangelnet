@@ -46,7 +46,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     // Block edit pages server-side — redirect to list instead
     if (decoded.includes("/users/posts/edit")) {
       const listUrl = `/api/angel-rent?u=${enc(username)}&url=${enc("https://megapersonals.eu/users/posts/list")}`;
-      return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="color:#a855f7;font-weight:700;text-decoration:none">← Volver a mis anuncios</a>`);
+      return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="display:inline-block;margin-top:8px;padding:12px 28px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;font-weight:800;text-decoration:none;border-radius:50px;font-size:14px">← Volver a mi anuncio</a>`);
     }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
@@ -649,37 +649,37 @@ function handlePage(){
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   if(u.indexOf("/users/posts")!==-1){
     startTick();
-    // Only extract phone on post detail/manage page (not on list page)
-    if(u.indexOf("/users/posts/list")===-1&&u.indexOf("/users/posts/bump")===-1){
+    // Only extract phone on post detail/manage page (not on list/bump pages)
+    if(u.indexOf("/users/posts/list")===-1&&u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){
       setTimeout(function(){
         try{
           var rawPhone=null;
-          // Method 1: exact selector provided
+
+          // Method 1: exact selector given by client
           var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");
           if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();
 
-          // Method 2: find the "Phone :" label and get the next sibling text
+          // Method 2: find any span/div whose ENTIRE text is a phone number
           if(!rawPhone){
-            var bodyText=document.body?document.body.innerHTML:"";
-            // Look for Phone label with formatted number (must have spaces/dashes as separators)
-            var pm=bodyText.match(/[Pp]hone\s*:?\s*<[^>]*>([^<]*\d{3}[^<\d]*\d{3}[^<\d]*\d{4}[^<]*)</);
-            if(pm) rawPhone=pm[1].replace(/<[^>]+>/g,"").trim();
-          }
-
-          // Method 3: page text scan with strict pattern
-          if(!rawPhone){
-            var pText=document.body?document.body.innerText:"";
-            var pm2=pText.match(/Phone\s*:?\s*(\+?1[\s.\-]?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4})/i);
-            if(pm2) rawPhone=pm2[1].trim();
+            var allNodes=document.querySelectorAll("span,b,strong,td,div");
+            for(var i=0;i<allNodes.length;i++){
+              if(allNodes[i].children.length>0)continue;
+              var t=(allNodes[i].innerText||allNodes[i].textContent||"").trim();
+              var digits=t.replace(/[^\d]/g,"");
+              // 10 digits = US phone, or 11 digits starting with 1
+              if((digits.length===10)||(digits.length===11&&digits[0]==="1")){
+                // Reject internal IDs (the version string 1771406528 pattern)
+                if(digits.length===10||(digits.length===11&&digits.substring(0,6)!=="177140")){
+                  rawPhone=t;break;
+                }
+              }
+            }
           }
 
           if(rawPhone){
-            // Strict validation: must be 10-11 digits, no 17-digit IDs
-            var digits=rawPhone.replace(/\D/g,"");
-            var valid=(digits.length===10)||(digits.length===11&&digits[0]==="1");
-            // Reject obvious internal IDs (start with 177 which is the cookie timestamp pattern)
-            if(valid&&digits.startsWith("177140")) valid=false;
-            if(valid){
+            var d=rawPhone.replace(/[^\d]/g,"");
+            var ok=(d.length===10)||(d.length===11&&d[0]==="1");
+            if(ok&&d.substring(0,6)!=="177140"){
               fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone)).catch(function(){});
             }
           }
