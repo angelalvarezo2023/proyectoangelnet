@@ -569,10 +569,18 @@ function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelect
 // Modal
 var modal=document.getElementById("ar-modal");
 if(modal){
-  if(sessionStorage.getItem("ar_wd_"+UNAME)){modal.style.display="none";}
+  var dismissed=localStorage.getItem("ar_wd_"+UNAME);
+  var dismissedTs=parseInt(dismissed||"0");
+  // Hide if dismissed less than 4 hours ago
+  if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}
   var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");
-  if(mok)mok.addEventListener("click",function(){modal.style.display="none";});
-  if(msk)msk.addEventListener("click",function(){modal.style.display="none";sessionStorage.setItem("ar_wd_"+UNAME,"1");});
+  if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});
+  if(msk)msk.addEventListener("click",function(){
+    modal.style.display="none";modal.classList.remove("show");
+    localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+  });
+  // Also dismiss on backdrop click
+  modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});
 }
 
 // INIT
