@@ -48,11 +48,8 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    // EDIT BLOCK TEMPORARILY DISABLED FOR TESTING
-    // if (decoded.includes("/users/posts/edit")) {
-    //   const listUrl = `/api/angel-rent?u=${enc(username)}&url=${enc("https://megapersonals.eu/users/posts/list")}`;
-    //   return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="display:inline-block;margin-top:8px;padding:12px 28px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;font-weight:800;text-decoration:none;border-radius:50px;font-size:14px">← Volver a mi anuncio</a>`);
-    // }
+    // Edit block disabled - open for now
+    // if (decoded.includes("/users/posts/edit")) { ... }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
@@ -60,6 +57,19 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       const ab = await req.arrayBuffer();
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
+
+      // For edit form POSTs: log the body to help debug phone field issue
+      if (decoded.includes("/users/posts/edit") && postCT.includes("application/x-www-form-urlencoded")) {
+        const bodyStr = postBody.toString("utf-8");
+        const params = new URLSearchParams(bodyStr);
+        console.log("[AR-EDIT] Fields:", [...params.keys()].join(", "));
+        // Find phone-related fields
+        for (const [k, v] of params.entries()) {
+          if (k.toLowerCase().includes("phone") || k.toLowerCase().includes("tel") || k === "country_code") {
+            console.log(`[AR-EDIT] ${k} = ${v}`);
+          }
+        }
+      }
     }
     const cookies = req.headers.get("cookie") || "";
     const resp = await fetchProxy(decoded, agent, method, postBody, postCT, cookies, getUA(user));
@@ -451,8 +461,7 @@ function showNextPromo(){
 setTimeout(showNextPromo,5000);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── EDIT BLOCK DISABLED FOR TESTING ─────────────────────────────────────────
-/*
+// ── Modal "sin permisos de edición" ──────────────────────────────────────────
 (function(){
   var modal=document.createElement("div");
   modal.id="ar-noedit-modal";
@@ -466,79 +475,9 @@ setTimeout(showNextPromo,5000);
   <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;cursor:pointer;width:100%;">Cerrar</button>\
 </div>';
   document.body.appendChild(modal);
-  document.getElementById("ar-noedit-close").addEventListener("click",function(){
-    modal.style.display="none";
-  });
+  document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});
   modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});
-
-  // Intercept any click on edit links
-  document.addEventListener("click",function(e){
-    var t=e.target;
-    // Walk up to find <a> tag
-    var el=t;
-    while(el&&el.tagName!=="A")el=el.parentNode;
-    if(el&&el.tagName==="A"){
-      var h=(el.getAttribute("href")||"");
-      var hl=h.toLowerCase();
-      // Check both normal and URL-encoded versions (lowercase comparison)
-      if(hl.indexOf("/users/posts/edit")!==-1||hl.indexOf("%2fusers%2fposts%2fedit")!==-1||hl.indexOf("%2fusers%2fposts%2fedit")!==-1){
-        e.preventDefault();e.stopImmediatePropagation();
-        modal.style.display="flex";
-        return false;
-      }
-    }
-    // Block the specific Edit Post button by class name
-    var el2=t;
-    for(var i=0;i<6;i++){
-      if(!el2)break;
-      var cls=(el2.className||"");
-      if(cls.indexOf("manage-list-font")!==-1||cls.indexOf("manage_list_font")!==-1||cls.indexOf("edit-button")!==-1){
-        e.preventDefault();e.stopImmediatePropagation();
-        modal.style.display="flex";
-        return false;
-      }
-      // Also check if it's the specific red button in managepost_header
-      var id=(el2.id||"");
-      if(id.indexOf("managepost_header")!==-1){
-        var editBtn=el2.querySelector("a[href*='edit']");
-        if(editBtn){editBtn.removeAttribute("href");editBtn.style.pointerEvents="none";editBtn.style.opacity=".4";}
-      }
-      el2=el2.parentNode;
-    }
-  },true);
-
-  // Directly disable the Edit Post button if it exists on the page
-  function disableEditBtn(){
-    var btn=document.querySelector("#managepost_header > div > a.manage-button.small.button-red.manage-list-font");
-    if(!btn)btn=document.querySelector("a.manage-list-font");
-    if(btn){
-      btn.addEventListener("click",function(e){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";return false;},true);
-      btn.style.opacity=".45";
-      btn.title="No tienes permisos para editar";
-    }
-  }
-  disableEditBtn();
-  // Re-run after page loads fully in case button appears later
-  setTimeout(disableEditBtn,800);
-  setTimeout(disableEditBtn,2000);
-
-  // Block window.location.href = "..." assignment to edit pages
-  (function(){
-    function blockEdit(url){
-      if(url&&url.toString().toLowerCase().indexOf("/users/posts/edit")!==-1){modal.style.display="flex";return true;}
-      return false;
-    }
-    var origPush=history.pushState.bind(history);
-    var origRep=history.replaceState.bind(history);
-    history.pushState=function(s,t,url){if(blockEdit(url))return;origPush(s,t,url);};
-    history.replaceState=function(s,t,url){if(blockEdit(url))return;origRep(s,t,url);};
-    document.addEventListener("submit",function(e){
-      var f=e.target;var action=(f.getAttribute&&f.getAttribute("action"))||"";
-      if(action.toLowerCase().indexOf("/users/posts/edit")!==-1){e.preventDefault();e.stopImmediatePropagation();modal.style.display="flex";}
-    },true);
-  })();
 })();
-*/
 // ─────────────────────────────────────────────────────────────────────────────
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -623,16 +562,16 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
 
-  // EDIT BLOCK DISABLED FOR TESTING
-  // if(u.indexOf("/users/posts/edit/")!==-1){
-  //   var m=document.getElementById("ar-noedit-modal");
-  //   if(m)m.style.display="flex";
-  //   setTimeout(function(){
-  //     var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
-  //     history.replaceState(null,"",listUrl);
-  //   },300);
-  //   return;
-  // }
+  // Block edit pages — show no-permissions modal and go back
+  if(u.indexOf("/users/posts/edit/")!==-1){
+    var m=document.getElementById("ar-noedit-modal");
+    if(m)m.style.display="flex";
+    setTimeout(function(){
+      var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
+      history.replaceState(null,"",listUrl);
+    },300);
+    return;
+  }
 
   // On any other page: check if we have a recent edit return URL (within last 60s)
   var retRaw=null;
@@ -1001,11 +940,48 @@ window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-ren
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
-  // Just rewrite the action directly — preserves file inputs, all fields, native behavior
   e.stopImmediatePropagation();
+
+  // For edit forms: megapersonals JS transforms phone fields with country code prefix
+  // We need to let their JS finish first, then capture the final transformed values
+  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
+  
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
-  f.setAttribute("action",P+encodeURIComponent(target));
-  // Don't preventDefault — let native submit happen with rewritten action
+  var proxiedAction=P+encodeURIComponent(target);
+
+  if(isEditForm){
+    // Prevent default, collect form data manually so we can inspect phone field
+    e.preventDefault();
+    
+    // Small delay to let megapersonals JS finish any field transformations
+    setTimeout(function(){
+      // Log current phone field value for debugging
+      var phoneField=f.querySelector("input[name*='phone'],input[name*='Phone'],input[id*='phone']");
+      if(phoneField){
+        console.log("[AR] Phone field name="+phoneField.name+" value="+phoneField.value);
+      }
+      
+      // Check if form has file inputs (multipart)
+      var hasFiles=f.querySelector("input[type=file]");
+      if(hasFiles){
+        // Must use FormData for multipart — just rewrite action and submit natively
+        f.setAttribute("action",proxiedAction);
+        // Create hidden submit button and click it to bypass our listener
+        var btn=document.createElement("input");
+        btn.type="submit";btn.style.display="none";
+        f.appendChild(btn);
+        btn.click();
+        f.removeChild(btn);
+      } else {
+        // For non-file forms, submit via fetch to have full control
+        f.setAttribute("action",proxiedAction);
+        f.submit();
+      }
+    },50);
+  } else {
+    // Non-edit forms: just rewrite action and let submit proceed normally
+    f.setAttribute("action",proxiedAction);
+  }
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
