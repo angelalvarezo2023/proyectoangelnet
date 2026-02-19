@@ -328,9 +328,17 @@ export default function AngelRentAdmin() {
                         {u.cookieTs && <div style={{ fontSize: 8, color: "rgba(255,255,255,.2)", marginTop: 2 }}>Cookie: {Math.round((Date.now() - u.cookieTs) / 3600000)}h atrás</div>}
                       </td>
                       <td style={{ padding: "10px 14px", fontSize: 12 }}>
-                        {u.phoneNumber
-                          ? <span style={{ fontFamily: "monospace", color: "#c084fc", fontWeight: 700 }}>{u.phoneNumber}</span>
-                          : <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Auto-detectando...</span>}
+                        {u.phoneNumber ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ fontFamily: "monospace", color: "#c084fc", fontWeight: 700, fontSize: 11 }}>{u.phoneNumber}</span>
+                            <button onClick={async () => {
+                              await fetch(`${FB}/proxyUsers/${k}/phoneNumber.json`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: "null" });
+                              showToast("📞 Teléfono borrado"); await load();
+                            }} title="Borrar teléfono" style={{ padding: "2px 6px", fontSize: 9, background: "rgba(239,68,68,.2)", color: "#f87171", border: "1px solid rgba(239,68,68,.3)", borderRadius: 4, cursor: "pointer" }}>✕</button>
+                          </div>
+                        ) : (
+                          <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Auto-detectando...</span>
+                        )}
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         <div style={{ display: "flex", gap: 4 }}>
