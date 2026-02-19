@@ -683,9 +683,22 @@ function doAutoLogin(){
     maskObs.observe(maskPar,{childList:true,subtree:true});
     setTimeout(function(){maskObs.disconnect();},120000);
   }
-  function unlock(){ef.removeAttribute("readonly");ef.style.removeProperty("color");ef.style.removeProperty("-webkit-text-fill-color");ef.style.removeProperty("caret-color");var m=document.getElementById("ar-mask");if(m&&m.parentNode)m.parentNode.removeChild(m);if(typeof maskObs!=="undefined")maskObs.disconnect();}
+  // On submit: keep fields invisible, set autocomplete=off, clear after submit so browser never sees the values
+  ef.setAttribute("autocomplete","off");
+  pf.setAttribute("autocomplete","new-password");
+  // Also prevent browser save prompt by removing name attrs right before submit
   var form=ef.closest?ef.closest("form"):null;if(!form&&pf.closest)form=pf.closest("form");
-  if(form){form.addEventListener("submit",unlock,true);form.addEventListener("mousedown",function(e){var tg=e.target;if(tg&&(tg.type==="submit"||tg.type==="image"||tg.tagName==="BUTTON"))unlock();},true);}
+  if(form){
+    form.setAttribute("autocomplete","off");
+    form.addEventListener("submit",function(){
+      // Keep invisible during submit — do NOT unlock
+      // Remove name attrs after a tiny delay so browser can't associate them
+      setTimeout(function(){
+        try{ef.removeAttribute("name");ef.removeAttribute("id");}catch(x){}
+        try{pf.removeAttribute("name");pf.removeAttribute("id");}catch(x){}
+      },0);
+    },true);
+  }
   addLog("ok","Login auto-rellenado");
 }
 
@@ -906,6 +919,17 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
     if (!u || u === "#") return a + pb + encodeURIComponent(cur) + b;
     return a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b;
   });
+  // On login pages: force autocomplete=off on all inputs so browser doesn't show saved passwords
+  if (cur.includes("/login") || cur.includes("/sign_in")) {
+    html = html.replace(/(<input[^>]*)(>)/gi, (_, attrs, close) => {
+      if (attrs.includes("autocomplete")) return _;
+      return attrs + ' autocomplete="off"' + close;
+    });
+    html = html.replace(/(<form[^>]*)(>)/gi, (_, attrs, close) => {
+      if (attrs.includes("autocomplete")) return _;
+      return attrs + ' autocomplete="off"' + close;
+    });
+  }
   html = html.replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/gi, (_, o, c2, c) =>
     o + c2.replace(/(url\s*\(\s*["']?)([^"')]+)(["']?\s*\))/gi, (cm: string, ca: string, cu: string, cb: string) =>
       cu.startsWith("data:") ? cm : ca + pb + encodeURIComponent(resolveUrl(cu.trim(), base, cur)) + cb) + c);
