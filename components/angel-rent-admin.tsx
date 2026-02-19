@@ -38,6 +38,31 @@ const UA_SHORT: Record<string, string> = {
   mac: "🍎 Mac", custom: "✏️ Custom",
 };
 
+// ── User-Agent generators ─────────────────────────────────────────────────────
+const UA_IPHONES = [
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/121.0.6167.171 Mobile/15E148 Safari/604.1",
+];
+const UA_ANDROID = [
+  "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 13; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
+  "Mozilla/5.0 (Linux; Android 14; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36",
+];
+const UA_PC = [
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+  "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+];
+
+function genUA(type: "iphone"|"android"|"pc"): string {
+  const list = type === "iphone" ? UA_IPHONES : type === "android" ? UA_ANDROID : UA_PC;
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 const BLANK = {
   username: "", name: "", proxyHost: "", proxyPort: "",
   proxyUser: "", proxyPass: "", userAgentKey: "iphone", userAgent: "",
@@ -74,6 +99,10 @@ export default function AngelRentAdmin() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState({ ...BLANK });
   const [toast, setToast] = useState("");
+  const [deviceType, setDeviceType] = useState<"iphone"|"android"|"pc">("iphone");
+  const [rentDays, setRentDays] = useState("30");
+  const [rentHours, setRentHours] = useState("0");
+  const [useLocalProxy, setUseLocalProxy] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("ar_admin") === "ok") {
@@ -101,26 +130,51 @@ export default function AngelRentAdmin() {
   };
 
   const openNew = () => {
-    const today = new Date().toISOString().split("T")[0];
-    const end = new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
-    setForm({ ...BLANK, rentalStart: today, rentalEnd: end });
+    setForm({ ...BLANK });
+    setDeviceType("iphone");
+    setRentDays("30"); setRentHours("0");
+    setUseLocalProxy(false);
     setEditing(null); setModal(true);
   };
 
   const openEdit = (k: string) => {
-    setForm({ ...BLANK, ...users[k], username: k });
+    const u = users[k];
+    setForm({ ...BLANK, ...u, username: k });
+    // Detect device type from userAgentKey
+    const key = u.userAgentKey || "iphone";
+    setDeviceType(key.startsWith("android") || key === "android" ? "android" : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc" : "iphone");
+    // Compute remaining days from rentalEnd
+    if (u.rentalEnd) {
+      const diff = Math.max(0, new Date(u.rentalEnd + "T23:59:59").getTime() - Date.now());
+      setRentDays(String(Math.floor(diff / 86400000)));
+      setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
+    } else { setRentDays("30"); setRentHours("0"); }
+    setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
   };
 
   const save = async () => {
     const key = form.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!key) { alert("Username inválido"); return; }
+
+    // Compute rentalEnd from days + hours
+    const days = parseInt(rentDays) || 0;
+    const hours = parseInt(rentHours) || 0;
+    const rentalEnd = new Date(Date.now() + days * 86400000 + hours * 3600000).toISOString().split("T")[0];
+    const rentalStart = new Date().toISOString().split("T")[0];
+
+    // Determine userAgentKey from deviceType
+    const uaKey = deviceType === "android" ? "android" : deviceType === "pc" ? "windows" : "iphone";
+
     const data: User = {
-      name: form.name, proxyHost: form.proxyHost, proxyPort: form.proxyPort,
-      proxyUser: form.proxyUser, proxyPass: form.proxyPass,
-      userAgentKey: form.userAgentKey,
-      userAgent: form.userAgentKey === "custom" ? form.userAgent : "",
-      rentalStart: form.rentalStart, rentalEnd: form.rentalEnd,
+      name: form.name,
+      proxyHost: useLocalProxy ? "" : form.proxyHost,
+      proxyPort: useLocalProxy ? "" : form.proxyPort,
+      proxyUser: useLocalProxy ? "" : form.proxyUser,
+      proxyPass: useLocalProxy ? "" : form.proxyPass,
+      userAgentKey: uaKey,
+      userAgent: form.userAgent || "",
+      rentalStart, rentalEnd,
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
@@ -319,49 +373,98 @@ export default function AngelRentAdmin() {
             <input style={F.input} value={form.name || ""} onChange={e => set("name", e.target.value)} placeholder="Diana Martinez" />
 
             {/* PROXY */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 4 }}>🌐 Configuración de Proxy</div>
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-              <div>
-                <label style={F.label}>IP / Host</label>
-                <input style={F.input} value={form.proxyHost || ""} onChange={e => set("proxyHost", e.target.value)} placeholder="192.168.1.1" />
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>🌐 Configuración de Proxy</div>
+
+            {/* Local IP toggle */}
+            <button onClick={() => setUseLocalProxy(!useLocalProxy)} style={{ width: "100%", padding: "8px 12px", marginBottom: 10, background: useLocalProxy ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.04)", border: `1px solid ${useLocalProxy ? "rgba(34,197,94,.4)" : "rgba(255,255,255,.1)"}`, borderRadius: 8, color: useLocalProxy ? "#4ade80" : "rgba(255,255,255,.5)", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <span>{useLocalProxy ? "✅" : "○"}</span> Usar IP Local (sin proxy externo)
+            </button>
+
+            {!useLocalProxy && (<>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={F.label}>IP / Host</label>
+                  <input style={F.input} value={form.proxyHost || ""} onChange={e => set("proxyHost", e.target.value)} placeholder="192.168.1.1" />
+                </div>
+                <div>
+                  <label style={F.label}>Puerto</label>
+                  <input style={F.input} value={form.proxyPort || ""} onChange={e => set("proxyPort", e.target.value)} placeholder="8080" />
+                </div>
               </div>
-              <div>
-                <label style={F.label}>Puerto</label>
-                <input style={F.input} value={form.proxyPort || ""} onChange={e => set("proxyPort", e.target.value)} placeholder="8080" />
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label style={F.label}>Usuario proxy</label>
+                  <input style={F.input} value={form.proxyUser || ""} onChange={e => set("proxyUser", e.target.value)} placeholder="user" />
+                </div>
+                <div>
+                  <label style={F.label}>Password proxy</label>
+                  <input style={F.input} value={form.proxyPass || ""} onChange={e => set("proxyPass", e.target.value)} placeholder="pass" />
+                </div>
               </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={F.label}>Usuario proxy</label>
-                <input style={F.input} value={form.proxyUser || ""} onChange={e => set("proxyUser", e.target.value)} placeholder="user" />
-              </div>
-              <div>
-                <label style={F.label}>Password proxy</label>
-                <input style={F.input} value={form.proxyPass || ""} onChange={e => set("proxyPass", e.target.value)} placeholder="pass" />
-              </div>
-            </div>
+            </>)}
 
             {/* DEVICE */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 4 }}>📱 Dispositivo (User-Agent)</div>
-            <select style={{ ...F.input, marginTop: 8 }} value={form.userAgentKey || "iphone"} onChange={e => set("userAgentKey", e.target.value)}>
-              {UA_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-            {form.userAgentKey === "custom" && (
-              <input style={{ ...F.input, marginTop: 6, fontSize: 11 }} value={form.userAgent || ""} onChange={e => set("userAgent", e.target.value)} placeholder="Mozilla/5.0 ..." />
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>📱 Dispositivo</div>
+
+            {/* 3 big device buttons */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+              {([["iphone","📱","iPhone"],["android","🤖","Android"],["pc","💻","PC"]] as const).map(([type, icon, label]) => (
+                <button key={type} onClick={() => { setDeviceType(type); set("userAgent", ""); }}
+                  style={{ padding: "12px 6px", borderRadius: 10, border: `1px solid ${deviceType === type ? "rgba(168,85,247,.6)" : "rgba(255,255,255,.08)"}`, background: deviceType === type ? "rgba(168,85,247,.15)" : "rgba(255,255,255,.03)", color: deviceType === type ? "#c084fc" : "rgba(255,255,255,.5)", cursor: "pointer", fontWeight: 800, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 22 }}>{icon}</span>{label}
+                </button>
+              ))}
+            </div>
+
+            {/* User Agent field + buttons */}
+            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+              <div style={{ flex: 1 }}>
+                <label style={F.label}>User Agent</label>
+                <input style={{ ...F.input, fontSize: 10 }} value={form.userAgent || ""} onChange={e => set("userAgent", e.target.value)} placeholder={`User agent de ${deviceType === "iphone" ? "iPhone" : deviceType === "android" ? "Android" : "PC"}...`} />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+              <button onClick={() => set("userAgent", genUA(deviceType))}
+                style={{ padding: "8px", borderRadius: 8, border: "1px solid rgba(168,85,247,.4)", background: "rgba(168,85,247,.1)", color: "#c084fc", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                🎲 Generar UA real
+              </button>
+              <button onClick={() => set("userAgent", "")}
+                style={{ padding: "8px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.4)", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
+                📱 Usar UA del dispositivo
+              </button>
+            </div>
+            {form.userAgent && (
+              <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.2)", borderRadius: 8, fontSize: 9, color: "rgba(168,85,247,.8)", wordBreak: "break-all" as const }}>
+                {form.userAgent}
+              </div>
             )}
 
             {/* RENTA */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 4 }}>📅 Renta</div>
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>📅 Tiempo de Renta</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
-                <label style={F.label}>Fecha inicio</label>
-                <input type="date" style={F.input} value={form.rentalStart || ""} onChange={e => set("rentalStart", e.target.value)} />
+                <label style={F.label}>Días</label>
+                <input type="number" min="0" style={F.input} value={rentDays} onChange={e => setRentDays(e.target.value)} placeholder="30" />
               </div>
               <div>
-                <label style={F.label}>Fecha fin</label>
-                <input type="date" style={F.input} value={form.rentalEnd || ""} onChange={e => set("rentalEnd", e.target.value)} />
+                <label style={F.label}>Horas</label>
+                <input type="number" min="0" max="23" style={F.input} value={rentHours} onChange={e => setRentHours(e.target.value)} placeholder="0" />
               </div>
             </div>
+            {/* Quick preset buttons */}
+            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" as const }}>
+              {[["7d","7","0"],["15d","15","0"],["30d","30","0"],["1d","1","0"],["12h","0","12"]].map(([label,d,h]) => (
+                <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
+                  style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.6)", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            {(parseInt(rentDays)||0) + (parseInt(rentHours)||0) > 0 && (
+              <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
+                ✅ Renta: {parseInt(rentDays)||0}d {parseInt(rentHours)||0}h → vence {new Date(Date.now() + ((parseInt(rentDays)||0)*86400+(parseInt(rentHours)||0)*3600)*1000).toLocaleDateString("es")}
+              </div>
+            )}
 
             <label style={F.label}>URL por defecto</label>
             <input style={F.input} value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="https://megapersonals.eu" />
