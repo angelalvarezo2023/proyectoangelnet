@@ -196,6 +196,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 }
 #ar-bar::-webkit-scrollbar{display:none}
+
 .ars{
   display:flex;align-items:center;gap:5px;
   padding:0 14px;height:100%;flex-shrink:0;
@@ -204,6 +205,22 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 }
 .ars:hover{background:rgba(255,255,255,.03)}
 .ars:first-child{padding-left:10px}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  #ar-bar{height:44px}
+  .ars{padding:0 10px;gap:4px}
+  .ars:first-child{padding-left:8px}
+  .arl{font-size:8px;letter-spacing:.7px}
+  .arv{font-size:11px}
+  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
+  
+  /* Ocultar segmentos menos críticos en móviles muy pequeños */
+  @media (max-width: 480px) {
+    .ars-hide-mobile{display:none!important}
+  }
+}
+
 .arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
 .arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
 #ar-dot{
@@ -235,6 +252,26 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   position:fixed;bottom:24px;right:16px;z-index:2147483647;
   display:flex;flex-direction:column;gap:12px;align-items:flex-end;
 }
+
+/* Mobile optimizations for floating buttons */
+@media (max-width: 768px) {
+  #ar-btns{bottom:16px;right:12px;gap:10px}
+  .arbtn{
+    padding:12px 20px;font-size:13px;
+    border-radius:50px;gap:8px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:15px!important}
+}
+
+@media (max-width: 480px) {
+  #ar-btns{bottom:12px;right:8px;gap:8px}
+  .arbtn{
+    padding:10px 16px;font-size:12px;
+    border-radius:40px;gap:6px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:14px!important}
+}
+
 .arbtn{
   display:flex;align-items:center;gap:9px;border:none;cursor:pointer;
   border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;
@@ -556,11 +593,12 @@ ${modalHtml}
   <div class="ars"><span class="arl">Usuario</span><span class="arv" style="color:rgba(255,255,255,.65);font-weight:700" id="ar-uname"></span></div>
   <div class="ars"><span class="arl">Renta</span><span class="arv arg" id="ar-rent">...</span></div>
   <div class="ars" style="gap:7px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.3)">OFF</span></div>
-  <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">⏱ Bump en</span><span class="arv arp2" id="ar-cd">--:--</span></div>
+  <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">⏱ Próximo</span><span class="arv arp2" id="ar-cd">--:--</span></div>
   <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
-  <div class="ars" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
+  <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
+  <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
   <div class="ars"><span class="arl">👁 Vistas</span><span class="arv arg" id="ar-views">...</span></div>
-  <div class="ars"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
+  <div class="ars ars-hide-mobile"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 <div id="ar-client-notify">
