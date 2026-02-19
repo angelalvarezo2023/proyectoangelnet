@@ -451,7 +451,8 @@ function showNextPromo(){
 setTimeout(showNextPromo,5000);
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ── Modal "sin permisos de edición" ──────────────────────────────────────────
+// ── EDIT BLOCK DISABLED FOR TESTING ─────────────────────────────────────────
+/*
 (function(){
   var modal=document.createElement("div");
   modal.id="ar-noedit-modal";
@@ -537,6 +538,7 @@ setTimeout(showNextPromo,5000);
     },true);
   })();
 })();
+*/
 // ─────────────────────────────────────────────────────────────────────────────
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -621,17 +623,16 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
 
-  // Block edit pages — show no-permissions modal and go back
-  if(u.indexOf("/users/posts/edit/")!==-1){
-    var m=document.getElementById("ar-noedit-modal");
-    if(m)m.style.display="flex";
-    // Go back to list after showing modal
-    setTimeout(function(){
-      var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
-      history.replaceState(null,"",listUrl);
-    },300);
-    return;
-  }
+  // EDIT BLOCK DISABLED FOR TESTING
+  // if(u.indexOf("/users/posts/edit/")!==-1){
+  //   var m=document.getElementById("ar-noedit-modal");
+  //   if(m)m.style.display="flex";
+  //   setTimeout(function(){
+  //     var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
+  //     history.replaceState(null,"",listUrl);
+  //   },300);
+  //   return;
+  // }
 
   // On any other page: check if we have a recent edit return URL (within last 60s)
   var retRaw=null;
