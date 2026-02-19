@@ -559,10 +559,6 @@ function handlePage(){
   if(u.indexOf("/users/posts/edit/")!==-1){
     var m=document.getElementById("ar-noedit-modal");
     if(m)m.style.display="flex";
-    setTimeout(function(){
-      var listUrl="/api/angel-rent?u="+UNAME+"&url="+encodeURIComponent("https://megapersonals.eu/users/posts/list");
-      history.replaceState(null,"",listUrl);
-    },300);
     return;
   }
 
