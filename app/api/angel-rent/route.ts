@@ -99,7 +99,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
-      html = injectUI(html, decoded, username, user);
+      html = injectUI(html, decoded, username, user, isEditPage);
       rh.set("Content-Type", "text/html; charset=utf-8");
       return new Response(html, { status: 200, headers: rh });
     }
@@ -173,7 +173,7 @@ async function saveCookies(username: string, newCookies: string[], existing: str
   } catch (e) { /* non-critical */ }
 }
 
-function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
+function injectUI(html: string, curUrl: string, username: string, user: ProxyUser, isEditPage: boolean): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   const V = {
     pb:    JSON.stringify(pb),
