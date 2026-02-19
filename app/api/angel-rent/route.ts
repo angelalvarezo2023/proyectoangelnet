@@ -48,11 +48,11 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    // Block edit pages server-side — redirect to list instead
-    if (decoded.includes("/users/posts/edit")) {
-      const listUrl = `/api/angel-rent?u=${enc(username)}&url=${enc("https://megapersonals.eu/users/posts/list")}`;
-      return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="display:inline-block;margin-top:8px;padding:12px 28px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;font-weight:800;text-decoration:none;border-radius:50px;font-size:14px">← Volver a mi anuncio</a>`);
-    }
+    // EDIT BLOCK TEMPORARILY DISABLED FOR TESTING
+    // if (decoded.includes("/users/posts/edit")) {
+    //   const listUrl = `/api/angel-rent?u=${enc(username)}&url=${enc("https://megapersonals.eu/users/posts/list")}`;
+    //   return expiredPage("Sin Permisos", `No tienes permisos para editar el anuncio.<br><br><a href="${listUrl}" style="display:inline-block;margin-top:8px;padding:12px 28px;background:linear-gradient(135deg,#a855f7,#ec4899);color:#fff;font-weight:800;text-decoration:none;border-radius:50px;font-size:14px">← Volver a mi anuncio</a>`);
+    // }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
