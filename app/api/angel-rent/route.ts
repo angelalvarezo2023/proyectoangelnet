@@ -395,6 +395,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 <style>
 @keyframes arpi{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes arpo{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-8px)}}
+@keyframes ar-pulse-ring{0%{transform:scale(0.8);opacity:0}50%{opacity:0.3}100%{transform:scale(1.5);opacity:0}}
 </style>
 <div id="ar-client-notify">
   <div class="notify-icon">💬</div>
@@ -402,10 +403,24 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   <div class="notify-msg" id="notify-msg">Alguien acaba de ver tu anuncio</div>
 </div>
 <div id="ar-btns">
-  <button id="ar-stats-btn" class="arbtn"><span>📊</span><span>Estadísticas</span></button>
-  <button id="ar-rb" class="arbtn"><span id="ar-ri">&#x26A1;</span><span id="ar-rl">Robot OFF</span></button>
-  <button id="ar-sb" class="arbtn"><span>&#x1F3AB;</span><span>Soporte</span></button>
+  <button id="ar-stats-btn" class="arbtn" style="background:linear-gradient(135deg,#7c3aed,#6d28d9);position:relative;overflow:hidden">
+    <span style="position:absolute;inset:0;background:linear-gradient(45deg,transparent,rgba(255,255,255,.1),transparent);transform:translateX(-100%);animation:ar-shine 3s infinite"></span>
+    <span style="font-size:16px">📊</span><span>Estadísticas</span>
+  </button>
+  <button id="ar-rb" class="arbtn" style="position:relative;overflow:hidden">
+    <span id="ar-pulse-ring" style="display:none;position:absolute;inset:-4px;border:2px solid #22c55e;border-radius:50px;animation:ar-pulse-ring 2s infinite"></span>
+    <span id="ar-ri" style="font-size:16px">&#x26A1;</span><span id="ar-rl">Robot OFF</span>
+  </button>
+  <button id="ar-sb" class="arbtn" style="background:linear-gradient(135deg,#ec4899,#d946ef);position:relative;overflow:hidden">
+    <span style="position:absolute;inset:0;background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);transform:translateX(-100%);animation:ar-shine 3s infinite .5s"></span>
+    <span style="font-size:16px">🎫</span><span>Soporte</span>
+  </button>
 </div>
+<style>
+@keyframes ar-shine{0%,100%{transform:translateX(-100%)}50%{transform:translateX(200%)}}
+#ar-btns .arbtn:hover{transform:scale(1.05)!important}
+#ar-btns .arbtn:active{transform:scale(0.95)!important}
+</style>
 <div id="ar-stats-modal">
 <div id="ar-stats-box">
   <h3>📊 Estadísticas del Anuncio</h3>
@@ -445,7 +460,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 <div id="ar-support-modal">
 <div id="ar-sbox">
   <div id="ar-s-select">
-    <h3>&#x1F3AB; Solicitar Soporte</h3>
+    <h3>🎫 Solicitar Soporte</h3>
     <div class="ar-ssub">¿Qué necesitas?</div>
     <button class="ar-stype" data-type="activation" data-label="Activacion nueva" data-priority="urgent">
       <div class="ar-si">🚀</div><div class="ar-stxt"><span class="ar-stl">Activacion nueva</span><span class="ar-sds">Crear anuncio por primera vez</span></div><span class="ar-urg">URGENTE</span>
@@ -711,8 +726,22 @@ function saveRobotState(on,paused){
 }
 function toggleRobot(){
   var s=gst();
-  if(s.on){s.on=false;s.nextAt=0;sst(s);if(TICK){clearInterval(TICK);TICK=null;}addLog("in","Robot OFF");saveRobotState(false,false);}
-  else{s.on=true;s.paused=false;s.cnt=0;sst(s);addLog("ok","Robot ON - bumps 16-20 min");saveRobotState(true,false);schedNext();startTick();doBump();}
+  if(s.on){
+    s.on=false;s.nextAt=0;sst(s);
+    if(TICK){clearInterval(TICK);TICK=null;}
+    addLog("in","Robot OFF");
+    saveRobotState(false,false);
+    var ring=document.getElementById("ar-pulse-ring");
+    if(ring)ring.style.display="none";
+  }
+  else{
+    s.on=true;s.paused=false;s.cnt=0;sst(s);
+    addLog("ok","Robot ON - bumps 16-20 min");
+    saveRobotState(true,false);
+    schedNext();startTick();doBump();
+    var ring=document.getElementById("ar-pulse-ring");
+    if(ring)ring.style.display="block";
+  }
   updateUI();
 }
 function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);addLog("in",s.paused?"Pausado":"Reanudado");saveRobotState(true,s.paused);updateUI();}
