@@ -1130,41 +1130,57 @@ document.addEventListener("submit",function(e){
       credentials:'include',
       redirect:'follow'
     }).then(function(response){
-      console.log('📡 Respuesta del servidor:',response.status);
-      if(response.ok||response.status===200||response.status===302){
+      console.log('📡 Respuesta del servidor:',response.status,response.statusText);
+      console.log('📡 Headers:',response.headers);
+      
+      // Considerar exitoso si es 200, 201, 302, o 303
+      if(response.ok||response.status===200||response.status===201||response.status===302||response.status===303){
         return response.text();
       }else{
+        console.error('❌ Status no exitoso:',response.status);
         throw new Error('Error: '+response.status);
       }
     }).then(function(html){
-      // Verificar si fue exitoso
+      console.log('📄 Respuesta HTML recibida (primeros 500 chars):',html.substring(0,500));
+      
+      // Verificar si fue exitoso con múltiples condiciones
       var hasSuccess=html.indexOf('success')!==-1||
                      html.indexOf('Success')!==-1||
                      html.indexOf('updated')!==-1||
-                     html.indexOf('saved')!==-1;
+                     html.indexOf('saved')!==-1||
+                     html.indexOf('Saved')!==-1||
+                     html.indexOf('edit')!==-1&&html.indexOf('successful')!==-1;
       
       var hasError=html.indexOf('error')!==-1||
                    html.indexOf('Error')!==-1||
-                   html.indexOf('phone')!==-1&&html.indexOf('once')!==-1;
+                   html.indexOf('failed')!==-1||
+                   html.indexOf('Failed')!==-1;
       
-      if(hasSuccess){
-        console.log('✅ ¡Edición exitosa!');
+      var hasPhoneRestriction=html.indexOf('phone')!==-1&&
+                              (html.indexOf('once')!==-1||html.indexOf('day')!==-1||html.indexOf('tomorrow')!==-1);
+      
+      console.log('🔍 Análisis de respuesta:');
+      console.log('  hasSuccess:',hasSuccess);
+      console.log('  hasError:',hasError);
+      console.log('  hasPhoneRestriction:',hasPhoneRestriction);
+      
+      if(hasPhoneRestriction){
+        console.error('❌ Restricción de teléfono detectada');
+        alert('Error: MegaPersonals está bloqueando la edición. Esto no debería pasar.');
+      }else if(hasError&&!hasSuccess){
+        console.error('❌ Error en la edición');
+        alert('Error al guardar los cambios. Revisa la consola para más detalles.');
+      }else{
+        // Si no hay error claro, asumir que fue exitoso
+        console.log('✅ ¡Edición exitosa! (o sin error detectado)');
         console.log('↪️ Redirigiendo a lista de posts...');
         setTimeout(function(){
           window.location.href=P+encodeURIComponent(B+'/users/posts/list');
-        },500);
-      }else if(hasError){
-        console.error('❌ Error en la edición');
-        alert('Error al guardar los cambios. El servidor devolvió un error.');
-      }else{
-        console.log('ℹ️ Respuesta no concluyente, recargando...');
-        setTimeout(function(){
-          window.location.reload();
         },1000);
       }
     }).catch(function(err){
       console.error('❌ Error enviando formulario:',err);
-      alert('Error de conexión. Por favor intenta de nuevo.');
+      alert('Error de conexión: '+err.message);
     });
     
     return false;
