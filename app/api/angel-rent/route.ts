@@ -250,17 +250,29 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-sdone p{font-size:14px;color:rgba(255,255,255,.5);margin:0;text-align:center}
 #ar-modal{position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.9);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;padding:20px}
 #ar-modal.show{display:flex}
-#ar-mbox{background:linear-gradient(160deg,#1c0a30,#0f0520);border:1px solid rgba(245,158,11,.35);border-radius:28px;padding:32px 26px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);font-family:-apple-system,sans-serif;color:#fff}
+#ar-mbox{background:linear-gradient(160deg,#1c0a30,#0f0520);border:1px solid rgba(245,158,11,.35);border-radius:28px;padding:32px 26px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);font-family:-apple-system,sans-serif;color:#fff;position:relative;z-index:2147483649}
 @keyframes ar-modal-pop{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
 #ar-mbox .mi{font-size:52px;margin-bottom:4px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
 #ar-mbox .mt{font-size:20px;font-weight:900;color:#fbbf24;margin-bottom:10px;letter-spacing:-.4px}
 #ar-mbox .mb{display:inline-flex;align-items:center;justify-content:center;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:16px;padding:8px 20px;margin-bottom:14px;font-size:28px;font-weight:900;color:#fcd34d;font-variant-numeric:tabular-nums}
 #ar-mbox .mm{font-size:14px;color:rgba(255,255,255,.55);line-height:1.7;margin-bottom:22px}
 #ar-mbox .mm strong{color:rgba(255,255,255,.8);font-weight:800}
-#ar-mbox .mc{width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s}
+#ar-mbox .mc{width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s;position:relative;z-index:1}
 #ar-mbox .mc:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,158,11,.6)}
 #ar-mbox .mc:active{transform:scale(.98)}
-#ar-mbox .ms{display:block;margin-top:14px;font-size:12px;color:rgba(255,255,255,.25);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline}
+#ar-mbox .ms{display:block;width:100%;margin-top:14px;padding:12px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;font-family:inherit;font-weight:600;transition:all .2s;position:relative;z-index:1}
+#ar-mbox .ms:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.9);border-color:rgba(255,255,255,.2)}
+#ar-mbox .ms:active{transform:scale(.98)}
+@media (max-width: 768px){
+  #ar-modal{padding:16px;align-items:center}
+  #ar-mbox{max-width:100%;padding:28px 20px 24px;border-radius:24px}
+  #ar-mbox .mi{font-size:48px}
+  #ar-mbox .mt{font-size:18px}
+  #ar-mbox .mb{font-size:24px;padding:6px 16px}
+  #ar-mbox .mm{font-size:13px;margin-bottom:20px}
+  #ar-mbox .mc{padding:14px;font-size:14px}
+  #ar-mbox .ms{padding:11px;font-size:12px}
+}
 #ar-promo{position:fixed;top:48px;left:0;right:0;z-index:2147483646;background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);padding:5px 14px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:800;color:#fff;letter-spacing:.2px;box-shadow:0 2px 12px rgba(0,0,0,.5);animation:ar-promo-in .4s ease;display:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @keyframes ar-promo-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes ar-promo-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
