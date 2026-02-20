@@ -473,6 +473,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   background:rgba(0,0,0,.9);
   -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
   display:none;align-items:center;justify-content:center;padding:20px;
+  cursor:pointer;
 }
 #ar-modal.show{display:flex}
 #ar-mbox{
@@ -482,6 +483,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;
   animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);
   font-family:-apple-system,sans-serif;color:#fff;
+  cursor:default;
+  pointer-events:auto;
 }
 @keyframes ar-modal-pop{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
 #ar-mbox .mi{font-size:52px;margin-bottom:4px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
@@ -501,6 +504,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   cursor:pointer;font-family:inherit;
   box-shadow:0 6px 20px rgba(245,158,11,.45);
   transition:all .2s;
+  pointer-events:auto;
+  -webkit-tap-highlight-color:transparent;
 }
 #ar-mbox .mc:hover{
   transform:translateY(-2px);
@@ -511,6 +516,16 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   display:block;margin-top:14px;font-size:12px;
   color:rgba(255,255,255,.25);cursor:pointer;background:none;
   border:none;font-family:inherit;text-decoration:underline;
+  padding:10px;
+  pointer-events:auto;
+  -webkit-tap-highlight-color:transparent;
+  transition:color .2s;
+}
+#ar-mbox .ms:hover{
+  color:rgba(255,255,255,.5);
+}
+#ar-mbox .ms:active{
+  color:rgba(255,255,255,.7);
 }
 
 /* ─── Promo bar ──────────────────────────────────────────────────────────── */
@@ -560,7 +575,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   const modalHtml = showWarn ? `
 <div id="ar-modal" class="show">
-<div id="ar-mbox">
+<div id="ar-mbox" onclick="event.stopPropagation()">
   <div class="mi">⏰</div>
   <div class="mt">Tu renta vence pronto</div>
   <div class="mb">${warnDays === 0 ? "HOY" : warnDays === 1 ? "1 día" : warnDays + " días"}</div>
@@ -568,8 +583,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
     ? "Tu plan <strong>vence hoy</strong>. Si no renuevas ahora, tu anuncio dejará de republicarse automáticamente."
     : `Tu plan vence en <strong>${warnDays} día${warnDays > 1 ? "s" : ""}</strong>. Renueva pronto para no perder la republicación automática.`
   }<br><br>Contáctanos para renovar y mantener tu anuncio siempre arriba.</p>
-  <button class="mc" id="ar-mok">📲 Contactar para renovar</button>
-  <button class="ms" id="ar-msk">Recordarme después</button>
+  <button class="mc" id="ar-mok" type="button">📲 Contactar para renovar</button>
+  <button class="ms" id="ar-msk" type="button">Recordarme después</button>
 </div>
 </div>` : "";
 
@@ -857,7 +872,57 @@ var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 
 var modal=document.getElementById("ar-modal");
-if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
+if(modal){
+  var dismissed=localStorage.getItem("ar_wd_"+UNAME);
+  var dismissedTs=parseInt(dismissed||"0");
+  if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){
+    modal.style.display="none";
+    modal.classList.remove("show");
+  }
+  
+  function closeModal(){
+    if(modal){
+      modal.style.display="none";
+      modal.classList.remove("show");
+      modal.style.pointerEvents="none";
+    }
+  }
+  
+  var mok=document.getElementById("ar-mok");
+  var msk=document.getElementById("ar-msk");
+  
+  if(mok){
+    mok.addEventListener("click",function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      closeModal();
+      window.open("https://t.me/angelrentsoporte","_blank");
+    },true);
+  }
+  
+  if(msk){
+    msk.addEventListener("click",function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+      closeModal();
+    },true);
+  }
+  
+  modal.addEventListener("click",function(e){
+    if(e.target===modal){
+      localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+      closeModal();
+    }
+  });
+  
+  document.addEventListener("keydown",function(e){
+    if(e.key==="Escape"&&modal.classList.contains("show")){
+      localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+      closeModal();
+    }
+  });
+}
 
 if(document.body)document.body.style.paddingTop="48px";
 var rb2=G("ar-rb");
