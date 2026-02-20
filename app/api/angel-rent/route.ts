@@ -58,6 +58,27 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
       
+      // BYPASS: Si es edición de post, manipular el body para evitar validación
+      if (decoded.includes("/users/posts/edit") || decoded.includes("/edit/")) {
+        try {
+          const bodyStr = postBody.toString('utf-8');
+          // Buscar si hay cambio de teléfono en el form data
+          const hasPhoneChange = bodyStr.includes('phoneNumber=') || bodyStr.includes('phone=');
+          
+          if (hasPhoneChange) {
+            // NO enviar el cambio de teléfono, mantener el actual
+            const params = new URLSearchParams(bodyStr);
+            // Remover cualquier parámetro de teléfono
+            params.delete('phoneNumber');
+            params.delete('phone');
+            params.delete('phoneUpdate');
+            postBody = Buffer.from(params.toString(), 'utf-8');
+          }
+        } catch (e) {
+          // Si hay error parseando, dejar el body original
+        }
+      }
+      
       // Si es multipart/form-data, asegurar que el boundary se preserve
       if (postCT.includes("multipart/form-data")) {
         // El content-type ya incluye el boundary, mantenerlo tal cual
@@ -926,27 +947,71 @@ try{
 
 // Bloquear el popup de restricción de teléfono automáticamente
 if(C.indexOf('/edit')!==-1){
+  var popupClosed=false;
   var checkPopup=setInterval(function(){
+    if(popupClosed)return;
+    
+    // Buscar el popup de múltiples formas
     var popup=document.querySelector('.modal');
     if(!popup)popup=document.querySelector('[class*="modal"]');
     if(!popup)popup=document.querySelector('div[style*="position: fixed"]');
+    if(!popup)popup=document.querySelector('div[style*="position:fixed"]');
     
-    if(popup){
-      var text=popup.innerText||popup.textContent||'';
-      if(text.indexOf('phone')!==-1&&text.indexOf('once')!==-1&&text.indexOf('day')!==-1){
-        var okBtn=popup.querySelector('button');
-        if(!okBtn)okBtn=popup.querySelector('[onclick]');
-        if(!okBtn)okBtn=popup.querySelector('input[type="button"]');
-        if(okBtn){
-          okBtn.click();
-          popup.style.display='none';
-          if(popup.parentNode)popup.parentNode.removeChild(popup);
+    // También buscar por contenido
+    var allDivs=document.querySelectorAll('div');
+    for(var i=0;i<allDivs.length;i++){
+      var style=window.getComputedStyle(allDivs[i]);
+      if(style.position==='fixed'||style.position==='absolute'){
+        var zIndex=parseInt(style.zIndex)||0;
+        if(zIndex>1000){
+          var text=(allDivs[i].innerText||allDivs[i].textContent||'').toLowerCase();
+          if(text.indexOf('phone')!==-1&&text.indexOf('once')!==-1&&text.indexOf('day')!==-1){
+            popup=allDivs[i];
+            break;
+          }
         }
       }
     }
-  },100);
+    
+    if(popup){
+      var text=(popup.innerText||popup.textContent||'').toLowerCase();
+      if(text.indexOf('phone')!==-1&&(text.indexOf('once')!==-1||text.indexOf('day')!==-1||text.indexOf('tomorrow')!==-1)){
+        // Encontrado! Cerrarlo inmediatamente
+        popup.style.display='none';
+        popup.style.visibility='hidden';
+        popup.style.opacity='0';
+        if(popup.parentNode){
+          try{popup.parentNode.removeChild(popup);}catch(e){}
+        }
+        
+        // Buscar y hacer click en el botón OK
+        var okBtn=document.querySelector('button');
+        if(!okBtn)okBtn=document.querySelector('[onclick]');
+        if(!okBtn)okBtn=document.querySelector('input[type="button"]');
+        if(!okBtn)okBtn=document.querySelector('[type="button"]');
+        
+        // Buscar en el popup específicamente
+        if(popup){
+          var btnInPopup=popup.querySelector('button');
+          if(btnInPopup)okBtn=btnInPopup;
+        }
+        
+        if(okBtn){
+          try{okBtn.click();}catch(e){}
+        }
+        
+        popupClosed=true;
+        console.log('✅ Popup de restricción cerrado automáticamente');
+      }
+    }
+  },50); // Revisar cada 50ms (más rápido)
   
-  setTimeout(function(){clearInterval(checkPopup);},10000);
+  setTimeout(function(){
+    clearInterval(checkPopup);
+    if(!popupClosed){
+      console.log('ℹ️ No se detectó popup de restricción');
+    }
+  },5000);
 }
 
 try{
@@ -1016,18 +1081,96 @@ document.addEventListener("submit",function(e){
   try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
   
-  // Si es formulario de edición, limpiar cookies de restricción
+  // Si es formulario de edición, interceptar y remover campos de teléfono
   var isEdit=C.indexOf("/edit")!==-1||a.indexOf("/edit")!==-1;
   if(isEdit){
-    // Limpiar cookies que puedan estar causando la restricción
-    var cookiesToClean=['phone_change_attempt','last_phone_update','phone_restriction','edit_restriction'];
-    cookiesToClean.forEach(function(cookieName){
-      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
-      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.megapersonals.eu';
-      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=megapersonals.eu';
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    
+    console.log('🔧 Interceptando formulario de edición...');
+    
+    // Obtener todos los campos del formulario
+    var originalFormData=new FormData(f);
+    var cleanedFormData=new FormData();
+    
+    // Lista de campos de teléfono que NO se deben enviar
+    var phoneFields=['phone','isPhone','_isPhone','phoneNumber','contactNumber','contact'];
+    var removedCount=0;
+    
+    // Copiar solo campos que NO son de teléfono
+    for(var pair of originalFormData.entries()){
+      var fieldName=pair[0];
+      var fieldValue=pair[1];
+      
+      // Verificar si es un campo de teléfono
+      var isPhoneField=false;
+      for(var i=0;i<phoneFields.length;i++){
+        if(fieldName===phoneFields[i]||fieldName.toLowerCase().indexOf('phone')!==-1){
+          isPhoneField=true;
+          removedCount++;
+          console.log('❌ Removiendo campo de teléfono:',fieldName);
+          break;
+        }
+      }
+      
+      // Si NO es campo de teléfono, incluirlo
+      if(!isPhoneField){
+        cleanedFormData.append(fieldName,fieldValue);
+        console.log('✅ Incluyendo campo:',fieldName);
+      }
+    }
+    
+    console.log('📊 Campos removidos:',removedCount);
+    console.log('📤 Enviando formulario limpio...');
+    
+    // Enviar el formulario limpio
+    fetch(proxiedAction,{
+      method:'POST',
+      body:cleanedFormData,
+      credentials:'include',
+      redirect:'follow'
+    }).then(function(response){
+      console.log('📡 Respuesta del servidor:',response.status);
+      if(response.ok||response.status===200||response.status===302){
+        return response.text();
+      }else{
+        throw new Error('Error: '+response.status);
+      }
+    }).then(function(html){
+      // Verificar si fue exitoso
+      var hasSuccess=html.indexOf('success')!==-1||
+                     html.indexOf('Success')!==-1||
+                     html.indexOf('updated')!==-1||
+                     html.indexOf('saved')!==-1;
+      
+      var hasError=html.indexOf('error')!==-1||
+                   html.indexOf('Error')!==-1||
+                   html.indexOf('phone')!==-1&&html.indexOf('once')!==-1;
+      
+      if(hasSuccess){
+        console.log('✅ ¡Edición exitosa!');
+        console.log('↪️ Redirigiendo a lista de posts...');
+        setTimeout(function(){
+          window.location.href=P+encodeURIComponent(B+'/users/posts/list');
+        },500);
+      }else if(hasError){
+        console.error('❌ Error en la edición');
+        alert('Error al guardar los cambios. El servidor devolvió un error.');
+      }else{
+        console.log('ℹ️ Respuesta no concluyente, recargando...');
+        setTimeout(function(){
+          window.location.reload();
+        },1000);
+      }
+    }).catch(function(err){
+      console.error('❌ Error enviando formulario:',err);
+      alert('Error de conexión. Por favor intenta de nuevo.');
     });
+    
+    return false;
   }
   
+  // Para otros formularios (login, etc), proceder normalmente
   e.stopImmediatePropagation();
   f.setAttribute("action",proxiedAction);
   f.setAttribute("method",f.getAttribute("method")||"POST");
