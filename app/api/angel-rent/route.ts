@@ -73,11 +73,21 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
       html = injectUI(html, decoded, username, user);
       rh.set("Content-Type", "text/html; charset=utf-8");
+      rh.set("X-Content-Type-Options", "nosniff");
+      rh.set("X-Frame-Options", "SAMEORIGIN");
+      // Copiar otros headers importantes del servidor original
+      if (resp.headers["cache-control"]) rh.set("Cache-Control", resp.headers["cache-control"]);
+      if (resp.headers["expires"]) rh.set("Expires", resp.headers["expires"]);
       return new Response(html, { status: 200, headers: rh });
     }
     if (ct.includes("text/css")) {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
+    }
+    if (ct.includes("application/json")) {
+      rh.set("Content-Type", "application/json");
+      // Pasar JSON sin modificar para que las validaciones funcionen
+      return new Response(resp.body, { status: resp.status, headers: rh });
     }
     rh.set("Content-Type", ct || "application/octet-stream");
     if (!ct.includes("text/") && !ct.includes("javascript")) rh.set("Cache-Control", "public, max-age=3600");
@@ -696,9 +706,19 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
     const headers: Record<string, string> = {
-      "User-Agent": ua, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
-      "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "identity",
-      "Host": u.hostname, "Connection": "keep-alive",
+      "User-Agent": ua,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+      "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
+      "Accept-Encoding": "identity",
+      "Host": u.hostname,
+      "Connection": "keep-alive",
+      "Upgrade-Insecure-Requests": "1",
+      "Sec-Fetch-Dest": method === "POST" ? "document" : "empty",
+      "Sec-Fetch-Mode": "navigate",
+      "Sec-Fetch-Site": "same-origin",
+      "Sec-Fetch-User": "?1",
+      "Cache-Control": "max-age=0",
+      "DNT": "1",
     };
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
@@ -706,6 +726,7 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
       if (postBody) headers["Content-Length"] = postBody.byteLength.toString();
       headers["Referer"] = url;
       headers["Origin"] = u.protocol + "//" + u.hostname;
+      headers["Sec-Fetch-Dest"] = "document";
     }
     const req = (lib as typeof https).request({
       hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80),
@@ -749,6 +770,11 @@ function resolveUrl(url: string, base: string, cur: string): string {
 function rewriteHtml(html: string, base: string, pb: string, cur: string): string {
   html = html.replace(/<base[^>]*>/gi, "");
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
+  
+  // Eliminar cualquier referencia a proxies o túneles en el HTML
+  html = html.replace(/proxy/gi, "direct");
+  html = html.replace(/tunnel/gi, "direct");
+  
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
@@ -778,6 +804,20 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const pbJ = JSON.stringify(pb), baseJ = JSON.stringify(base), curJ = JSON.stringify(cur);
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
+
+// OCULTAR EL PROXY - Hacer que JavaScript vea la URL real de MegaPersonals
+try{
+  var realUrl=C;
+  var realHost='megapersonals.eu';
+  Object.defineProperty(window.location,'href',{get:function(){return realUrl},set:function(v){window.location.replace(P+encodeURIComponent(v))}});
+  Object.defineProperty(window.location,'hostname',{get:function(){return realHost}});
+  Object.defineProperty(window.location,'host',{get:function(){return realHost}});
+  Object.defineProperty(window.location,'origin',{get:function(){return 'https://'+realHost}});
+  Object.defineProperty(document,'referrer',{get:function(){return realUrl}});
+  Object.defineProperty(document,'URL',{get:function(){return realUrl}});
+  Object.defineProperty(document,'documentURI',{get:function(){return realUrl}});
+}catch(e){}
+
 try{
   var _dw=document.write.bind(document);
   document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
@@ -802,39 +842,125 @@ document.addEventListener("click",function(e){
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
 },true);
 var _fe=window.fetch;
-if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
+if(_fe)window.fetch=function(u,o){
+  if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
+    var f=px(u);
+    if(f){
+      // Asegurar que las opciones incluyan credenciales
+      o=o||{};
+      if(!o.credentials)o.credentials='include';
+      if(!o.headers)o.headers={};
+      // Copiar headers importantes
+      if(typeof o.headers==='object'&&!Array.isArray(o.headers)){
+        o.headers['X-Requested-With']=o.headers['X-Requested-With']||'XMLHttpRequest';
+      }
+      u=f;
+    }
+  }
+  return _fe.call(this,u,o);
+};
 var _xo=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)arguments[1]=f;}return _xo.apply(this,arguments);};
+XMLHttpRequest.prototype.open=function(m,u){
+  if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
+    var f=px(u);
+    if(f){
+      arguments[1]=f;
+      // Agregar headers importantes después de open
+      var self=this;
+      var _send=self.send;
+      self.send=function(data){
+        self.setRequestHeader('X-Requested-With','XMLHttpRequest');
+        self.withCredentials=true;
+        return _send.call(self,data);
+      };
+    }
+  }
+  return _xo.apply(this,arguments);
+};
 var _wo=window.open;
 window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
-  e.stopImmediatePropagation();
-  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
+  
+  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1||a.indexOf("/edit")!==-1;
   var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
+  
+  // Para formularios de edición, hacerlos parecer navegación normal
   if(isEditForm){
     e.preventDefault();
+    e.stopImmediatePropagation();
+    
+    // Copiar el form data
+    var formData=new FormData(f);
+    var hasFiles=f.querySelector("input[type=file]");
+    
     setTimeout(function(){
-      var hasFiles=f.querySelector("input[type=file]");
       if(hasFiles){
+        // Si hay archivos, usar el método tradicional
         f.setAttribute("action",proxiedAction);
+        f.setAttribute("method","POST");
         var btn=document.createElement("input");
         btn.type="submit";btn.style.display="none";
         f.appendChild(btn);
         btn.click();
         f.removeChild(btn);
       } else {
-        f.setAttribute("action",proxiedAction);
-        f.submit();
+        // Si no hay archivos, usar fetch para mejor control
+        var params=new URLSearchParams();
+        for(var pair of formData.entries()){
+          params.append(pair[0],pair[1]);
+        }
+        
+        fetch(proxiedAction,{
+          method:'POST',
+          headers:{
+            'Content-Type':'application/x-www-form-urlencoded',
+          },
+          body:params.toString(),
+          credentials:'include',
+          redirect:'follow'
+        }).then(function(response){
+          return response.text();
+        }).then(function(html){
+          if(html.indexOf('success')!==-1||html.indexOf('Success')!==-1){
+            window.location.href=P+encodeURIComponent(B+'/users/posts/list');
+          }else{
+            document.open();
+            document.write(html);
+            document.close();
+          }
+        }).catch(function(err){
+          console.error('Form error:',err);
+          f.setAttribute("action",proxiedAction);
+          f.submit();
+        });
       }
     },50);
   } else {
+    // Otros formularios (login, etc)
+    e.stopImmediatePropagation();
     f.setAttribute("action",proxiedAction);
   }
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
+
+// Interceptar addEventListener para eventos que puedan estar validando el origen
+var _ael=EventTarget.prototype.addEventListener;
+EventTarget.prototype.addEventListener=function(type,listener,options){
+  if(type==='change'||type==='input'||type==='blur'){
+    var wrappedListener=function(e){
+      // Asegurar que el evento parezca venir del dominio correcto
+      try{
+        Object.defineProperty(e,'origin',{get:function(){return 'https://megapersonals.eu'}});
+      }catch(x){}
+      return listener.call(this,e);
+    };
+    return _ael.call(this,type,wrappedListener,options);
+  }
+  return _ael.call(this,type,listener,options);
+};
 })();<\/script>`;
 
   return html.match(/<head[^>]*>/i) ? html.replace(/<head[^>]*>/i, (m) => m + zl) : zl + html;
