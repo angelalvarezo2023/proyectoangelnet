@@ -295,8 +295,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
     ? "Tu plan <strong style='color:rgba(255,255,255,.8)'>vence hoy</strong>. Si no renuevas ahora, tu anuncio dejará de republicarse automáticamente."
     : `Tu plan vence en <strong style='color:rgba(255,255,255,.8)'>${warnDays} día${warnDays > 1 ? "s" : ""}</strong>. Renueva pronto para no perder la republicación automática.`
   }<br><br>Contáctanos para renovar y mantener tu anuncio siempre arriba.</p>
-  <button onclick="window.open('https://t.me/angelrentsoporte','_blank');document.getElementById('ar-modal').style.display='none';" style="width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);margin-bottom:12px">📲 Contactar para renovar</button>
-  <button onclick="localStorage.setItem('ar_wd_${username}',Date.now());document.getElementById('ar-modal').style.display='none';" style="width:100%;padding:12px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;font-family:inherit;font-weight:600;pointer-events:auto">Recordarme después</button>
+  <button id="ar-mok-btn" style="width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);margin-bottom:12px">📲 Contactar para renovar</button>
+  <button id="ar-msk-btn" style="width:100%;padding:12px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;font-family:inherit;font-weight:600;pointer-events:auto">Recordarme después</button>
 </div>
 </div>` : "";
 
@@ -458,6 +458,30 @@ var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 if(document.body)document.body.style.paddingTop="48px";
 (function(){var dismissed=localStorage.getItem("ar_wd_"+UNAME);if(dismissed){var dismissedTs=parseInt(dismissed);if((Date.now()-dismissedTs)<14400000){var m=document.getElementById("ar-modal");if(m)m.style.display="none";}}})();
+var modal=document.getElementById("ar-modal");
+if(modal){
+  var mok=document.getElementById("ar-mok-btn");
+  var msk=document.getElementById("ar-msk-btn");
+  if(mok)mok.addEventListener("click",function(e){
+    e.preventDefault();e.stopPropagation();
+    modal.style.display="none";
+    modal.classList.remove("show");
+    window.open("https://t.me/angelrentsoporte","_blank");
+  });
+  if(msk)msk.addEventListener("click",function(e){
+    e.preventDefault();e.stopPropagation();
+    modal.style.display="none";
+    modal.classList.remove("show");
+    localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+  });
+  modal.addEventListener("click",function(e){
+    if(e.target===modal){
+      modal.style.display="none";
+      modal.classList.remove("show");
+      localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());
+    }
+  });
+}
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 var arStatsModal=G("ar-stats-modal");
