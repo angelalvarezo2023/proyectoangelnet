@@ -85,7 +85,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
-      html = injectUI(html, decoded, username, user, isEditPage);
+      html = injectUI(html, decoded, username, user);
       rh.set("Content-Type", "text/html; charset=utf-8");
       return new Response(html, { status: 200, headers: rh });
     }
@@ -159,7 +159,7 @@ async function saveCookies(username: string, newCookies: string[], existing: str
   } catch (e) { /* non-critical */ }
 }
 
-function injectUI(html: string, curUrl: string, username: string, user: ProxyUser, isEditPage: boolean): string {
+function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   const V = {
     pb:    JSON.stringify(pb),
@@ -884,16 +884,15 @@ function handlePage(){
       }
     }
     
-    // Bloquear EDIT POST
-    blockButton("a[href*='/users/posts/edit']","Edit Post");
-    blockButton("button:contains('EDIT POST')","Edit Post");
-    blockButton("#edit-post-btn","Edit Post");
+    // EDIT POST Y WRITE NEW DESBLOQUEADOS PARA TESTING
+    // blockButton("a[href*='/users/posts/edit']","Edit Post");
+    // blockButton("button:contains('EDIT POST')","Edit Post");
+    // blockButton("#edit-post-btn","Edit Post");
     
-    // Bloquear WRITE NEW
-    blockButton("a[href*='/users/posts/create']","Write New");
-    blockButton("button:contains('WRITE NEW')","Write New");
-    blockButton("#write-new-btn","Write New");
-    blockButton("a[href*='create']","Write New");
+    // blockButton("a[href*='/users/posts/create']","Write New");
+    // blockButton("button:contains('WRITE NEW')","Write New");
+    // blockButton("#write-new-btn","Write New");
+    // blockButton("a[href*='create']","Write New");
     
     // Bloquear REMOVE POST
     blockButton("#delete-post-id","Remove Post");
@@ -914,10 +913,8 @@ function handlePage(){
       var text=(el.innerText||el.textContent||"").trim().toUpperCase();
       var href=(el.getAttribute("href")||"").toLowerCase();
       
-      // Bloquear por texto
-      if(text.indexOf("EDIT POST")!==-1||
-         text.indexOf("WRITE NEW")!==-1||
-         text.indexOf("REMOVE POST")!==-1||
+      // Bloquear solo REMOVE/DELETE (NO EDIT ni WRITE NEW)
+      if(text.indexOf("REMOVE POST")!==-1||
          text.indexOf("DELETE POST")!==-1||
          text.indexOf("DELETE ACCOUNT")!==-1||
          text.indexOf("REMOVE ACCOUNT")!==-1){
@@ -929,14 +926,12 @@ function handlePage(){
         el.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
-          alert("⚠️ Edición deshabilitada. Contacta soporte por Telegram si necesitas editar.");
+          alert("⚠️ Acción deshabilitada. Contacta soporte por Telegram.");
         },true);
       }
       
-      // Bloquear por href
-      if(href.indexOf("/edit")!==-1||
-         href.indexOf("/create")!==-1||
-         href.indexOf("/delete")!==-1||
+      // Bloquear solo por href de DELETE/REMOVE (NO EDIT ni CREATE)
+      if(href.indexOf("/delete")!==-1||
          href.indexOf("/remove")!==-1){
         
         if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
@@ -947,8 +942,7 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            // modal disabled
-            
+            alert("⚠️ Acción deshabilitada. Contacta soporte por Telegram.");
           },true);
         }
       }
@@ -963,13 +957,11 @@ function handlePage(){
       var text=(el.innerText||el.textContent||"").trim().toUpperCase();
       var href=(el.getAttribute("href")||"").toLowerCase();
       
-      if((text.indexOf("EDIT POST")!==-1||
-          text.indexOf("WRITE NEW")!==-1||
-          text.indexOf("REMOVE POST")!==-1||
+      // Solo bloquear DELETE/REMOVE (NO EDIT ni WRITE NEW)
+      if((text.indexOf("REMOVE POST")!==-1||
           text.indexOf("DELETE")!==-1||
-          href.indexOf("/edit")!==-1||
-          href.indexOf("/create")!==-1||
-          href.indexOf("/delete")!==-1)&&
+          href.indexOf("/delete")!==-1||
+          href.indexOf("/remove")!==-1)&&
           href.indexOf("/bump")===-1&&
           href.indexOf("/repost")===-1){
         
@@ -981,8 +973,7 @@ function handlePage(){
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
-            // modal disabled
-            
+            alert("⚠️ Acción deshabilitada. Contacta soporte por Telegram.");
           },true);
         }
       }
