@@ -88,8 +88,24 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
           });
         }
         
+        // IMPORTANTE: Filtrar cookies que causan restricciones de edición
+        const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit'];
+        blockedCookies.forEach(blocked => delete cookieMap[blocked]);
+        
         allCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
       }
+    } else if (cookies) {
+      // Si no hay cookies guardadas, filtrar las del request
+      const cookieMap: Record<string, string> = {};
+      cookies.split(";").forEach(c => {
+        const [k, ...v] = c.trim().split("=");
+        if (k) cookieMap[k.trim()] = v.join("=").trim();
+      });
+      
+      const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit'];
+      blockedCookies.forEach(blocked => delete cookieMap[blocked]);
+      
+      allCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
     }
     
     const resp = await fetchProxy(decoded, agent, method, postBody, postCT, allCookies, getUA(user));
@@ -196,6 +212,10 @@ async function saveCookies(username: string, newCookies: string[], existing: str
         }
       }
     });
+    
+    // IMPORTANTE: NO guardar cookies que causan restricciones
+    const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit', 'edit_timestamp', 'phone_modified'];
+    blockedCookies.forEach(blocked => delete cookieMap[blocked]);
     
     // Crear string de cookies limpio
     const cookieStr = Object.entries(cookieMap)
@@ -904,6 +924,31 @@ try{
   Object.defineProperty(document,'documentURI',{get:function(){return realUrl}});
 }catch(e){}
 
+// Bloquear el popup de restricción de teléfono automáticamente
+if(C.indexOf('/edit')!==-1){
+  var checkPopup=setInterval(function(){
+    var popup=document.querySelector('.modal');
+    if(!popup)popup=document.querySelector('[class*="modal"]');
+    if(!popup)popup=document.querySelector('div[style*="position: fixed"]');
+    
+    if(popup){
+      var text=popup.innerText||popup.textContent||'';
+      if(text.indexOf('phone')!==-1&&text.indexOf('once')!==-1&&text.indexOf('day')!==-1){
+        var okBtn=popup.querySelector('button');
+        if(!okBtn)okBtn=popup.querySelector('[onclick]');
+        if(!okBtn)okBtn=popup.querySelector('input[type="button"]');
+        if(okBtn){
+          okBtn.click();
+          popup.style.display='none';
+          if(popup.parentNode)popup.parentNode.removeChild(popup);
+        }
+      }
+    }
+  },100);
+  
+  setTimeout(function(){clearInterval(checkPopup);},10000);
+}
+
 try{
   var _dw=document.write.bind(document);
   document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
@@ -967,14 +1012,23 @@ document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
   
-  // NO prevenir default, dejar que el form se envíe naturalmente
-  e.stopImmediatePropagation();
-  
   var target;
   try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
   
-  // Simplemente cambiar el action y dejar que el browser lo maneje
+  // Si es formulario de edición, limpiar cookies de restricción
+  var isEdit=C.indexOf("/edit")!==-1||a.indexOf("/edit")!==-1;
+  if(isEdit){
+    // Limpiar cookies que puedan estar causando la restricción
+    var cookiesToClean=['phone_change_attempt','last_phone_update','phone_restriction','edit_restriction'];
+    cookiesToClean.forEach(function(cookieName){
+      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.megapersonals.eu';
+      document.cookie=cookieName+'=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=megapersonals.eu';
+    });
+  }
+  
+  e.stopImmediatePropagation();
   f.setAttribute("action",proxiedAction);
   f.setAttribute("method",f.getAttribute("method")||"POST");
 },true);
