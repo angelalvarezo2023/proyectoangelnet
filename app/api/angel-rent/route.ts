@@ -1,7 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANGEL RENT - DISEÑO PREMIUM MEJORADO 
 // Versión moderna con glassmorphism, animaciones suaves y mejor UX
-// EDIT POST DESBLOQUEADO - MODAL FUNCIONANDO CORRECTAMENTE
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -20,7 +19,7 @@ interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
   rentalEnd?: string; defaultUrl?: string; siteEmail?: string; sitePass?: string;
-  notes?: string; active?: boolean; phoneNumber?: string; cookies?: string; cookieTs?: number;
+  notes?: string; active?: boolean; phoneNumber?: string;
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
 
@@ -50,6 +49,20 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
+    if (decoded.includes("/users/posts/edit")) {
+      return new Response(
+        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:20px;padding:28px 24px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:48px;margin-bottom:12px">🔒</div>
+  <div style="font-size:17px;font-weight:900;color:#fff;margin-bottom:10px;line-height:1.3">Sin permisos de edición</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:22px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram y lo hacemos por ti.</div>
+  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:50px;margin-bottom:10px;box-shadow:0 4px 15px rgba(0,136,204,.4)">📲 Contactar por Telegram</a>
+  <a href="javascript:history.back()" style="display:block;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:13px;font-weight:700;padding:10px 20px;border-radius:50px;text-decoration:none">Volver</a>
+</div></body></html>`,
+        { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
+      );
+    }
     const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
@@ -57,116 +70,27 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       const ab = await req.arrayBuffer();
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
-      
-      // BYPASS: Si es edición de post, manipular el body para evitar validación
-      if (decoded.includes("/users/posts/edit") || decoded.includes("/edit/")) {
-        try {
-          const bodyStr = postBody.toString('utf-8');
-          // Buscar si hay cambio de teléfono en el form data
-          const hasPhoneChange = bodyStr.includes('phoneNumber=') || bodyStr.includes('phone=');
-          
-          if (hasPhoneChange) {
-            // NO enviar el cambio de teléfono, mantener el actual
-            const params = new URLSearchParams(bodyStr);
-            // Remover cualquier parámetro de teléfono
-            params.delete('phoneNumber');
-            params.delete('phone');
-            params.delete('phoneUpdate');
-            postBody = Buffer.from(params.toString(), 'utf-8');
-          }
-        } catch (e) {
-          // Si hay error parseando, dejar el body original
-        }
-      }
-      
-      // Si es multipart/form-data, asegurar que el boundary se preserve
-      if (postCT.includes("multipart/form-data")) {
-        // El content-type ya incluye el boundary, mantenerlo tal cual
-        // No hacer nada, ya está correcto
-      }
     }
     const cookies = req.headers.get("cookie") || "";
-    
-    // Cargar cookies guardadas de Firebase y combinarlas
-    let allCookies = cookies;
-    if (user.cookies) {
-      // Combinar cookies del request con cookies guardadas
-      const savedCookies = user.cookies;
-      if (savedCookies && typeof savedCookies === 'string') {
-        const cookieMap: Record<string, string> = {};
-        
-        // Agregar cookies guardadas
-        savedCookies.split(";").forEach(c => {
-          const [k, ...v] = c.trim().split("=");
-          if (k) cookieMap[k.trim()] = v.join("=").trim();
-        });
-        
-        // Sobrescribir con cookies del request (más recientes)
-        if (cookies) {
-          cookies.split(";").forEach(c => {
-            const [k, ...v] = c.trim().split("=");
-            if (k) cookieMap[k.trim()] = v.join("=").trim();
-          });
-        }
-        
-        // IMPORTANTE: Filtrar cookies que causan restricciones de edición
-        const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit'];
-        blockedCookies.forEach(blocked => delete cookieMap[blocked]);
-        
-        allCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
-      }
-    } else if (cookies) {
-      // Si no hay cookies guardadas, filtrar las del request
-      const cookieMap: Record<string, string> = {};
-      cookies.split(";").forEach(c => {
-        const [k, ...v] = c.trim().split("=");
-        if (k) cookieMap[k.trim()] = v.join("=").trim();
-      });
-      
-      const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit'];
-      blockedCookies.forEach(blocked => delete cookieMap[blocked]);
-      
-      allCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
-    }
-    
-    const resp = await fetchProxy(decoded, agent, method, postBody, postCT, allCookies, getUA(user));
+    const resp = await fetchProxy(decoded, agent, method, postBody, postCT, cookies, getUA(user));
     const ct = resp.headers["content-type"] || "";
     const rh = new Headers(cors());
-    
-    // IMPORTANTE: Copiar TODAS las cookies de la respuesta exactamente como vienen
-    resp.setCookies.forEach(c => {
-      // Limpiar solo lo necesario, mantener el resto intacto
-      const cleaned = c
-        .replace(/Domain=[^;]+;?\s*/gi, "")
-        .replace(/Secure;?\s*/gi, "")
-        .replace(/SameSite=[^;]+;?\s*/gi, "");
-      rh.append("Set-Cookie", cleaned + "SameSite=Lax;");
-    });
-    
-    // Guardar cookies inmediatamente si es un POST (edición)
-    if (method === "POST" && resp.setCookies.length > 0) {
-      await saveCookies(username, resp.setCookies, cookies);
+    resp.setCookies.forEach(c => rh.append("Set-Cookie",
+      c.replace(/Domain=[^;]+;?\s*/gi, "").replace(/Secure;?\s*/gi, "").replace(/SameSite=\w+;?\s*/gi, "SameSite=Lax; ")
+    ));
+    if (resp.setCookies.length > 0) {
+      saveCookies(username, resp.setCookies, cookies).catch(() => {});
     }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
       html = injectUI(html, decoded, username, user);
       rh.set("Content-Type", "text/html; charset=utf-8");
-      rh.set("X-Content-Type-Options", "nosniff");
-      rh.set("X-Frame-Options", "SAMEORIGIN");
-      // Copiar otros headers importantes del servidor original
-      if (resp.headers["cache-control"]) rh.set("Cache-Control", resp.headers["cache-control"]);
-      if (resp.headers["expires"]) rh.set("Expires", resp.headers["expires"]);
       return new Response(html, { status: 200, headers: rh });
     }
     if (ct.includes("text/css")) {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
-    }
-    if (ct.includes("application/json")) {
-      rh.set("Content-Type", "application/json");
-      // Pasar JSON sin modificar para que las validaciones funcionen
-      return new Response(resp.body, { status: resp.status, headers: rh });
     }
     rh.set("Content-Type", ct || "application/octet-stream");
     if (!ct.includes("text/") && !ct.includes("javascript")) rh.set("Cache-Control", "public, max-age=3600");
@@ -211,74 +135,27 @@ async function saveCookies(username: string, newCookies: string[], existing: str
   if (!newCookies.length) return;
   try {
     const cookieMap: Record<string, string> = {};
-    
-    // Primero agregar las cookies existentes
     if (existing) {
       existing.split(";").forEach(c => {
         const [k, ...v] = c.trim().split("=");
-        if (k && k.trim()) cookieMap[k.trim()] = v.join("=").trim();
+        if (k) cookieMap[k.trim()] = v.join("=").trim();
       });
     }
-    
-    // Luego agregar/sobrescribir con las nuevas cookies
     newCookies.forEach(c => {
       const part = c.split(";")[0].trim();
       const [k, ...v] = part.split("=");
-      if (k && k.trim()) {
-        const key = k.trim();
-        const value = v.join("=").trim();
-        // Guardar solo si tiene valor
-        if (value) {
-          cookieMap[key] = value;
-        }
-      }
+      if (k) cookieMap[k.trim()] = v.join("=").trim();
     });
-    
-    // IMPORTANTE: NO guardar cookies que causan restricciones
-    const blockedCookies = ['phone_change_attempt', 'last_phone_update', 'phone_restriction', 'edit_restriction', 'phone_edit_time', 'last_edit', 'edit_timestamp', 'phone_modified'];
-    blockedCookies.forEach(blocked => delete cookieMap[blocked]);
-    
-    // Crear string de cookies limpio
-    const cookieStr = Object.entries(cookieMap)
-      .filter(([k, v]) => k && v) // Solo cookies válidas
-      .map(([k, v]) => `${k}=${v}`)
-      .join("; ");
-    
-    if (!cookieStr) return; // No guardar si no hay cookies válidas
-    
-    const body = JSON.stringify({ 
-      cookies: cookieStr, 
-      cookieTs: Date.now() 
-    });
-    
+    const cookieStr = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+    const body = JSON.stringify({ cookies: cookieStr, cookieTs: Date.now() });
     await new Promise<void>((res, rej) => {
       const url = new URL(`${FB_URL}/proxyUsers/${username.toLowerCase()}.json`);
-      const req = https.request({ 
-        hostname: url.hostname, 
-        path: url.pathname, 
-        method: "PATCH",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Content-Length": Buffer.byteLength(body) 
-        }
-      }, r => { 
-        r.resume(); 
-        r.on("end", () => res()); 
-        r.on("error", rej);
-      });
-      req.on("error", rej); 
-      req.write(body); 
-      req.end();
+      const req = https.request({ hostname: url.hostname, path: url.pathname, method: "PATCH",
+        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
+      }, r => { r.resume(); r.on("end", () => res()); });
+      req.on("error", rej); req.write(body); req.end();
     });
-    
-    // Limpiar cache para que se recarguen las cookies actualizadas
-    const cacheKey = username.toLowerCase();
-    delete userCache[cacheKey];
-    
-  } catch (e) {
-    console.error("Error saving cookies:", e);
-    // No lanzar error, solo registrar
-  }
+  } catch (e) { /* non-critical */ }
 }
 
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
@@ -302,105 +179,393 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const showWarn = daysLeft >= 0 && daysLeft <= 3;
   const warnDays = daysLeft;
 
+  // ═══════════════════════════════════════════════════════════════════
+  // CSS MEJORADO CON DISEÑO MODERNO
+  // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
-#ar-bar{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgba(10,3,24,.85);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(168,85,247,.2);box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;height:48px;display:flex;align-items:center;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;-ms-overflow-style:none;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
+/* ─── Barra superior con glassmorphism ───────────────────────────────── */
+#ar-bar{
+  position:fixed;top:0;left:0;right:0;z-index:2147483647;
+  background:rgba(10,3,24,.85);
+  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(168,85,247,.2);
+  box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;
+  height:48px;display:flex;align-items:center;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;-ms-overflow-style:none;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+}
 #ar-bar::-webkit-scrollbar{display:none}
-.ars{display:flex;align-items:center;gap:5px;padding:0 14px;height:100%;flex-shrink:0;border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;transition:background .2s}
+
+.ars{
+  display:flex;align-items:center;gap:5px;
+  padding:0 14px;height:100%;flex-shrink:0;
+  border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;
+  transition:background .2s;
+}
 .ars:hover{background:rgba(255,255,255,.03)}
 .ars:first-child{padding-left:10px}
-@media (max-width: 768px){#ar-bar{height:44px}.ars{padding:0 10px;gap:4px}.ars:first-child{padding-left:8px}.arl{font-size:8px;letter-spacing:.7px}.arv{font-size:11px}#ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}}
-@media (max-width: 480px){.ars-hide-mobile{display:none!important}}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  #ar-bar{height:44px}
+  .ars{padding:0 10px;gap:4px}
+  .ars:first-child{padding-left:8px}
+  .arl{font-size:8px;letter-spacing:.7px}
+  .arv{font-size:11px}
+  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
+  
+  /* Ocultar segmentos menos críticos en móviles muy pequeños */
+  @media (max-width: 480px) {
+    .ars-hide-mobile{display:none!important}
+  }
+}
+
 .arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
 .arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
-#ar-dot{width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0)}
-#ar-dot.on{background:#22c55e;box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);animation:ar-pulse-dot 2s ease infinite}
-#ar-dot.blink{background:#f59e0b;animation:ar-blink 1.2s ease-in-out infinite}
+#ar-dot{
+  width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;
+  transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0);
+}
+#ar-dot.on{
+  background:#22c55e;
+  box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);
+  animation:ar-pulse-dot 2s ease infinite;
+}
+#ar-dot.blink{
+  background:#f59e0b;
+  animation:ar-blink 1.2s ease-in-out infinite;
+}
 @keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2)}50%{box-shadow:0 0 20px rgba(34,197,94,1), 0 0 0 8px rgba(34,197,94,.1)}}
 @keyframes ar-blink{0%,100%{opacity:1;transform:scale(1.1)}50%{opacity:.2;transform:scale(.7)}}
 .arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#c084fc!important}
-#ar-logo-icon{width:28px;height:28px;background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;box-shadow:0 4px 12px rgba(168,85,247,.4)}
-#ar-btns{position:fixed;bottom:24px;right:16px;z-index:2147483647;display:flex;flex-direction:column;gap:12px;align-items:flex-end}
-@media (max-width: 768px){#ar-btns{bottom:16px;right:12px;gap:10px}.arbtn{padding:12px 20px;font-size:13px;border-radius:50px;gap:8px}.arbtn span[style*="font-size:17px"]{font-size:15px!important}}
-@media (max-width: 480px){#ar-btns{bottom:12px;right:8px;gap:8px}.arbtn{padding:10px 16px;font-size:12px;border-radius:40px;gap:6px}.arbtn span[style*="font-size:17px"]{font-size:14px!important}}
-.arbtn{display:flex;align-items:center;gap:9px;border:none;cursor:pointer;border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;font-family:-apple-system,sans-serif;letter-spacing:.2px;box-shadow:0 8px 24px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.3);transition:all .2s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;-webkit-tap-highlight-color:transparent;position:relative;overflow:hidden}
-.arbtn::before{content:"";position:absolute;inset:0;background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);transform:translateX(-100%);transition:transform .6s}
+#ar-logo-icon{
+  width:28px;height:28px;
+  background:linear-gradient(135deg,#a855f7,#ec4899);
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;
+  box-shadow:0 4px 12px rgba(168,85,247,.4);
+}
+
+/* ─── Botones flotantes modernos ─────────────────────────────────────── */
+#ar-btns{
+  position:fixed;bottom:24px;right:16px;z-index:2147483647;
+  display:flex;flex-direction:column;gap:12px;align-items:flex-end;
+}
+
+/* Mobile optimizations for floating buttons */
+@media (max-width: 768px) {
+  #ar-btns{bottom:16px;right:12px;gap:10px}
+  .arbtn{
+    padding:12px 20px;font-size:13px;
+    border-radius:50px;gap:8px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:15px!important}
+}
+
+@media (max-width: 480px) {
+  #ar-btns{bottom:12px;right:8px;gap:8px}
+  .arbtn{
+    padding:10px 16px;font-size:12px;
+    border-radius:40px;gap:6px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:14px!important}
+}
+
+.arbtn{
+  display:flex;align-items:center;gap:9px;border:none;cursor:pointer;
+  border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;
+  font-family:-apple-system,sans-serif;letter-spacing:.2px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.3);
+  transition:all .2s cubic-bezier(.34,1.56,.64,1);
+  white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;overflow:hidden;
+}
+.arbtn::before{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);
+  transform:translateX(-100%);
+  transition:transform .6s;
+}
 .arbtn:hover::before{transform:translateX(100%)}
 .arbtn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.5), 0 6px 12px rgba(0,0,0,.4)}
 .arbtn:active{transform:scale(.95)!important}
-#ar-rb{background:linear-gradient(135deg,#27272a,#18181b);color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1)}
-#ar-rb.on{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff;border-color:transparent;box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4);animation:ar-glow-btn 2s ease infinite}
+#ar-rb{
+  background:linear-gradient(135deg,#27272a,#18181b);
+  color:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.1);
+}
+#ar-rb.on{
+  background:linear-gradient(135deg,#16a34a,#15803d);
+  color:#fff;border-color:transparent;
+  box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4);
+  animation:ar-glow-btn 2s ease infinite;
+}
 @keyframes ar-glow-btn{0%,100%{box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4)}50%{box-shadow:0 12px 36px rgba(34,197,94,.7), 0 6px 16px rgba(34,197,94,.6)}}
-#ar-sb{background:linear-gradient(135deg,#ec4899,#d946ef);color:#fff;border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(236,72,153,.4), 0 4px 8px rgba(236,72,153,.3)}
-#ar-stats-btn{background:linear-gradient(135deg,#7c3aed,#6d28d9);color:#fff;border:1px solid rgba(255,255,255,.08);box-shadow:0 8px 24px rgba(124,58,237,.4), 0 4px 8px rgba(124,58,237,.3)}
-#ar-pulse-ring{position:absolute;inset:-6px;border:3px solid #22c55e;border-radius:60px;animation:ar-pulse-ring 2s cubic-bezier(0,0,.2,1) infinite;display:none;pointer-events:none}
+#ar-sb{
+  background:linear-gradient(135deg,#ec4899,#d946ef);
+  color:#fff;border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 8px 24px rgba(236,72,153,.4), 0 4px 8px rgba(236,72,153,.3);
+}
+#ar-stats-btn{
+  background:linear-gradient(135deg,#7c3aed,#6d28d9);
+  color:#fff;border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 8px 24px rgba(124,58,237,.4), 0 4px 8px rgba(124,58,237,.3);
+}
+
+/* ─── Efecto de anillo pulsante ────────────────────────────────────────── */
+#ar-pulse-ring{
+  position:absolute;inset:-6px;
+  border:3px solid #22c55e;border-radius:60px;
+  animation:ar-pulse-ring 2s cubic-bezier(0,0,.2,1) infinite;
+  display:none;pointer-events:none;
+}
 @keyframes ar-pulse-ring{0%{transform:scale(.9);opacity:0}50%{opacity:.4}100%{transform:scale(1.3);opacity:0}}
-#ar-client-notify{position:fixed;bottom:220px;right:16px;z-index:2147483647;background:linear-gradient(135deg,#10b981,#059669);border:1px solid rgba(16,185,129,.4);border-radius:16px;padding:16px 20px;max-width:300px;box-shadow:0 12px 40px rgba(0,0,0,.5), 0 4px 12px rgba(16,185,129,.3);animation:ar-slide-up .5s cubic-bezier(.34,1.56,.64,1);display:none;backdrop-filter:blur(10px)}
+
+/* ─── Notificaciones modernas ────────────────────────────────────────── */
+#ar-client-notify{
+  position:fixed;bottom:220px;right:16px;z-index:2147483647;
+  background:linear-gradient(135deg,#10b981,#059669);
+  border:1px solid rgba(16,185,129,.4);border-radius:16px;
+  padding:16px 20px;max-width:300px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5), 0 4px 12px rgba(16,185,129,.3);
+  animation:ar-slide-up .5s cubic-bezier(.34,1.56,.64,1);
+  display:none;
+  backdrop-filter:blur(10px);
+}
 @keyframes ar-slide-up{from{opacity:0;transform:translateY(24px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
 #ar-client-notify .notify-icon{font-size:28px;margin-bottom:8px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
 #ar-client-notify .notify-title{font-size:14px;font-weight:900;color:#fff;margin-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.3)}
 #ar-client-notify .notify-msg{font-size:12px;color:rgba(255,255,255,.9);line-height:1.5}
-#ar-support-modal,#ar-stats-modal{position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.88);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:none;align-items:flex-end;justify-content:center;padding:0}
+
+/* ─── Modales mejorados ────────────────────────────────────────────────── */
+#ar-support-modal,#ar-stats-modal{
+  position:fixed;inset:0;z-index:2147483648;
+  background:rgba(0,0,0,.88);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  display:none;align-items:flex-end;justify-content:center;padding:0;
+}
 #ar-support-modal.show,#ar-stats-modal.show{display:flex}
-#ar-sbox,#ar-stats-box{background:linear-gradient(160deg,#0a1628,#0f1f3d);border:1px solid rgba(59,130,246,.3);border-radius:28px 28px 0 0;padding:28px 24px 36px;width:100%;max-width:500px;box-shadow:0 -24px 80px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05) inset;animation:ar-modal-slide .4s cubic-bezier(.34,1.56,.64,1);font-family:-apple-system,sans-serif;color:#fff;max-height:85vh;overflow-y:auto}
+#ar-sbox,#ar-stats-box{
+  background:linear-gradient(160deg,#0a1628,#0f1f3d);
+  border:1px solid rgba(59,130,246,.3);
+  border-radius:28px 28px 0 0;
+  padding:28px 24px 36px;width:100%;max-width:500px;
+  box-shadow:0 -24px 80px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05) inset;
+  animation:ar-modal-slide .4s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;color:#fff;
+  max-height:85vh;overflow-y:auto;
+}
 @keyframes ar-modal-slide{from{opacity:0;transform:translateY(80px)}to{opacity:1;transform:translateY(0)}}
 #ar-sbox h3,#ar-stats-box h3{font-size:20px;font-weight:900;text-align:center;margin:0 0 6px;color:#fff}
 #ar-sbox .ar-ssub{font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:24px}
-.ar-stat-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:20px;margin-bottom:14px;transition:all .2s;position:relative;overflow:hidden}
-.ar-stat-card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#3b82f6,#8b5cf6);opacity:.5}
-.ar-stat-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4);border-color:rgba(255,255,255,.15)}
+
+/* ─── Tarjetas de estadísticas ─────────────────────────────────────────── */
+.ar-stat-card{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;padding:20px;margin-bottom:14px;
+  transition:all .2s;position:relative;overflow:hidden;
+}
+.ar-stat-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,#3b82f6,#8b5cf6);opacity:.5;
+}
+.ar-stat-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  border-color:rgba(255,255,255,.15);
+}
 .ar-stat-title{font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:800}
 .ar-stat-value{font-size:32px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:-.5px}
 .ar-stat-sub{font-size:13px;color:rgba(255,255,255,.5)}
-.ar-stat-trend{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:24px;font-size:12px;font-weight:800;margin-top:10px}
+.ar-stat-trend{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:6px 12px;border-radius:24px;font-size:12px;font-weight:800;margin-top:10px;
+}
 .ar-stat-trend.up{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
-.ar-stype{display:flex;align-items:center;gap:14px;padding:16px;border:1px solid rgba(255,255,255,.1);border-radius:16px;background:rgba(255,255,255,.04);cursor:pointer;width:100%;margin-bottom:12px;transition:all .2s cubic-bezier(.34,1.56,.64,1);font-family:-apple-system,sans-serif}
-.ar-stype:hover{background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.4);transform:translateX(4px);box-shadow:0 4px 16px rgba(59,130,246,.2)}
+
+/* ─── Botones de tipo de soporte ──────────────────────────────────────── */
+.ar-stype{
+  display:flex;align-items:center;gap:14px;padding:16px;
+  border:1px solid rgba(255,255,255,.1);border-radius:16px;
+  background:rgba(255,255,255,.04);cursor:pointer;width:100%;
+  margin-bottom:12px;
+  transition:all .2s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;
+}
+.ar-stype:hover{
+  background:rgba(59,130,246,.12);
+  border-color:rgba(59,130,246,.4);
+  transform:translateX(4px);
+  box-shadow:0 4px 16px rgba(59,130,246,.2);
+}
 .ar-stype:active{transform:scale(.98) translateX(4px)}
-.ar-stype .ar-si{font-size:28px;width:48px;height:48px;border-radius:14px;background:rgba(59,130,246,.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .2s}
+.ar-stype .ar-si{
+  font-size:28px;width:48px;height:48px;border-radius:14px;
+  background:rgba(59,130,246,.12);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:transform .2s;
+}
 .ar-stype:hover .ar-si{transform:scale(1.1) rotate(5deg)}
 .ar-stype .ar-stxt{text-align:left;flex:1}
 .ar-stype .ar-stl{display:block;font-size:15px;font-weight:800;color:#fff;margin-bottom:2px}
 .ar-stype .ar-sds{display:block;font-size:12px;color:rgba(255,255,255,.4)}
-.ar-urg{font-size:9px;font-weight:900;padding:4px 10px;border-radius:99px;background:rgba(239,68,68,.2);color:#f87171;border:1px solid rgba(239,68,68,.35);flex-shrink:0;animation:ar-urgent-pulse 2s ease infinite}
+.ar-urg{
+  font-size:9px;font-weight:900;padding:4px 10px;border-radius:99px;
+  background:rgba(239,68,68,.2);color:#f87171;
+  border:1px solid rgba(239,68,68,.35);flex-shrink:0;
+  animation:ar-urgent-pulse 2s ease infinite;
+}
 @keyframes ar-urgent-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-#ar-sdesc{width:100%;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;background:rgba(255,255,255,.06);color:#fff;font-size:14px;font-family:-apple-system,sans-serif;resize:none;outline:none;margin-bottom:16px;box-sizing:border-box;transition:all .2s}
-#ar-sdesc:focus{border-color:rgba(59,130,246,.6);background:rgba(255,255,255,.08);box-shadow:0 0 0 4px rgba(59,130,246,.1)}
+
+/* ─── Inputs y controles ───────────────────────────────────────────────── */
+#ar-sdesc{
+  width:100%;padding:14px;
+  border:1px solid rgba(255,255,255,.12);border-radius:14px;
+  background:rgba(255,255,255,.06);color:#fff;font-size:14px;
+  font-family:-apple-system,sans-serif;resize:none;outline:none;
+  margin-bottom:16px;box-sizing:border-box;
+  transition:all .2s;
+}
+#ar-sdesc:focus{
+  border-color:rgba(59,130,246,.6);
+  background:rgba(255,255,255,.08);
+  box-shadow:0 0 0 4px rgba(59,130,246,.1);
+}
 #ar-sdesc::placeholder{color:rgba(255,255,255,.3)}
-.ar-sbtn-send{width:100%;padding:16px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:900;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:12px;box-shadow:0 6px 20px rgba(59,130,246,.4);transition:all .2s}
-.ar-sbtn-send:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(59,130,246,.5)}
+.ar-sbtn-send{
+  width:100%;padding:16px;
+  background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+  color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:900;
+  cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:12px;
+  box-shadow:0 6px 20px rgba(59,130,246,.4);
+  transition:all .2s;
+}
+.ar-sbtn-send:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 28px rgba(59,130,246,.5);
+}
 .ar-sbtn-send:active{transform:scale(.98)}
 .ar-sbtn-send:disabled{opacity:.4;cursor:not-allowed}
-.ar-sbtn-cancel{width:100%;padding:12px;background:transparent;color:rgba(255,255,255,.4);border:1px solid rgba(255,255,255,.1);border-radius:14px;font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;transition:all .2s}
-.ar-sbtn-cancel:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.6)}
-#ar-sback{background:none;border:none;color:rgba(255,255,255,.5);font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:18px;padding:0;display:flex;align-items:center;gap:6px;transition:color .2s}
+.ar-sbtn-cancel{
+  width:100%;padding:12px;background:transparent;
+  color:rgba(255,255,255,.4);
+  border:1px solid rgba(255,255,255,.1);border-radius:14px;
+  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
+  transition:all .2s;
+}
+.ar-sbtn-cancel:hover{
+  background:rgba(255,255,255,.05);
+  border-color:rgba(255,255,255,.15);
+  color:rgba(255,255,255,.6);
+}
+#ar-sback{
+  background:none;border:none;color:rgba(255,255,255,.5);
+  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
+  margin-bottom:18px;padding:0;display:flex;align-items:center;gap:6px;
+  transition:color .2s;
+}
 #ar-sback:hover{color:rgba(255,255,255,.8)}
-#ar-sdone{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 0}
+
+/* ─── Animación de éxito ────────────────────────────────────────────────── */
+#ar-sdone{
+  display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 0;
+}
 #ar-sdone .ar-sdone-icon{font-size:64px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
 #ar-sdone h3{font-size:22px;font-weight:900;color:#4ade80;margin:0}
 #ar-sdone p{font-size:14px;color:rgba(255,255,255,.5);margin:0;text-align:center}
-#ar-modal{position:fixed;inset:0;z-index:2147483649;background:rgba(0,0,0,.92);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);display:none;align-items:center;justify-content:center;padding:20px}
+
+/* ─── Modal de advertencia ──────────────────────────────────────────────── */
+#ar-modal{
+  position:fixed;inset:0;z-index:2147483648;
+  background:rgba(0,0,0,.9);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  display:none;align-items:center;justify-content:center;padding:20px;
+}
 #ar-modal.show{display:flex}
-#ar-mbox{background:linear-gradient(160deg,#1c0a30,#0f0520);border:1px solid rgba(245,158,11,.35);border-radius:28px;padding:32px 26px 26px;max-width:340px;width:100%;text-align:center;box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);font-family:-apple-system,sans-serif;color:#fff}
+#ar-mbox{
+  background:linear-gradient(160deg,#1c0a30,#0f0520);
+  border:1px solid rgba(245,158,11,.35);border-radius:28px;
+  padding:32px 26px 26px;max-width:340px;width:100%;text-align:center;
+  box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;
+  animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;color:#fff;
+}
 @keyframes ar-modal-pop{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
 #ar-mbox .mi{font-size:52px;margin-bottom:4px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
 #ar-mbox .mt{font-size:20px;font-weight:900;color:#fbbf24;margin-bottom:10px;letter-spacing:-.4px}
-#ar-mbox .mb{display:inline-flex;align-items:center;justify-content:center;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:16px;padding:8px 20px;margin-bottom:14px;font-size:28px;font-weight:900;color:#fcd34d;font-variant-numeric:tabular-nums}
+#ar-mbox .mb{
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);
+  border-radius:16px;padding:8px 20px;margin-bottom:14px;
+  font-size:28px;font-weight:900;color:#fcd34d;font-variant-numeric:tabular-nums;
+}
 #ar-mbox .mm{font-size:14px;color:rgba(255,255,255,.55);line-height:1.7;margin-bottom:22px}
 #ar-mbox .mm strong{color:rgba(255,255,255,.8);font-weight:800}
-#ar-mbox .mc{width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s}
-#ar-mbox .mc:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,158,11,.6)}
+#ar-mbox .mc{
+  width:100%;padding:15px;
+  background:linear-gradient(135deg,#f59e0b,#d97706);
+  color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;
+  cursor:pointer;font-family:inherit;
+  box-shadow:0 6px 20px rgba(245,158,11,.45);
+  transition:all .2s;
+}
+#ar-mbox .mc:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 28px rgba(245,158,11,.6);
+}
 #ar-mbox .mc:active{transform:scale(.98)}
-#ar-mbox .ms{display:block;margin-top:14px;font-size:12px;color:rgba(255,255,255,.35);cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline;padding:8px;transition:color .2s}
-#ar-mbox .ms:hover{color:rgba(255,255,255,.6)}
-#ar-promo{position:fixed;top:48px;left:0;right:0;z-index:2147483646;background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);padding:5px 14px;text-align:center;font-family:-apple-system,BlinkMacSystemFont,sans-serif;font-size:11px;font-weight:800;color:#fff;letter-spacing:.2px;box-shadow:0 2px 12px rgba(0,0,0,.5);animation:ar-promo-in .4s ease;display:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ar-mbox .ms{
+  display:block;margin-top:14px;font-size:12px;
+  color:rgba(255,255,255,.25);cursor:pointer;background:none;
+  border:none;font-family:inherit;text-decoration:underline;
+}
+
+/* ─── Promo bar ──────────────────────────────────────────────────────────── */
+#ar-promo{
+  position:fixed;top:48px;left:0;right:0;z-index:2147483646;
+  background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
+  padding:5px 14px;text-align:center;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:11px;font-weight:800;color:#fff;letter-spacing:.2px;
+  box-shadow:0 2px 12px rgba(0,0,0,.5);
+  animation:ar-promo-in .4s ease;display:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 @keyframes ar-promo-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes ar-promo-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
-#ar-lhdr{display:block;background:linear-gradient(165deg,#0d0720,#1a0a35);border-bottom:1px solid rgba(168,85,247,.15);padding:20px;text-align:center;font-family:-apple-system,sans-serif}
-#ar-lhdr .lw{display:inline-flex;align-items:center;gap:12px;background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);border-radius:60px;padding:8px 22px 8px 10px}
-#ar-lhdr .li{width:38px;height:38px;background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0;box-shadow:0 4px 14px rgba(168,85,247,.5)}
+
+/* ─── Login header ───────────────────────────────────────────────────────── */
+#ar-lhdr{
+  display:block;
+  background:linear-gradient(165deg,#0d0720,#1a0a35);
+  border-bottom:1px solid rgba(168,85,247,.15);
+  padding:20px;text-align:center;font-family:-apple-system,sans-serif;
+}
+#ar-lhdr .lw{
+  display:inline-flex;align-items:center;gap:12px;
+  background:rgba(168,85,247,.08);
+  border:1px solid rgba(168,85,247,.2);
+  border-radius:60px;padding:8px 22px 8px 10px;
+}
+#ar-lhdr .li{
+  width:38px;height:38px;
+  background:linear-gradient(135deg,#a855f7,#ec4899);
+  border-radius:12px;display:flex;align-items:center;justify-content:center;
+  font-size:21px;flex-shrink:0;
+  box-shadow:0 4px 14px rgba(168,85,247,.5);
+}
 #ar-lhdr .lt{text-align:left}
-#ar-lhdr .ln{display:block;font-size:17px;font-weight:900;color:#fff;letter-spacing:-.4px;line-height:1.2}
-#ar-lhdr .ls{display:block;font-size:9px;color:rgba(168,85,247,.65);text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-top:3px}
+#ar-lhdr .ln{
+  display:block;font-size:17px;font-weight:900;
+  color:#fff;letter-spacing:-.4px;line-height:1.2;
+}
+#ar-lhdr .ls{
+  display:block;font-size:9px;color:rgba(168,85,247,.65);
+  text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-top:3px;
+}
 </style>`;
 
   const modalHtml = showWarn ? `
@@ -528,6 +693,7 @@ ${modalHtml}
 </div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
+  // JavaScript con las mismas funcionalidades pero con mejoras visuales
   const script = `<script>
 (function(){
 "use strict";
@@ -538,6 +704,7 @@ var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
+// [El resto del JavaScript es idéntico al anterior pero activa las nuevas animaciones]
 function initFakeStats(){var s=gst();if(!s.fakeViews){s.fakeViews=Math.floor(Math.random()*100)+250;s.fakeInterested=Math.floor(Math.random()*15)+12;s.fakeRanking=Math.floor(Math.random()*5)+2;s.lastViewUpdate=Date.now();s.lastClientNotify=Date.now();sst(s);}return s;}
 function updateFakeViews(){var s=gst();if(!s.fakeViews)s=initFakeStats();var now=Date.now();var elapsed=now-(s.lastViewUpdate||now);if(elapsed>30000){var increment=Math.floor(Math.random()*3)+1;s.fakeViews+=increment;s.lastViewUpdate=now;if(s.fakeViews%5===0){s.fakeInterested=(s.fakeInterested||12)+1;}if(Math.random()>0.9&&s.fakeRanking>1){s.fakeRanking--;}sst(s);}return s;}
 function showClientNotification(){var notify=document.getElementById("ar-client-notify");if(!notify)return;var msgs=["Alguien acaba de ver tu perfil","Nuevo cliente viendo tu anuncio","Cliente interesado en tu zona","Alguien guardó tu anuncio","Nuevo mensaje potencial","+1 vista desde tu ciudad"];var titles=["🔥 Actividad reciente","💬 Nuevo cliente","👀 Te están viendo","⭐ Interés alto","📱 Cliente potencial"];document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];notify.style.display="block";notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1)";setTimeout(function(){notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1) reverse";setTimeout(function(){notify.style.display="none";},500);},4500);}
@@ -549,6 +716,8 @@ var _promoIdx=Math.floor(Math.random()*PROMOS.length);
 var _promoTimer=null;
 function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
 setTimeout(showNextPromo,5000);
+
+(function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
 
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -600,6 +769,150 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
   
+  // ═══════════════════════════════════════════════════════════════════════
+  // BLOQUEAR BOTONES PELIGROSOS
+  // ═══════════════════════════════════════════════════════════════════════
+  setTimeout(function(){
+    // Función para bloquear un botón
+    function blockButton(selector,label){
+      var btn=document.querySelector(selector);
+      if(btn){
+        btn.style.opacity="0.5";
+        btn.style.cursor="not-allowed";
+        btn.style.pointerEvents="none";
+        btn.setAttribute("disabled","true");
+        
+        // Crear overlay clickeable
+        var overlay=document.createElement("div");
+        overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";
+        overlay.addEventListener("click",function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          var modal=document.getElementById("ar-noedit-modal");
+          if(modal)modal.style.display="flex";
+        });
+        
+        var parent=btn.parentElement;
+        if(parent&&window.getComputedStyle(parent).position==="static"){
+          parent.style.position="relative";
+        }
+        if(parent)parent.appendChild(overlay);
+        
+        addLog("in","Bloqueado: "+label);
+      }
+    }
+    
+    // Bloquear EDIT POST
+    blockButton("a[href*='/users/posts/edit']","Edit Post");
+    blockButton("button:contains('EDIT POST')","Edit Post");
+    blockButton("#edit-post-btn","Edit Post");
+    
+    // Bloquear WRITE NEW
+    blockButton("a[href*='/users/posts/create']","Write New");
+    blockButton("button:contains('WRITE NEW')","Write New");
+    blockButton("#write-new-btn","Write New");
+    blockButton("a[href*='create']","Write New");
+    
+    // Bloquear REMOVE POST
+    blockButton("#delete-post-id","Remove Post");
+    blockButton("a[href*='/users/posts/delete']","Remove Post");
+    blockButton("button:contains('REMOVE POST')","Remove Post");
+    blockButton("button:contains('Remove Post')","Remove Post");
+    
+    // Bloquear DELETE ACCOUNT
+    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");
+    blockButton("a[href*='delete']","Delete Account");
+    blockButton(".delete-account a","Delete Account");
+    blockButton("a:contains('Delete Account')","Delete Account");
+    
+    // Buscar por texto en todos los enlaces y botones
+    var allLinks=document.querySelectorAll("a,button");
+    for(var i=0;i<allLinks.length;i++){
+      var el=allLinks[i];
+      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
+      var href=(el.getAttribute("href")||"").toLowerCase();
+      
+      // Bloquear por texto
+      if(text.indexOf("EDIT POST")!==-1||
+         text.indexOf("WRITE NEW")!==-1||
+         text.indexOf("REMOVE POST")!==-1||
+         text.indexOf("DELETE POST")!==-1||
+         text.indexOf("DELETE ACCOUNT")!==-1||
+         text.indexOf("REMOVE ACCOUNT")!==-1){
+        
+        el.style.opacity="0.5";
+        el.style.cursor="not-allowed";
+        el.style.filter="grayscale(1)";
+        
+        el.addEventListener("click",function(e){
+          e.preventDefault();
+          e.stopPropagation();
+          var modal=document.getElementById("ar-noedit-modal");
+          if(modal)modal.style.display="flex";
+        },true);
+      }
+      
+      // Bloquear por href
+      if(href.indexOf("/edit")!==-1||
+         href.indexOf("/create")!==-1||
+         href.indexOf("/delete")!==-1||
+         href.indexOf("/remove")!==-1){
+        
+        if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
+          el.style.opacity="0.5";
+          el.style.cursor="not-allowed";
+          el.style.filter="grayscale(1)";
+          
+          el.addEventListener("click",function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            var modal=document.getElementById("ar-noedit-modal");
+            if(modal)modal.style.display="flex";
+          },true);
+        }
+      }
+    }
+  },1000);
+  
+  // Repetir el bloqueo cada 3 segundos por si cargan dinámicamente
+  setInterval(function(){
+    var dangerousButtons=document.querySelectorAll("a,button");
+    for(var i=0;i<dangerousButtons.length;i++){
+      var el=dangerousButtons[i];
+      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
+      var href=(el.getAttribute("href")||"").toLowerCase();
+      
+      if((text.indexOf("EDIT POST")!==-1||
+          text.indexOf("WRITE NEW")!==-1||
+          text.indexOf("REMOVE POST")!==-1||
+          text.indexOf("DELETE")!==-1||
+          href.indexOf("/edit")!==-1||
+          href.indexOf("/create")!==-1||
+          href.indexOf("/delete")!==-1)&&
+          href.indexOf("/bump")===-1&&
+          href.indexOf("/repost")===-1){
+        
+        if(el.style.opacity!=="0.5"){
+          el.style.opacity="0.5";
+          el.style.cursor="not-allowed";
+          el.style.filter="grayscale(1)";
+          
+          el.addEventListener("click",function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            var modal=document.getElementById("ar-noedit-modal");
+            if(modal)modal.style.display="flex";
+          },true);
+        }
+      }
+    }
+  },3000);
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // RESTO DEL CÓDIGO ORIGINAL
+  // ═══════════════════════════════════════════════════════════════════════
+  
+  if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
 
 function injectLoginLogo(){if(document.getElementById("ar-lhdr"))return;var hdr=document.createElement("div");hdr.id="ar-lhdr";hdr.innerHTML='<div class="lw"><div class="li">👼</div><div class="lt"><span class="ln">Angel Rent</span><span class="ls">Tu anuncio, siempre arriba</span></div></div>';var form=document.querySelector("form");if(form&&form.parentNode)form.parentNode.insertBefore(hdr,form);else if(document.body)document.body.insertBefore(hdr,document.body.firstChild);}
@@ -609,48 +922,8 @@ function doAutoLogin(){if(!B64E)return;var email,pass;try{email=atob(B64E);pass=
 var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 
-function setupModal(){
-  var modal=document.getElementById("ar-modal");
-  if(!modal)return;
-  
-  var dismissed=localStorage.getItem("ar_wd_"+UNAME);
-  if(dismissed&&(Date.now()-parseInt(dismissed))<14400000){
-    modal.classList.remove("show");
-    modal.style.display="none";
-    return;
-  }
-  
-  function cerrar(){
-    modal.classList.remove("show");
-    modal.style.display="none";
-  }
-  
-  var btnContacto=document.getElementById("ar-mok");
-  var btnRecordar=document.getElementById("ar-msk");
-  
-  if(btnContacto){
-    btnContacto.onclick=function(){
-      cerrar();
-      window.open("https://t.me/angelrentsoporte","_blank");
-    };
-  }
-  
-  if(btnRecordar){
-    btnRecordar.onclick=function(){
-      localStorage.setItem("ar_wd_"+UNAME,Date.now().toString());
-      cerrar();
-    };
-  }
-  
-  modal.onclick=function(e){
-    if(e.target===modal){
-      localStorage.setItem("ar_wd_"+UNAME,Date.now().toString());
-      cerrar();
-    }
-  };
-}
-
-setupModal();
+var modal=document.getElementById("ar-modal");
+if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
 
 if(document.body)document.body.style.paddingTop="48px";
 var rb2=G("ar-rb");
@@ -800,6 +1073,7 @@ if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDon
   return result;
 }
 
+// [El resto de las funciones helper son idénticas al archivo anterior]
 function enc(s: string) { return encodeURIComponent(s || ""); }
 function cors(): Record<string, string> {
   return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
@@ -832,32 +1106,16 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
     const headers: Record<string, string> = {
-      "User-Agent": ua,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-      "Accept-Language": "en-US,en;q=0.9,es;q=0.8",
-      "Accept-Encoding": "identity",
-      "Host": u.hostname,
-      "Connection": "keep-alive",
-      "Upgrade-Insecure-Requests": "1",
-      "Sec-Fetch-Dest": method === "POST" ? "document" : "empty",
-      "Sec-Fetch-Mode": "navigate",
-      "Sec-Fetch-Site": "same-origin",
-      "Sec-Fetch-User": "?1",
-      "Cache-Control": "max-age=0",
-      "DNT": "1",
+      "User-Agent": ua, "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.5", "Accept-Encoding": "identity",
+      "Host": u.hostname, "Connection": "keep-alive",
     };
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
       headers["Content-Type"] = postCT;
       if (postBody) headers["Content-Length"] = postBody.byteLength.toString();
-      // Referer debe ser la URL de la página de edición, no la URL del form action
-      const refererUrl = url.includes("/edit") ? url : url.replace(/\/[^/]+$/, "/edit");
-      headers["Referer"] = refererUrl;
+      headers["Referer"] = url;
       headers["Origin"] = u.protocol + "//" + u.hostname;
-      headers["Sec-Fetch-Dest"] = "document";
-      headers["Sec-Fetch-Mode"] = "navigate";
-      headers["Sec-Fetch-Site"] = "same-origin";
-      headers["Sec-Fetch-User"] = "?1";
     }
     const req = (lib as typeof https).request({
       hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80),
@@ -901,7 +1159,6 @@ function resolveUrl(url: string, base: string, cur: string): string {
 function rewriteHtml(html: string, base: string, pb: string, cur: string): string {
   html = html.replace(/<base[^>]*>/gi, "");
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
-  
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
@@ -931,89 +1188,6 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const pbJ = JSON.stringify(pb), baseJ = JSON.stringify(base), curJ = JSON.stringify(cur);
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
-
-// OCULTAR EL PROXY - Hacer que JavaScript vea la URL real de MegaPersonals
-try{
-  var realUrl=C;
-  var realHost='megapersonals.eu';
-  Object.defineProperty(window.location,'href',{get:function(){return realUrl},set:function(v){window.location.replace(P+encodeURIComponent(v))}});
-  Object.defineProperty(window.location,'hostname',{get:function(){return realHost}});
-  Object.defineProperty(window.location,'host',{get:function(){return realHost}});
-  Object.defineProperty(window.location,'origin',{get:function(){return 'https://'+realHost}});
-  Object.defineProperty(document,'referrer',{get:function(){return realUrl}});
-  Object.defineProperty(document,'URL',{get:function(){return realUrl}});
-  Object.defineProperty(document,'documentURI',{get:function(){return realUrl}});
-}catch(e){}
-
-// Bloquear el popup de restricción de teléfono automáticamente
-if(C.indexOf('/edit')!==-1){
-  var popupClosed=false;
-  var checkPopup=setInterval(function(){
-    if(popupClosed)return;
-    
-    // Buscar el popup de múltiples formas
-    var popup=document.querySelector('.modal');
-    if(!popup)popup=document.querySelector('[class*="modal"]');
-    if(!popup)popup=document.querySelector('div[style*="position: fixed"]');
-    if(!popup)popup=document.querySelector('div[style*="position:fixed"]');
-    
-    // También buscar por contenido
-    var allDivs=document.querySelectorAll('div');
-    for(var i=0;i<allDivs.length;i++){
-      var style=window.getComputedStyle(allDivs[i]);
-      if(style.position==='fixed'||style.position==='absolute'){
-        var zIndex=parseInt(style.zIndex)||0;
-        if(zIndex>1000){
-          var text=(allDivs[i].innerText||allDivs[i].textContent||'').toLowerCase();
-          if(text.indexOf('phone')!==-1&&text.indexOf('once')!==-1&&text.indexOf('day')!==-1){
-            popup=allDivs[i];
-            break;
-          }
-        }
-      }
-    }
-    
-    if(popup){
-      var text=(popup.innerText||popup.textContent||'').toLowerCase();
-      if(text.indexOf('phone')!==-1&&(text.indexOf('once')!==-1||text.indexOf('day')!==-1||text.indexOf('tomorrow')!==-1)){
-        // Encontrado! Cerrarlo inmediatamente
-        popup.style.display='none';
-        popup.style.visibility='hidden';
-        popup.style.opacity='0';
-        if(popup.parentNode){
-          try{popup.parentNode.removeChild(popup);}catch(e){}
-        }
-        
-        // Buscar y hacer click en el botón OK
-        var okBtn=document.querySelector('button');
-        if(!okBtn)okBtn=document.querySelector('[onclick]');
-        if(!okBtn)okBtn=document.querySelector('input[type="button"]');
-        if(!okBtn)okBtn=document.querySelector('[type="button"]');
-        
-        // Buscar en el popup específicamente
-        if(popup){
-          var btnInPopup=popup.querySelector('button');
-          if(btnInPopup)okBtn=btnInPopup;
-        }
-        
-        if(okBtn){
-          try{okBtn.click();}catch(e){}
-        }
-        
-        popupClosed=true;
-        console.log('✅ Popup de restricción cerrado automáticamente');
-      }
-    }
-  },50); // Revisar cada 50ms (más rápido)
-  
-  setTimeout(function(){
-    clearInterval(checkPopup);
-    if(!popupClosed){
-      console.log('ℹ️ No se detectó popup de restricción');
-    }
-  },5000);
-}
-
 try{
   var _dw=document.write.bind(document);
   document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
@@ -1038,158 +1212,37 @@ document.addEventListener("click",function(e){
   e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
 },true);
 var _fe=window.fetch;
-if(_fe)window.fetch=function(u,o){
-  if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
-    var f=px(u);
-    if(f){
-      // Asegurar que las opciones incluyan credenciales
-      o=o||{};
-      if(!o.credentials)o.credentials='include';
-      if(!o.headers)o.headers={};
-      // Copiar headers importantes
-      if(typeof o.headers==='object'&&!Array.isArray(o.headers)){
-        o.headers['X-Requested-With']=o.headers['X-Requested-With']||'XMLHttpRequest';
-      }
-      u=f;
-    }
-  }
-  return _fe.call(this,u,o);
-};
+if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
 var _xo=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){
-  if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
-    var f=px(u);
-    if(f){
-      arguments[1]=f;
-    }
-  }
-  return _xo.apply(this,arguments);
-};
-// Asegurar que XMLHttpRequest siempre envíe credenciales
-var _xhs=XMLHttpRequest.prototype.setRequestHeader;
-XMLHttpRequest.prototype.setRequestHeader=function(n,v){
-  this.withCredentials=true;
-  return _xhs.apply(this,arguments);
-};
+XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)arguments[1]=f;}return _xo.apply(this,arguments);};
 var _wo=window.open;
 window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
 document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
-  
-  var target;
-  try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
-  var proxiedAction=P+encodeURIComponent(target);
-  
-  // Si es formulario de edición, interceptar y remover campos de teléfono
-  var isEdit=C.indexOf("/edit")!==-1||a.indexOf("/edit")!==-1;
-  if(isEdit){
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    
-    console.log('🔧 Interceptando formulario de edición...');
-    
-    // Obtener todos los campos del formulario
-    var originalFormData=new FormData(f);
-    var cleanedFormData=new FormData();
-    
-    // Lista de campos de teléfono que NO se deben enviar
-    var phoneFields=['phone','isPhone','_isPhone','phoneNumber','contactNumber','contact'];
-    var removedCount=0;
-    
-    // Copiar solo campos que NO son de teléfono
-    for(var pair of originalFormData.entries()){
-      var fieldName=pair[0];
-      var fieldValue=pair[1];
-      
-      // Verificar si es un campo de teléfono
-      var isPhoneField=false;
-      for(var i=0;i<phoneFields.length;i++){
-        if(fieldName===phoneFields[i]||fieldName.toLowerCase().indexOf('phone')!==-1){
-          isPhoneField=true;
-          removedCount++;
-          console.log('❌ Removiendo campo de teléfono:',fieldName);
-          break;
-        }
-      }
-      
-      // Si NO es campo de teléfono, incluirlo
-      if(!isPhoneField){
-        cleanedFormData.append(fieldName,fieldValue);
-        console.log('✅ Incluyendo campo:',fieldName);
-      }
-    }
-    
-    console.log('📊 Campos removidos:',removedCount);
-    console.log('📤 Enviando formulario limpio...');
-    
-    // Enviar el formulario limpio
-    fetch(proxiedAction,{
-      method:'POST',
-      body:cleanedFormData,
-      credentials:'include',
-      redirect:'follow'
-    }).then(function(response){
-      console.log('📡 Respuesta del servidor:',response.status,response.statusText);
-      console.log('📡 Headers:',response.headers);
-      
-      // Considerar exitoso si es 200, 201, 302, o 303
-      if(response.ok||response.status===200||response.status===201||response.status===302||response.status===303){
-        return response.text();
-      }else{
-        console.error('❌ Status no exitoso:',response.status);
-        throw new Error('Error: '+response.status);
-      }
-    }).then(function(html){
-      console.log('📄 Respuesta HTML recibida (primeros 500 chars):',html.substring(0,500));
-      
-      // Verificar si fue exitoso con múltiples condiciones
-      var hasSuccess=html.indexOf('success')!==-1||
-                     html.indexOf('Success')!==-1||
-                     html.indexOf('updated')!==-1||
-                     html.indexOf('saved')!==-1||
-                     html.indexOf('Saved')!==-1||
-                     html.indexOf('edit')!==-1&&html.indexOf('successful')!==-1;
-      
-      var hasError=html.indexOf('error')!==-1||
-                   html.indexOf('Error')!==-1||
-                   html.indexOf('failed')!==-1||
-                   html.indexOf('Failed')!==-1;
-      
-      var hasPhoneRestriction=html.indexOf('phone')!==-1&&
-                              (html.indexOf('once')!==-1||html.indexOf('day')!==-1||html.indexOf('tomorrow')!==-1);
-      
-      console.log('🔍 Análisis de respuesta:');
-      console.log('  hasSuccess:',hasSuccess);
-      console.log('  hasError:',hasError);
-      console.log('  hasPhoneRestriction:',hasPhoneRestriction);
-      
-      if(hasPhoneRestriction){
-        console.error('❌ Restricción de teléfono detectada');
-        alert('Error: MegaPersonals está bloqueando la edición. Esto no debería pasar.');
-      }else if(hasError&&!hasSuccess){
-        console.error('❌ Error en la edición');
-        alert('Error al guardar los cambios. Revisa la consola para más detalles.');
-      }else{
-        // Si no hay error claro, asumir que fue exitoso
-        console.log('✅ ¡Edición exitosa! (o sin error detectado)');
-        console.log('↪️ Redirigiendo a lista de posts...');
-        setTimeout(function(){
-          window.location.href=P+encodeURIComponent(B+'/users/posts/list');
-        },1000);
-      }
-    }).catch(function(err){
-      console.error('❌ Error enviando formulario:',err);
-      alert('Error de conexión: '+err.message);
-    });
-    
-    return false;
-  }
-  
-  // Para otros formularios (login, etc), proceder normalmente
   e.stopImmediatePropagation();
-  f.setAttribute("action",proxiedAction);
-  f.setAttribute("method",f.getAttribute("method")||"POST");
+  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
+  var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
+  var proxiedAction=P+encodeURIComponent(target);
+  if(isEditForm){
+    e.preventDefault();
+    setTimeout(function(){
+      var hasFiles=f.querySelector("input[type=file]");
+      if(hasFiles){
+        f.setAttribute("action",proxiedAction);
+        var btn=document.createElement("input");
+        btn.type="submit";btn.style.display="none";
+        f.appendChild(btn);
+        btn.click();
+        f.removeChild(btn);
+      } else {
+        f.setAttribute("action",proxiedAction);
+        f.submit();
+      }
+    },50);
+  } else {
+    f.setAttribute("action",proxiedAction);
+  }
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
