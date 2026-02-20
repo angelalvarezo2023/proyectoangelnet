@@ -176,10 +176,19 @@ export default function AngelRentAdmin() {
     const key = form.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!key) { alert("Username inválido"); return; }
 
-    // Compute rentalEnd from days + hours
+    // ═══════════════════════════════════════════════════════════════════
+    // ✅ CÁLCULO CORRECTO DE FECHA (igual que MegaBot)
+    // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
-    const rentalEnd = new Date(Date.now() + days * 86400000 + hours * 3600000).toISOString().split("T")[0];
+    
+    // Crear fecha desde ahora
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + days);
+    newDate.setHours(newDate.getHours() + hours);
+    
+    // Extraer solo la fecha (sin hora) en formato YYYY-MM-DD
+    const rentalEnd = newDate.toISOString().split("T")[0];
     const rentalStart = new Date().toISOString().split("T")[0];
 
     // Determine userAgentKey from deviceType
