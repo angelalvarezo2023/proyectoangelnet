@@ -20,7 +20,7 @@ interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
   rentalEnd?: string; defaultUrl?: string; siteEmail?: string; sitePass?: string;
-  notes?: string; active?: boolean; phoneNumber?: string;
+  notes?: string; active?: boolean; phoneNumber?: string; cookies?: string; cookieTs?: number;
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
 
@@ -57,16 +57,58 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       const ab = await req.arrayBuffer();
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
+      
+      // Si es multipart/form-data, asegurar que el boundary se preserve
+      if (postCT.includes("multipart/form-data")) {
+        // El content-type ya incluye el boundary, mantenerlo tal cual
+        // No hacer nada, ya está correcto
+      }
     }
     const cookies = req.headers.get("cookie") || "";
-    const resp = await fetchProxy(decoded, agent, method, postBody, postCT, cookies, getUA(user));
+    
+    // Cargar cookies guardadas de Firebase y combinarlas
+    let allCookies = cookies;
+    if (user.cookies) {
+      // Combinar cookies del request con cookies guardadas
+      const savedCookies = user.cookies;
+      if (savedCookies && typeof savedCookies === 'string') {
+        const cookieMap: Record<string, string> = {};
+        
+        // Agregar cookies guardadas
+        savedCookies.split(";").forEach(c => {
+          const [k, ...v] = c.trim().split("=");
+          if (k) cookieMap[k.trim()] = v.join("=").trim();
+        });
+        
+        // Sobrescribir con cookies del request (más recientes)
+        if (cookies) {
+          cookies.split(";").forEach(c => {
+            const [k, ...v] = c.trim().split("=");
+            if (k) cookieMap[k.trim()] = v.join("=").trim();
+          });
+        }
+        
+        allCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+      }
+    }
+    
+    const resp = await fetchProxy(decoded, agent, method, postBody, postCT, allCookies, getUA(user));
     const ct = resp.headers["content-type"] || "";
     const rh = new Headers(cors());
-    resp.setCookies.forEach(c => rh.append("Set-Cookie",
-      c.replace(/Domain=[^;]+;?\s*/gi, "").replace(/Secure;?\s*/gi, "").replace(/SameSite=\w+;?\s*/gi, "SameSite=Lax; ")
-    ));
-    if (resp.setCookies.length > 0) {
-      saveCookies(username, resp.setCookies, cookies).catch(() => {});
+    
+    // IMPORTANTE: Copiar TODAS las cookies de la respuesta exactamente como vienen
+    resp.setCookies.forEach(c => {
+      // Limpiar solo lo necesario, mantener el resto intacto
+      const cleaned = c
+        .replace(/Domain=[^;]+;?\s*/gi, "")
+        .replace(/Secure;?\s*/gi, "")
+        .replace(/SameSite=[^;]+;?\s*/gi, "");
+      rh.append("Set-Cookie", cleaned + "SameSite=Lax;");
+    });
+    
+    // Guardar cookies inmediatamente si es un POST (edición)
+    if (method === "POST" && resp.setCookies.length > 0) {
+      await saveCookies(username, resp.setCookies, cookies);
     }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
@@ -132,27 +174,70 @@ async function saveCookies(username: string, newCookies: string[], existing: str
   if (!newCookies.length) return;
   try {
     const cookieMap: Record<string, string> = {};
+    
+    // Primero agregar las cookies existentes
     if (existing) {
       existing.split(";").forEach(c => {
         const [k, ...v] = c.trim().split("=");
-        if (k) cookieMap[k.trim()] = v.join("=").trim();
+        if (k && k.trim()) cookieMap[k.trim()] = v.join("=").trim();
       });
     }
+    
+    // Luego agregar/sobrescribir con las nuevas cookies
     newCookies.forEach(c => {
       const part = c.split(";")[0].trim();
       const [k, ...v] = part.split("=");
-      if (k) cookieMap[k.trim()] = v.join("=").trim();
+      if (k && k.trim()) {
+        const key = k.trim();
+        const value = v.join("=").trim();
+        // Guardar solo si tiene valor
+        if (value) {
+          cookieMap[key] = value;
+        }
+      }
     });
-    const cookieStr = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
-    const body = JSON.stringify({ cookies: cookieStr, cookieTs: Date.now() });
+    
+    // Crear string de cookies limpio
+    const cookieStr = Object.entries(cookieMap)
+      .filter(([k, v]) => k && v) // Solo cookies válidas
+      .map(([k, v]) => `${k}=${v}`)
+      .join("; ");
+    
+    if (!cookieStr) return; // No guardar si no hay cookies válidas
+    
+    const body = JSON.stringify({ 
+      cookies: cookieStr, 
+      cookieTs: Date.now() 
+    });
+    
     await new Promise<void>((res, rej) => {
       const url = new URL(`${FB_URL}/proxyUsers/${username.toLowerCase()}.json`);
-      const req = https.request({ hostname: url.hostname, path: url.pathname, method: "PATCH",
-        headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) }
-      }, r => { r.resume(); r.on("end", () => res()); });
-      req.on("error", rej); req.write(body); req.end();
+      const req = https.request({ 
+        hostname: url.hostname, 
+        path: url.pathname, 
+        method: "PATCH",
+        headers: { 
+          "Content-Type": "application/json", 
+          "Content-Length": Buffer.byteLength(body) 
+        }
+      }, r => { 
+        r.resume(); 
+        r.on("end", () => res()); 
+        r.on("error", rej);
+      });
+      req.on("error", rej); 
+      req.write(body); 
+      req.end();
     });
-  } catch (e) { /* non-critical */ }
+    
+    // Limpiar cache para que se recarguen las cookies actualizadas
+    const cacheKey = username.toLowerCase();
+    delete userCache[cacheKey];
+    
+  } catch (e) {
+    console.error("Error saving cookies:", e);
+    // No lanzar error, solo registrar
+  }
 }
 
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
@@ -724,9 +809,14 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
     if (method === "POST" && postCT) {
       headers["Content-Type"] = postCT;
       if (postBody) headers["Content-Length"] = postBody.byteLength.toString();
-      headers["Referer"] = url;
+      // Referer debe ser la URL de la página de edición, no la URL del form action
+      const refererUrl = url.includes("/edit") ? url : url.replace(/\/[^/]+$/, "/edit");
+      headers["Referer"] = refererUrl;
       headers["Origin"] = u.protocol + "//" + u.hostname;
       headers["Sec-Fetch-Dest"] = "document";
+      headers["Sec-Fetch-Mode"] = "navigate";
+      headers["Sec-Fetch-Site"] = "same-origin";
+      headers["Sec-Fetch-User"] = "?1";
     }
     const req = (lib as typeof https).request({
       hostname: u.hostname, port: u.port || (u.protocol === "https:" ? 443 : 80),
@@ -770,10 +860,6 @@ function resolveUrl(url: string, base: string, cur: string): string {
 function rewriteHtml(html: string, base: string, pb: string, cur: string): string {
   html = html.replace(/<base[^>]*>/gi, "");
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
-  
-  // Eliminar cualquier referencia a proxies o túneles en el HTML
-  html = html.replace(/proxy/gi, "direct");
-  html = html.replace(/tunnel/gi, "direct");
   
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
@@ -865,17 +951,15 @@ XMLHttpRequest.prototype.open=function(m,u){
     var f=px(u);
     if(f){
       arguments[1]=f;
-      // Agregar headers importantes después de open
-      var self=this;
-      var _send=self.send;
-      self.send=function(data){
-        self.setRequestHeader('X-Requested-With','XMLHttpRequest');
-        self.withCredentials=true;
-        return _send.call(self,data);
-      };
     }
   }
   return _xo.apply(this,arguments);
+};
+// Asegurar que XMLHttpRequest siempre envíe credenciales
+var _xhs=XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader=function(n,v){
+  this.withCredentials=true;
+  return _xhs.apply(this,arguments);
 };
 var _wo=window.open;
 window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
@@ -883,84 +967,18 @@ document.addEventListener("submit",function(e){
   var f=e.target,a=f.getAttribute("action")||"";
   if(a.indexOf("/api/angel-rent")!==-1)return;
   
-  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1||a.indexOf("/edit")!==-1;
-  var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
+  // NO prevenir default, dejar que el form se envíe naturalmente
+  e.stopImmediatePropagation();
+  
+  var target;
+  try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
   var proxiedAction=P+encodeURIComponent(target);
   
-  // Para formularios de edición, hacerlos parecer navegación normal
-  if(isEditForm){
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    
-    // Copiar el form data
-    var formData=new FormData(f);
-    var hasFiles=f.querySelector("input[type=file]");
-    
-    setTimeout(function(){
-      if(hasFiles){
-        // Si hay archivos, usar el método tradicional
-        f.setAttribute("action",proxiedAction);
-        f.setAttribute("method","POST");
-        var btn=document.createElement("input");
-        btn.type="submit";btn.style.display="none";
-        f.appendChild(btn);
-        btn.click();
-        f.removeChild(btn);
-      } else {
-        // Si no hay archivos, usar fetch para mejor control
-        var params=new URLSearchParams();
-        for(var pair of formData.entries()){
-          params.append(pair[0],pair[1]);
-        }
-        
-        fetch(proxiedAction,{
-          method:'POST',
-          headers:{
-            'Content-Type':'application/x-www-form-urlencoded',
-          },
-          body:params.toString(),
-          credentials:'include',
-          redirect:'follow'
-        }).then(function(response){
-          return response.text();
-        }).then(function(html){
-          if(html.indexOf('success')!==-1||html.indexOf('Success')!==-1){
-            window.location.href=P+encodeURIComponent(B+'/users/posts/list');
-          }else{
-            document.open();
-            document.write(html);
-            document.close();
-          }
-        }).catch(function(err){
-          console.error('Form error:',err);
-          f.setAttribute("action",proxiedAction);
-          f.submit();
-        });
-      }
-    },50);
-  } else {
-    // Otros formularios (login, etc)
-    e.stopImmediatePropagation();
-    f.setAttribute("action",proxiedAction);
-  }
+  // Simplemente cambiar el action y dejar que el browser lo maneje
+  f.setAttribute("action",proxiedAction);
+  f.setAttribute("method",f.getAttribute("method")||"POST");
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
-
-// Interceptar addEventListener para eventos que puedan estar validando el origen
-var _ael=EventTarget.prototype.addEventListener;
-EventTarget.prototype.addEventListener=function(type,listener,options){
-  if(type==='change'||type==='input'||type==='blur'){
-    var wrappedListener=function(e){
-      // Asegurar que el evento parezca venir del dominio correcto
-      try{
-        Object.defineProperty(e,'origin',{get:function(){return 'https://megapersonals.eu'}});
-      }catch(x){}
-      return listener.call(this,e);
-    };
-    return _ael.call(this,type,wrappedListener,options);
-  }
-  return _ael.call(this,type,listener,options);
-};
 })();<\/script>`;
 
   return html.match(/<head[^>]*>/i) ? html.replace(/<head[^>]*>/i, (m) => m + zl) : zl + html;
