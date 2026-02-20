@@ -257,10 +257,10 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-mbox .mb{display:inline-flex;align-items:center;justify-content:center;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);border-radius:16px;padding:8px 20px;margin-bottom:14px;font-size:28px;font-weight:900;color:#fcd34d;font-variant-numeric:tabular-nums}
 #ar-mbox .mm{font-size:14px;color:rgba(255,255,255,.55);line-height:1.7;margin-bottom:22px}
 #ar-mbox .mm strong{color:rgba(255,255,255,.8);font-weight:800}
-#ar-mbox .mc{width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s;position:relative;z-index:1}
+#ar-mbox .mc{width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s;position:relative;z-index:1;pointer-events:auto;-webkit-tap-highlight-color:transparent}
 #ar-mbox .mc:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,158,11,.6)}
 #ar-mbox .mc:active{transform:scale(.98)}
-#ar-mbox .ms{display:block;width:100%;margin-top:14px;padding:12px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;font-family:inherit;font-weight:600;transition:all .2s;position:relative;z-index:1}
+#ar-mbox .ms{display:block;width:100%;margin-top:14px;padding:12px;font-size:13px;color:rgba(255,255,255,.6);cursor:pointer;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;font-family:inherit;font-weight:600;transition:all .2s;position:relative;z-index:1;pointer-events:auto;-webkit-tap-highlight-color:transparent}
 #ar-mbox .ms:hover{background:rgba(255,255,255,.1);color:rgba(255,255,255,.9);border-color:rgba(255,255,255,.2)}
 #ar-mbox .ms:active{transform:scale(.98)}
 @media (max-width: 768px){
@@ -457,7 +457,7 @@ function doAutoLogin(){if(!B64E)return;var email,pass;try{email=atob(B64E);pass=
 var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 var modal=document.getElementById("ar-modal");
-if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
+if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 4*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();modal.style.display="none";modal.classList.remove("show");window.open("https://t.me/angelrentsoporte","_blank");},true);if(msk)msk.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());},true);modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
 if(document.body)document.body.style.paddingTop="48px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
