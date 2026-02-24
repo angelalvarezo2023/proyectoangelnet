@@ -45,8 +45,14 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
     if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
-    if (user.rentalEnd && new Date() > new Date(user.rentalEnd + "T23:59:59"))
-      return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
+    // Calcular expiración: el día rentalEnd expira a las 00:00:00 del día SIGUIENTE
+    if (user.rentalEnd) {
+      const expirationDate = new Date(user.rentalEnd + "T00:00:00");
+      expirationDate.setDate(expirationDate.getDate() + 1); // Añadir 1 día
+      if (new Date() > expirationDate) {
+        return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
+      }
+    }
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
     if (decoded.includes("/users/posts/edit")) {
@@ -160,12 +166,21 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
+  
+  // Calcular timestamp de expiración: 00:00:00 del día SIGUIENTE a rentalEnd
+  let endTimestamp = 0;
+  if (user.rentalEnd) {
+    const expDate = new Date(user.rentalEnd + "T00:00:00");
+    expDate.setDate(expDate.getDate() + 1); // Añadir 1 día
+    endTimestamp = expDate.getTime();
+  }
+  
   const V = {
     pb:    JSON.stringify(pb),
     cur:   JSON.stringify(curUrl),
     uname: JSON.stringify(username),
     name:  JSON.stringify(user.name || username),
-    endTs: user.rentalEnd ? String(new Date(user.rentalEnd + "T23:59:59").getTime()) : "0",
+    endTs: String(endTimestamp),
     b64e:  JSON.stringify(Buffer.from(user.siteEmail || "").toString("base64")),
     b64p:  JSON.stringify(Buffer.from(user.sitePass  || "").toString("base64")),
     phone: JSON.stringify(user.phoneNumber || ""),
@@ -174,7 +189,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   let daysLeft = 999;
   if (user.rentalEnd) {
-    daysLeft = Math.ceil((new Date(user.rentalEnd + "T23:59:59").getTime() - Date.now()) / 86400000);
+    // Calcular días restantes usando el mismo timestamp
+    daysLeft = Math.floor((endTimestamp - Date.now()) / 86400000);
   }
   const showWarn = daysLeft >= 0 && daysLeft <= 3;
   const warnDays = daysLeft;
@@ -725,7 +741,67 @@ function p2(n){return String(n).padStart(2,"0");}
 function fmtR(ms){if(ms===null)return"∞";if(ms<=0)return"EXP";var d=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000),m=Math.floor((ms%3600000)/60000);if(d>0)return d+"d "+h+"h";if(h>0)return h+"h "+m+"m";return m+"m";}
 function G(id){return document.getElementById(id);}
 
-function updateUI(){var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;if(G("ar-uname"))G("ar-uname").textContent=DNAME;var rl=rentLeft(),re=G("ar-rent");if(re){re.textContent=fmtR(rl);re.className="arv";re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");}var dot=G("ar-dot");if(dot){dot.className="";if(on&&!paused)dot.className="on";else if(on&&paused)dot.className="blink";}var st=G("ar-status");if(st){if(!on){st.textContent="OFF";st.style.color="rgba(255,255,255,.3)";}else if(paused){st.textContent="Pausado";st.style.color="#f59e0b";}else{st.textContent="Activo";st.style.color="#22c55e";}}var cdSeg=G("ar-cdseg");if(on&&!paused){if(cdSeg)cdSeg.style.display="";var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);}else if(cdSeg)cdSeg.style.display="none";var cntSeg=G("ar-cntseg");if(on){if(cntSeg)cntSeg.style.display="";if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);}else if(cntSeg)cntSeg.style.display="none";var rb=G("ar-rb");if(rb){rb.className=on?"arbtn on":"arbtn";if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";}updateFakeUI();}
+function updateUI(){
+  var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
+  
+  // Actualizar nombre de usuario
+  if(G("ar-uname"))G("ar-uname").textContent=DNAME;
+  
+  // SIEMPRE actualizar tiempo de renta (esto se ejecuta cada segundo)
+  var rl=rentLeft(),re=G("ar-rent");
+  if(re){
+    re.textContent=fmtR(rl);
+    re.className="arv";
+    re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");
+  }
+  
+  // Actualizar estado del robot
+  var dot=G("ar-dot");
+  if(dot){
+    dot.className="";
+    if(on&&!paused)dot.className="on";
+    else if(on&&paused)dot.className="blink";
+  }
+  
+  var st=G("ar-status");
+  if(st){
+    if(!on){
+      st.textContent="OFF";
+      st.style.color="rgba(255,255,255,.3)";
+    }else if(paused){
+      st.textContent="Pausado";
+      st.style.color="#f59e0b";
+    }else{
+      st.textContent="Activo";
+      st.style.color="#22c55e";
+    }
+  }
+  
+  // Contador de próximo bump
+  var cdSeg=G("ar-cdseg");
+  if(on&&!paused){
+    if(cdSeg)cdSeg.style.display="";
+    var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
+    if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);
+  }else if(cdSeg)cdSeg.style.display="none";
+  
+  // Contador de bumps
+  var cntSeg=G("ar-cntseg");
+  if(on){
+    if(cntSeg)cntSeg.style.display="";
+    if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
+  }else if(cntSeg)cntSeg.style.display="none";
+  
+  // Botón del robot
+  var rb=G("ar-rb");
+  if(rb){
+    rb.className=on?"arbtn on":"arbtn";
+    if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
+  }
+  
+  // Actualizar estadísticas falsas
+  updateFakeUI();
+}
 
 function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
 function goList(ms){setTimeout(function(){window.location.href=PLIST;},ms||1500);}
@@ -737,7 +813,16 @@ function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.ma
 
 async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
 
-function startTick(){if(TICK)return;TICK=setInterval(function(){var s=gst();if(!s.on||s.paused)return;updateUI();if(s.nextAt>0&&Date.now()>=s.nextAt)doBump();},1000);}
+function startTick(){
+  if(TICK)return;
+  TICK=setInterval(function(){
+    var s=gst();
+    // Solo ejecutar el bump automático si el robot está ON
+    if(s.on && !s.paused && s.nextAt>0 && Date.now()>=s.nextAt){
+      doBump();
+    }
+  },1000);
+}
 
 function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
 
