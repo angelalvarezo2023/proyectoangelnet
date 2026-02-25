@@ -72,14 +72,20 @@ const BLANK = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ FUNCIÓN CORREGIDA - Cálculo preciso de días restantes
+// ✅ FUNCIÓN CORREGIDA - Cálculo exacto igual que route.ts
 // ═══════════════════════════════════════════════════════════════════════════
 function rentalDays(u: User) {
   if (!u.rentalEnd) return 9999;
-  // Usar T00:00:00 en lugar de T23:59:59 para evitar añadir ~24h extra
-  const endDate = new Date(u.rentalEnd + "T00:00:00");
-  const diffMs = endDate.getTime() - Date.now();
-  return Math.ceil(diffMs / 86400000);
+  
+  // Crear fecha de expiración: 00:00:00 del día SIGUIENTE (igual que route.ts)
+  const expirationDate = new Date(u.rentalEnd + "T00:00:00");
+  expirationDate.setDate(expirationDate.getDate() + 1); // Añadir 1 día
+  
+  // Calcular diferencia en milisegundos
+  const diffMs = expirationDate.getTime() - Date.now();
+  
+  // Usar Math.floor para redondear hacia abajo (no Math.ceil)
+  return Math.floor(diffMs / 86400000);
 }
 
 // ─── small reusable input ───────────────────────────────────────────────────
@@ -159,8 +165,10 @@ export default function AngelRentAdmin() {
       setRentDays(String(u.rentalDays));
       setRentHours(String(u.rentalHours));
     } else if (u.rentalEnd) {
-      // Fallback: calcular desde la fecha (método antiguo, menos preciso)
-      const diff = Math.max(0, new Date(u.rentalEnd + "T00:00:00").getTime() - Date.now());
+      // Fallback: calcular desde la fecha usando la MISMA lógica que rentalDays()
+      const expDate = new Date(u.rentalEnd + "T00:00:00");
+      expDate.setDate(expDate.getDate() + 1);
+      const diff = Math.max(0, expDate.getTime() - Date.now());
       setRentDays(String(Math.floor(diff / 86400000)));
       setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
     } else { 
@@ -177,7 +185,7 @@ export default function AngelRentAdmin() {
     if (!key) { alert("Username inválido"); return; }
 
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CORRECTO DE FECHA (igual que MegaBot)
+    // ✅ CÁLCULO CORRECTO DE FECHA (igual que route.ts)
     // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
