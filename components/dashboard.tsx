@@ -7,127 +7,12 @@ import {
   PauseIcon,
   PlayIcon,
   RefreshIcon,
-  EditIcon,
   ClockIcon,
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { NotificationSettings } from "@/components/notification-settings";
-import { CitySelector } from "@/components/CitySelector";
 import { TicketModal, TicketStatusBadge } from "@/components/ticket-system";
 
-// =====================================================================
-// TIPOS DEL FLUJO DE EDICIÓN UNIFICADO
-// =====================================================================
-type EditStep =
-  | "idle"
-  | "editing"
-  | "saving"
-  | "waiting_bot"
-  | "waiting_captcha"
-  | "captcha"
-  | "submitting_captcha"
-  | "finishing"
-  | "complete"
-  | "error";
-
-const EDIT_STEPS_CONFIG = [
-  { key: "editing", icon: "✏️", label: "Editar", shortLabel: "1" },
-  { key: "saving", icon: "💾", label: "Guardando", shortLabel: "2" },
-  { key: "captcha", icon: "🔐", label: "Captcha", shortLabel: "3" },
-  { key: "complete", icon: "✅", label: "Listo", shortLabel: "4" },
-] as const;
-
-function getStepIndex(step: EditStep): number {
-  switch (step) {
-    case "editing": return 0;
-    case "saving":
-    case "waiting_bot": return 1;
-    case "waiting_captcha":
-    case "captcha":
-    case "submitting_captcha":
-    case "finishing": return 2;
-    case "complete": return 3;
-    case "error": return -1;
-    default: return -1;
-  }
-}
-
-// =====================================================================
-// STEPPER VISUAL
-// =====================================================================
-function EditStepper({ currentStep }: { currentStep: EditStep }) {
-  const currentIndex = getStepIndex(currentStep);
-  const isError = currentStep === "error";
-  return (
-    <div className="px-4 sm:px-6 py-4 sm:py-5">
-      <div className="flex items-center justify-between relative">
-        <div className="absolute top-5 left-[10%] right-[10%] h-0.5 bg-white/10 z-0" />
-        <div
-          className="absolute top-5 left-[10%] h-0.5 bg-gradient-to-r from-pink-500 to-purple-500 z-0 transition-all duration-700 ease-out"
-          style={{
-            width: isError ? "0%" : `${Math.min(100, (currentIndex / (EDIT_STEPS_CONFIG.length - 1)) * 80)}%`,
-          }}
-        />
-        {EDIT_STEPS_CONFIG.map((step, index) => {
-          const isCompleted = !isError && currentIndex > index;
-          const isActive = !isError && currentIndex === index;
-          const isPending = isError || currentIndex < index;
-          return (
-            <div key={step.key} className="flex flex-col items-center relative z-10 flex-1">
-              <div
-                className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold border-2 transition-all duration-500",
-                  isCompleted && "bg-gradient-to-br from-green-500 to-emerald-500 border-green-400 text-white shadow-lg shadow-green-500/30 scale-100",
-                  isActive && "bg-gradient-to-br from-pink-500 to-purple-500 border-pink-400 text-white shadow-lg shadow-pink-500/40 scale-110 animate-pulse",
-                  isPending && "bg-white/5 border-white/20 text-white/30"
-                )}
-              >
-                {isCompleted ? "✓" : step.icon}
-              </div>
-              <span
-                className={cn(
-                  "mt-2 text-[11px] sm:text-xs font-bold tracking-wide transition-colors duration-300",
-                  isCompleted && "text-green-400",
-                  isActive && "text-pink-400",
-                  isPending && "text-white/30"
-                )}
-              >
-                {step.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-4 text-center">
-        <p className={cn(
-          "text-sm font-semibold transition-all duration-300",
-          isError ? "text-red-400" :
-          currentStep === "editing" ? "text-white/70" :
-          currentStep === "saving" || currentStep === "waiting_bot" ? "text-yellow-400" :
-          currentStep === "waiting_captcha" ? "text-orange-400" :
-          currentStep === "captcha" ? "text-pink-400" :
-          currentStep === "submitting_captcha" || currentStep === "finishing" ? "text-blue-400" :
-          currentStep === "complete" ? "text-green-400" : "text-white/50"
-        )}>
-          {currentStep === "editing" && "Modifica los campos que desees cambiar"}
-          {currentStep === "saving" && "Enviando cambios al sistema..."}
-          {currentStep === "waiting_bot" && "El bot está procesando tu edición..."}
-          {currentStep === "waiting_captcha" && "Esperando captcha..."}
-          {currentStep === "captcha" && "Ingresa el código de seguridad"}
-          {currentStep === "submitting_captcha" && "Verificando código..."}
-          {currentStep === "finishing" && "Esperando momento de republicar..."}
-          {currentStep === "complete" && "¡Cambios guardados exitosamente!"}
-          {currentStep === "error" && "Hubo un error, intenta de nuevo"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================================
-// DASHBOARD PRINCIPAL
-// =====================================================================
 interface DashboardProps {
   searchResult: SearchResult;
   onClose: () => void;
@@ -181,22 +66,8 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const [liveData, setLiveData] = useState(searchResult);
   const [actionLoading, setActionLoading] = useState(false);
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
-  const [showSavedMessage, setShowSavedMessage] = useState(false);
   const [showNotificationSettings, setShowNotificationSettings] = useState(false);
-  const [showCitySelector, setShowCitySelector] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
-
-  const [editStep, setEditStep] = useState<EditStep>("idle");
-  const [editError, setEditError] = useState("");
-  const [captchaCode, setCaptchaCode] = useState("");
-  const [editForm, setEditForm] = useState({
-    name: "",
-    age: "",
-    headline: "",
-    body: "",
-    city: "",
-    location: "",
-  });
 
   const [autoPauseSeconds, setAutoPauseSeconds] = useState(
     searchResult.fullData.autoPauseInfo?.secondsUntilPause || 0
@@ -204,38 +75,11 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
 
   const commandInProgressRef = useRef(false);
   const previousRepublishRef = useRef<BrowserData["republishStatus"] | null>(null);
-  const previousEditInProgressRef = useRef<boolean>(false);
   const lastActionTimeRef = useRef<number>(0);
   const lastSuccessMessageTimeRef = useRef<number>(0);
-  const editStepRef = useRef<EditStep>("idle");
-  const [editLogDismissed, setEditLogDismissed] = useState(false);
-  const lastEditLogRef = useRef<string | undefined>(undefined);
-
-  useEffect(() => {
-    editStepRef.current = editStep;
-  }, [editStep]);
 
   const browserName = liveData.browserName;
   const FIREBASE_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
-
-  const clearEditLog = useCallback(async () => {
-    try {
-      await Promise.all([
-        fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-        fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-      ]);
-    } catch {}
-  }, [browserName]);
-
-  const setFirebaseField = useCallback(async (field: string, value: any) => {
-    try {
-      await fetch(`${FIREBASE_URL}/browsers/${browserName}/${field}.json`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(value),
-      });
-    } catch {}
-  }, [browserName]);
 
   const postId = liveData.type === "multi" ? liveData.postId : undefined;
   const currentIsPaused = liveData.isPaused ?? false;
@@ -248,19 +92,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
   const postName = liveData.postName;
   const postUrl = liveData.type === "multi" && liveData.postData ? liveData.postData.postUrl : liveData.fullData.postUrl;
   const postIdCaptured = liveData.type === "multi" && liveData.postData ? liveData.postData.postIdCapturedAt : liveData.fullData.postIdCapturedAt;
-  const name = liveData.type === "multi" && liveData.postData ? liveData.postData.name : liveData.fullData.name;
-  const age = liveData.type === "multi" && liveData.postData ? liveData.postData.age : liveData.fullData.age;
-  const headline = liveData.type === "multi" && liveData.postData ? liveData.postData.headline : liveData.fullData.headline;
-  const body = liveData.type === "multi" && liveData.postData ? liveData.postData.body : liveData.fullData.body;
-  const editInProgress = liveData.fullData.editInProgress;
-  const editLog = liveData.fullData.editLog;
-  const editLogType = liveData.fullData.editLogType;
-  const captchaWaiting = liveData.fullData.captchaWaiting;
-  const captchaImage = liveData.fullData.captchaImage;
   const manuallyCreated = liveData.fullData.manuallyCreated;
-
-  const isEditActive = editStep !== "idle";
-  const canEdit = !editInProgress && !isEditActive;
 
   // History principal
   useEffect(() => {
@@ -270,18 +102,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [onClose]);
 
-  // History edición
-  useEffect(() => {
-    if (editStep !== "editing") return;
-    window.history.pushState({ editSessionOpen: true }, "");
-    const handlePopState = () => {
-      if (editStepRef.current !== "idle") handleCancelEdit();
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, [editStep === "editing"]);
-
-  // Countdown republicación - Corregido
+  // Countdown republicación
   useEffect(() => {
     if (!republishStatus) return;
     if (currentIsPaused) return;
@@ -335,52 +156,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         previousRepublishRef.current = newData.republishStatus;
       }
 
-      const step = editStepRef.current;
-
-      if (newData.captchaWaiting &&
-          (step === "saving" || step === "waiting_bot" || step === "waiting_captcha" || step === "finishing")) {
-        setEditStep("captcha");
-        setCaptchaCode("");
-      }
-
-      if (!newData.captchaWaiting && step === "submitting_captcha") {
-        setEditStep("finishing");
-      }
-
-      if (newData.editInProgress && step === "saving") {
-        setEditStep("waiting_bot");
-      }
-
-      if (!newData.editInProgress && !newData.captchaWaiting) {
-        if (step === "finishing") {
-          setEditStep("complete");
-          Promise.all([
-            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-          ]).catch(() => {});
-        }
-        if (step === "waiting_bot") {
-          setEditStep("waiting_captcha");
-        }
-        if (step === "saving") {
-          setTimeout(() => {
-            const currentStep = editStepRef.current;
-            if (currentStep === "saving") {
-              setEditStep("waiting_captcha");
-            }
-          }, 5000);
-        }
-      }
-
-      if (!newData.editInProgress && !newData.captchaWaiting && step === "idle" && newData.editLog) {
-        setTimeout(() => {
-          Promise.all([
-            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLog.json`, { method: "DELETE" }),
-            fetch(`${FIREBASE_URL}/browsers/${browserName}/editLogType.json`, { method: "DELETE" }),
-          ]).catch(() => {});
-        }, 3000);
-      }
-
       if (liveData.type === "single") {
         setLiveData({
           ...liveData,
@@ -412,31 +187,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     return () => unsubscribe();
   }, [browserName, liveData.type, liveData.postId]);
 
-  // Auto-close complete
-  useEffect(() => {
-    if (editStep === "complete") {
-      clearEditLog();
-      setFirebaseField("editInProgress", false);
-      const timer = setTimeout(() => {
-        setEditStep("idle");
-        setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-        setCaptchaCode("");
-        setEditError("");
-        setShowSavedMessage(true);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-
-    if (editStep === "waiting_captcha") {
-      const timer = setTimeout(() => {
-        if (editStepRef.current === "waiting_captcha") {
-          console.log("[Dashboard]: waiting_captcha timeout 3min — still waiting");
-        }
-      }, 180000);
-      return () => clearTimeout(timer);
-    }
-  }, [editStep, clearEditLog, setFirebaseField]);
-
   // Timers mensajes
   useEffect(() => {
     if (showSuccessMessage) {
@@ -444,40 +194,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
       return () => clearTimeout(timer);
     }
   }, [showSuccessMessage]);
-
-  useEffect(() => {
-    if (showSavedMessage) {
-      const timer = setTimeout(() => setShowSavedMessage(false), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [showSavedMessage]);
-
-  // Auto-dismiss editLog
-  useEffect(() => {
-    if (editLog !== lastEditLogRef.current) {
-      lastEditLogRef.current = editLog;
-      if (editLog) {
-        setEditLogDismissed(false);
-      }
-    }
-    if (editLog && !editLogDismissed && !isEditActive) {
-      const timer = setTimeout(() => {
-        setEditLogDismissed(true);
-        clearEditLog();
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [editLog, editLogDismissed, isEditActive, clearEditLog]);
-
-  // Detect editInProgress → saved
-  useEffect(() => {
-    const wasEditing = previousEditInProgressRef.current;
-    const isEditingNow = editInProgress;
-    if (wasEditing && !isEditingNow && editStep === "idle") {
-      setShowSavedMessage(true);
-    }
-    previousEditInProgressRef.current = isEditingNow;
-  }, [editInProgress, editStep]);
 
   // Debounce
   const debounce = useCallback((callback: () => void, delay: number = 500): boolean => {
@@ -488,9 +204,9 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
     return true;
   }, []);
 
-  // Handler PAUSAR / REANUDAR - Corregido
+  // Handler PAUSAR / REANUDAR
   const handleTogglePause = useCallback(async () => {
-    if (commandInProgressRef.current || actionLoading || isEditActive) return;
+    if (commandInProgressRef.current || actionLoading) return;
 
     debounce(async () => {
       const newPauseState = !currentIsPaused;
@@ -529,11 +245,11 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         commandInProgressRef.current = false;
       }
     });
-  }, [currentIsPaused, browserName, postId, debounce, actionLoading, isEditActive]);
+  }, [currentIsPaused, browserName, postId, debounce, actionLoading]);
 
   // Handler Republicar
   const handleRepublish = useCallback(async () => {
-    if (commandInProgressRef.current || actionLoading || currentIsPaused || isEditActive) return;
+    if (commandInProgressRef.current || actionLoading || currentIsPaused) return;
     debounce(async () => {
       setActionLoading(true);
       commandInProgressRef.current = true;
@@ -553,145 +269,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         }, 1000);
       }
     });
-  }, [browserName, debounce, actionLoading, currentIsPaused, isEditActive]);
-
-  // Handler Abrir Editor
-  const handleOpenEditor = async () => {
-    try {
-      await fetch(`${FIREBASE_URL}/commands/${browserName}.json`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "bring_to_front", timestamp: Date.now() }),
-      });
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    } catch {}
-    setEditForm({
-      name: name || "",
-      age: age ? String(age) : "",
-      headline: headline || "",
-      body: body || "",
-      city: city || "",
-      location: location || "",
-    });
-    setEditError("");
-    setCaptchaCode("");
-    setEditStep("editing");
-  };
-
-  // Handler Guardar Edits
-  const handleSaveAllEdits = async () => {
-    if (editStep !== "editing") return;
-    const changes: Record<string, string> = {};
-    if (editForm.name.trim() && editForm.name.trim() !== (name || "")) changes.name = editForm.name.trim();
-    if (editForm.age.trim() && editForm.age.trim() !== String(age || "")) changes.age = editForm.age.trim();
-    if (editForm.headline.trim() && editForm.headline.trim() !== (headline || "")) changes.headline = editForm.headline.trim();
-    if (editForm.body.trim() && editForm.body.trim() !== (body || "")) changes.body = editForm.body.trim();
-    if (editForm.city.trim() && editForm.city.trim() !== (city || "")) changes.city = editForm.city.trim();
-    if (editForm.location.trim() && editForm.location.trim() !== (location || "")) changes.location = editForm.location.trim();
-
-    if (Object.keys(changes).length === 0) {
-      setEditError("No has realizado ningun cambio. Modifica los campos que quieras actualizar.");
-      return;
-    }
-
-    if (changes.age) {
-      const ageNum = Number.parseInt(changes.age);
-      if (Number.isNaN(ageNum) || ageNum < 18 || ageNum > 99) {
-        setEditError("Edad debe ser entre 18 y 99");
-        return;
-      }
-    }
-    if (changes.headline && changes.headline.length > 250) {
-      setEditError(`Encabezado muy largo (${changes.headline.length}/250)`);
-      return;
-    }
-    if (changes.body && changes.body.length > 2000) {
-      setEditError(`Cuerpo muy largo (${changes.body.length}/2000)`);
-      return;
-    }
-
-    setEditError("");
-    setEditStep("saving");
-
-    try {
-      const payload: Record<string, any> = { changes };
-      if (postId) payload.postId = postId;
-      const result = await FirebaseAPI.sendCommand(browserName, "edit_multiple_fields", payload);
-      if (!result.success) {
-        setEditError(`Error: ${result.error}`);
-        setEditStep("error");
-        setTimeout(() => {
-          if (editStepRef.current === "error") setEditStep("editing");
-        }, 3000);
-      }
-    } catch {
-      setEditError("Error de conexión al enviar los cambios");
-      setEditStep("error");
-      setTimeout(() => {
-        if (editStepRef.current === "error") setEditStep("editing");
-      }, 3000);
-    }
-  };
-
-  // Handler Captcha Submit
-  const handleCaptchaSubmit = async () => {
-    if (!captchaCode.trim()) {
-      setEditError("Escribe el codigo de seguridad");
-      return;
-    }
-    if (editStep !== "captcha") return;
-    setEditError("");
-    setEditStep("submitting_captcha");
-    try {
-      const result = await FirebaseAPI.sendCommand(browserName, "submit_captcha", {
-        code: captchaCode.trim(),
-      });
-      if (!result.success) {
-        setEditError(`Error: ${result.error}`);
-        setEditStep("captcha");
-      }
-    } catch {
-      setEditError("Error de conexión al enviar el captcha");
-      setEditStep("captcha");
-    }
-  };
-
-  // Handler Captcha Refresh
-  const [captchaRefreshing, setCaptchaRefreshing] = useState(false);
-  const handleCaptchaRefresh = async () => {
-    if (captchaRefreshing) return;
-    setCaptchaRefreshing(true);
-    try {
-      await FirebaseAPI.sendCommand(browserName, "refresh_captcha", {});
-      setTimeout(() => setCaptchaRefreshing(false), 5000);
-    } catch {
-      setCaptchaRefreshing(false);
-    }
-  };
-
-  // Handler Cancelar Edición
-  const handleCancelEdit = async () => {
-    try {
-      await FirebaseAPI.sendCommand(browserName, "cancel_edit", {});
-      await clearEditLog();
-    } catch {}
-    setEditStep("idle");
-    setEditForm({ name: "", age: "", headline: "", body: "", city: "", location: "" });
-    setCaptchaCode("");
-    setEditError("");
-    setEditLogDismissed(true);
-  };
-
-  // Handlers campos
-  const handleFieldChange = (field: keyof typeof editForm, value: string) => {
-    setEditForm((prev) => ({ ...prev, [field]: value }));
-    if (editError) setEditError("");
-  };
-
-  const handleCitySelect = (selectedCity: string) => {
-    setEditForm((prev) => ({ ...prev, city: selectedCity }));
-    if (editError) setEditError("");
-  };
+  }, [browserName, debounce, actionLoading, currentIsPaused]);
 
   const progressPercent = republishStatus
     ? (republishStatus.elapsedSeconds / republishStatus.totalSeconds) * 100
@@ -735,18 +313,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   <span className={cn("h-1.5 w-1.5 rounded-full", currentIsPaused ? "bg-yellow-400" : "animate-pulse bg-green-400")} />
                   {currentIsPaused ? "Pausado" : "Activo"}
                 </span>
-                {isEditActive && (
-                  <span className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-pink-500/10 px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold text-pink-400 border border-pink-500/20">
-                    <span className="h-1.5 w-1.5 animate-spin rounded-full border border-pink-400 border-t-transparent" />
-                    Editando
-                  </span>
-                )}
-                {editInProgress && !isEditActive && (
-                  <span className="inline-flex items-center gap-1 sm:gap-1.5 rounded-full bg-primary/10 px-2 sm:px-3 py-0.5 sm:py-1 text-xs font-semibold text-primary border border-primary/20">
-                    <span className="h-1.5 w-1.5 animate-spin rounded-full border border-primary border-t-transparent" />
-                    Editando
-                  </span>
-                )}
               </div>
             </div>
           </div>
@@ -783,30 +349,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 </div>
               );
             })()}
-
-            {/* EDIT LOG */}
-            {editLog && !isEditActive && !editLogDismissed && (
-              <div className={cn(
-                "rounded-lg sm:rounded-xl border p-3 sm:p-4 relative animate-in fade-in duration-300",
-                editLogType === "error" && "border-destructive/30 bg-destructive/10 text-destructive",
-                editLogType === "success" && "border-accent/30 bg-accent/10 text-accent",
-                editLogType === "info" && "border-primary/30 bg-primary/10 text-primary",
-                editLogType === "warning" && "border-orange-500/30 bg-orange-500/10 text-orange-400"
-              )}>
-                <button
-                  onClick={() => {
-                    setEditLogDismissed(true);
-                    clearEditLog();
-                  }}
-                  className="absolute top-2 right-2 text-current opacity-50 hover:opacity-100 transition-opacity p-1"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-                <p className="text-center text-sm font-medium pr-6">{editLog}</p>
-              </div>
-            )}
 
             {/* INFORMACIÓN */}
             {!manuallyCreated && (
@@ -853,20 +395,13 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                 <div className="mb-3 sm:mb-4 flex items-center justify-between">
                   <h3 className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                     <ClockIcon className="h-3 w-3 sm:h-4 sm:w-4" />
-                    {showSavedMessage ? "Guardado" : editInProgress ? "Editando" : republishStatus.remainingSeconds <= 0 && !showSuccessMessage ? "Republicacion" : showSuccessMessage ? "Exitoso" : "Proximo Anuncio"}
+                    {republishStatus.remainingSeconds <= 0 && !showSuccessMessage ? "Republicacion" : showSuccessMessage ? "Exitoso" : "Proximo Anuncio"}
                   </h3>
                   {currentIsPaused && <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">Pausado</span>}
                 </div>
                 <div className="mb-3 sm:mb-4 text-center">
                   <div className="text-3xl sm:text-4xl font-bold tabular-nums text-foreground">
-                    {showSavedMessage ? (
-                      <span className="text-accent text-2xl sm:text-3xl">Cambios guardados</span>
-                    ) : editInProgress ? (
-                      <div className="flex flex-col items-center gap-1.5 sm:gap-2">
-                        <span className="text-primary text-2xl sm:text-3xl">Editando...</span>
-                        {republishStatus.remainingSeconds > 0 && <span className="text-lg sm:text-xl text-muted-foreground">Se publicara en {formatTime(republishStatus.remainingSeconds)}</span>}
-                      </div>
-                    ) : republishStatus.remainingSeconds <= 0 && !showSuccessMessage ? (
+                    {republishStatus.remainingSeconds <= 0 && !showSuccessMessage ? (
                       <span className="text-accent text-2xl sm:text-3xl">Completada</span>
                     ) : showSuccessMessage ? (
                       <span className="text-accent text-2xl sm:text-3xl">Completado</span>
@@ -945,15 +480,14 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
             </div>
 
             {/* CONTROLES */}
-            <div className={cn("rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4 transition-opacity duration-300", isEditActive && "opacity-50 pointer-events-none")}>
+            <div className="rounded-lg sm:rounded-xl border border-border bg-secondary/30 p-3 sm:p-4">
               <h3 className="mb-3 sm:mb-4 text-xs sm:text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 Controles
-                {isEditActive && <span className="ml-2 text-pink-400 normal-case tracking-normal font-normal">(deshabilitados durante edición)</span>}
               </h3>
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+              <div className="grid grid-cols-2 gap-2 sm:gap-3">
                 <Button
                   onClick={handleTogglePause}
-                  disabled={actionLoading || commandInProgressRef.current || isEditActive}
+                  disabled={actionLoading || commandInProgressRef.current}
                   className={cn(
                     "flex h-auto flex-col gap-1.5 sm:gap-2 py-3 sm:py-4 text-sm",
                     currentIsPaused ? "bg-accent/10 text-accent hover:bg-accent/20" : "bg-warning/10 text-warning hover:bg-warning/20"
@@ -965,29 +499,16 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
 
                 <Button
                   onClick={handleRepublish}
-                  disabled={actionLoading || currentIsPaused || commandInProgressRef.current || isEditActive}
+                  disabled={actionLoading || currentIsPaused || commandInProgressRef.current}
                   className="flex h-auto flex-col gap-1.5 sm:gap-2 bg-primary/10 py-3 sm:py-4 text-primary hover:bg-primary/20 text-sm"
                 >
                   <RefreshIcon className="h-5 w-5" />
                   <span className="text-xs">Republicar</span>
                 </Button>
 
-                <Button
-                  onClick={handleOpenEditor}
-                  disabled={actionLoading || !canEdit || commandInProgressRef.current || isEditActive}
-                  className={cn(
-                    "flex h-auto flex-col gap-1.5 sm:gap-2 py-3 sm:py-4 text-sm",
-                    !canEdit ? "bg-gray-500/10 text-gray-500 cursor-not-allowed opacity-50" : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20"
-                  )}
-                >
-                  <EditIcon className="h-5 w-5" />
-                  <span className="text-xs">{!canEdit ? "Ocupado" : "Editar"}</span>
-                </Button>
-
-                <div className="col-span-3 grid grid-cols-2 gap-2">
+                <div className="col-span-2 grid grid-cols-2 gap-2">
                   <Button
                     onClick={() => setShowNotificationSettings(true)}
-                    disabled={isEditActive}
                     className="flex h-auto flex-col gap-1 bg-blue-500/10 py-2.5 sm:py-3 text-blue-400 hover:bg-blue-500/20 border border-blue-500/30"
                   >
                     <span className="text-lg sm:text-xl">🔔</span>
@@ -995,7 +516,6 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
                   </Button>
                   <Button
                     onClick={() => setShowTicketModal(true)}
-                    disabled={isEditActive}
                     className="flex h-auto flex-col gap-1 bg-cyan-500/10 py-2.5 sm:py-3 text-cyan-400 hover:bg-cyan-500/20 border border-cyan-500/30"
                   >
                     <span className="text-lg sm:text-xl">🎫</span>
@@ -1012,286 +532,7 @@ export function Dashboard({ searchResult, onClose }: DashboardProps) {
         </div>
       </div>
 
-      {/* MODAL DE EDICIÓN COMPLETO */}
-      {editStep !== "idle" && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 p-2 sm:p-4 backdrop-blur-sm">
-          <div
-            className="my-4 sm:my-8 w-full max-w-2xl shadow-2xl max-h-[95vh] overflow-y-auto relative"
-            style={{ background: "linear-gradient(180deg, #E6C9E6 0%, #D4A5D4 20%, #C28AC2 40%, #B06FB0 60%, #9E549E 80%, #8C398C 100%)", borderRadius: "0 0 16px 16px", border: "none" }}
-          >
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "20px", background: "linear-gradient(90deg, #FF69B4 0%, #FF1493 50%, #FF69B4 100%)", borderRadius: "16px 16px 0 0" }}>
-              <svg width="100%" height="20" viewBox="0 0 100 20" preserveAspectRatio="none" style={{ position: "absolute", top: 0, left: 0 }}>
-                <path d="M0,20 Q2.5,0 5,0 T10,0 T15,0 T20,0 T25,0 T30,0 T35,0 T40,0 T45,0 T50,0 T55,0 T60,0 T65,0 T70,0 T75,0 T80,0 T85,0 T90,0 T95,0 T100,0 L100,20 Z" fill="#FF69B4" />
-              </svg>
-            </div>
-
-            <div className="text-center pt-6 pb-2" style={{ background: "linear-gradient(180deg, rgba(255,105,180,0.3) 0%, transparent 100%)", marginTop: "20px" }}>
-              <h1 style={{ fontSize: "clamp(24px, 5vw, 32px)", fontWeight: "bold", color: "#E8E8E8", textShadow: "2px 2px 4px rgba(0,0,0,0.3)", letterSpacing: "2px", fontFamily: 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif' }}>MegaPersonals</h1>
-              <p style={{ fontSize: "10px", color: "#E8E8E8", marginTop: "-5px", letterSpacing: "2px" }}>personals classifieds</p>
-            </div>
-
-            <EditStepper currentStep={editStep} />
-
-            <div className="relative" style={{ padding: "0 20px 25px 20px" }}>
-              {/* PASO 1: FORMULARIO */}
-              {editStep === "editing" && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-white/95 rounded-xl border-2 border-pink-500 shadow-lg">
-                    <p className="text-center text-sm font-bold text-gray-800">
-                      Cambia SOLO los campos que quieras actualizar. Los demás déjalos como están.
-                    </p>
-                  </div>
-
-                  {editError && (
-                    <div className="p-3 bg-yellow-100 border border-yellow-400 rounded-lg text-yellow-800 text-center font-medium">
-                      {editError}
-                    </div>
-                  )}
-
-                  {/* Name */}
-                  <div>
-                    <label className="block mb-1 text-sm font-bold text-yellow-300">Nombre/Alias</label>
-                    <input
-                      type="text"
-                      value={editForm.name}
-                      onChange={(e) => handleFieldChange("name", e.target.value)}
-                      maxLength={50}
-                      placeholder="Ejemplo: Sofia"
-                      className="w-full h-10 px-3 bg-white border-2 border-gray-400 rounded-md text-gray-800 focus:border-pink-500 focus:outline-none"
-                    />
-                    {editForm.name && <p className="text-xs text-white mt-1">{editForm.name.length}/50</p>}
-                  </div>
-
-                  {/* Age */}
-                  <div>
-                    <label className="block mb-1 text-sm font-bold text-yellow-300">Edad</label>
-                    <select
-                      value={editForm.age}
-                      onChange={(e) => handleFieldChange("age", e.target.value)}
-                      className="w-full h-10 px-3 bg-white border-2 border-gray-400 rounded-md text-gray-800 focus:border-pink-500 focus:outline-none"
-                    >
-                      <option value="">No cambiar</option>
-                      {Array.from({ length: 82 }, (_, i) => i + 18).map((a) => (
-                        <option key={a} value={a}>{a}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Headline */}
-                  <div>
-                    <label className="block mb-1 text-sm font-bold text-yellow-300">Encabezado</label>
-                    <input
-                      type="text"
-                      value={editForm.headline}
-                      onChange={(e) => handleFieldChange("headline", e.target.value)}
-                      maxLength={250}
-                      placeholder="Ejemplo: SEXY COLOMBIANA"
-                      className="w-full h-10 px-3 bg-white border-2 border-gray-400 rounded-md text-gray-800 focus:border-pink-500 focus:outline-none"
-                    />
-                    {editForm.headline && <p className="text-xs text-white mt-1">{editForm.headline.length}/250</p>}
-                  </div>
-
-                  {/* Body */}
-                  <div>
-                    <label className="block mb-1 text-sm font-bold text-yellow-300">Cuerpo del anuncio</label>
-                    <textarea
-                      value={editForm.body}
-                      onChange={(e) => handleFieldChange("body", e.target.value)}
-                      rows={5}
-                      maxLength={2000}
-                      placeholder="Ejemplo: Hola soy muy caliente..."
-                      className="w-full px-3 py-2 bg-white border-2 border-gray-400 rounded-md text-gray-800 focus:border-pink-500 focus:outline-none resize-none"
-                    />
-                    {editForm.body && <p className="text-xs text-white mt-1">{editForm.body.length}/2000</p>}
-                  </div>
-
-                  {/* City + Location */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block mb-1 text-sm font-bold text-yellow-300">Ciudad</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={editForm.city}
-                          readOnly
-                          className="flex-1 h-10 px-3 bg-white border-2 border-gray-400 rounded-md text-gray-800"
-                        />
-                        <Button
-                          type="button"
-                          onClick={() => setShowCitySelector(true)}
-                          className="h-10 px-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold rounded-md hover:scale-105 transition"
-                        >
-                          Cambiar
-                        </Button>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block mb-1 text-sm font-bold text-yellow-300">Ubicación/Área</label>
-                      <input
-                        type="text"
-                        value={editForm.location}
-                        onChange={(e) => handleFieldChange("location", e.target.value)}
-                        maxLength={100}
-                        placeholder="Ejemplo: Downtown"
-                        className="w-full h-10 px-3 bg-white border-2 border-gray-400 rounded-md text-gray-800 focus:border-pink-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col gap-3 mt-6">
-                    <Button
-                      onClick={handleSaveAllEdits}
-                      className="w-full h-12 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold text-lg rounded-xl hover:scale-105 transition shadow-lg"
-                    >
-                      Guardar Cambios
-                    </Button>
-                    <Button
-                      onClick={handleCancelEdit}
-                      className="w-full h-12 bg-gray-600 text-white font-bold text-lg rounded-xl hover:bg-gray-700 transition"
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* PASO 2: GUARDANDO / ESPERANDO BOT */}
-              {(editStep === "saving" || editStep === "waiting_bot") && (
-                <div className="py-16 flex flex-col items-center gap-6">
-                  <div className="relative">
-                    <div className="w-28 h-28 rounded-full border-4 border-pink-500/30 border-t-pink-500 animate-spin" />
-                    <div className="absolute inset-0 flex items-center justify-center text-5xl">
-                      {editStep === "saving" ? "💾" : "🤖"}
-                    </div>
-                  </div>
-                  <h3 className="text-3xl font-black text-yellow-400 text-center">
-                    {editStep === "saving" ? "Enviando cambios..." : "Bot procesando..."}
-                  </h3>
-                  <p className="text-lg text-white text-center max-w-md">
-                    {editStep === "saving" ? "Conectando con el sistema..." : "El bot está editando tu anuncio. Esto puede tomar unos segundos."}
-                  </p>
-                  {editLog && <p className="text-yellow-300 italic text-center">{editLog}</p>}
-                  <div className="w-64 h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 animate-pulse" style={{ width: editStep === "saving" ? "40%" : "65%" }} />
-                  </div>
-                </div>
-              )}
-
-              {/* PASO 2.5: ESPERANDO CAPTCHA */}
-              {editStep === "waiting_captcha" && (
-                <div className="py-16 flex flex-col items-center gap-6">
-                  <div className="w-28 h-28 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-xl animate-pulse">
-                    <span className="text-5xl">🔐</span>
-                  </div>
-                  <h3 className="text-3xl font-black text-white text-center">Esperando Captcha...</h3>
-                  <p className="text-lg text-gray-300 text-center max-w-md">
-                    El bot está navegando a la página de verificación
-                  </p>
-                  {editLog && <p className="text-pink-300 italic text-center">{editLog}</p>}
-                  <div className="w-64 h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-pink-500 to-purple-500 animate-pulse w-4/5" />
-                  </div>
-                </div>
-              )}
-
-              {/* PASO 3: CAPTCHA */}
-              {(editStep === "captcha" || editStep === "submitting_captcha") && (
-                <div className="py-8 flex flex-col items-center gap-6">
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-xl">
-                    <span className="text-5xl">🔐</span>
-                  </div>
-                  <h3 className="text-3xl font-black text-white">Verificación de Seguridad</h3>
-                  <p className="text-lg text-gray-300">Escribe los caracteres de la imagen</p>
-
-                  {captchaImage && (
-                    <div className="bg-white p-4 rounded-xl shadow-lg">
-                      <img src={captchaImage} alt="Captcha" className="max-w-full rounded-lg" />
-                      <Button
-                        onClick={handleCaptchaRefresh}
-                        disabled={captchaRefreshing || editStep === "submitting_captcha"}
-                        className="mt-3 w-full bg-gray-200 hover:bg-gray-300"
-                      >
-                        {captchaRefreshing ? "Cargando..." : "Cambiar imagen"}
-                      </Button>
-                    </div>
-                  )}
-
-                  {editError && <p className="text-yellow-400 font-medium text-center">{editError}</p>}
-
-                  <input
-                    type="text"
-                    value={captchaCode}
-                    onChange={(e) => {
-                      setCaptchaCode(e.target.value.toUpperCase());
-                      if (editError) setEditError("");
-                    }}
-                    placeholder="ABC123"
-                    autoFocus
-                    disabled={editStep === "submitting_captcha"}
-                    className="w-48 text-center text-2xl font-mono tracking-widest p-3 border-2 border-gray-400 rounded-lg focus:border-pink-500 outline-none"
-                  />
-
-                  <Button
-                    onClick={handleCaptchaSubmit}
-                    disabled={editStep === "submitting_captcha" || !captchaCode.trim()}
-                    className="w-full max-w-xs h-12 bg-gradient-to-r from-pink-500 to-purple-600 text-white font-bold text-lg rounded-xl hover:scale-105 transition"
-                  >
-                    {editStep === "submitting_captcha" ? "Verificando..." : "Enviar Código"}
-                  </Button>
-
-                  <Button
-                    onClick={handleCancelEdit}
-                    variant="outline"
-                    className="text-gray-400 hover:text-white"
-                  >
-                    Cancelar
-                  </Button>
-                </div>
-              )}
-
-              {/* PASO 4: FINISHING */}
-              {editStep === "finishing" && (
-                <div className="py-16 flex flex-col items-center gap-6">
-                  <div className="w-28 h-28 rounded-full border-4 border-blue-500/30 border-t-blue-500 animate-spin flex items-center justify-center">
-                    <span className="text-5xl">⏳</span>
-                  </div>
-                  <h3 className="text-3xl font-black text-white">Esperando publicación...</h3>
-                  <p className="text-lg text-gray-300 text-center max-w-md">
-                    Captcha verificado. Publicando cuando llegue el momento.
-                  </p>
-                  {editLog && <p className="text-blue-300 italic">{editLog}</p>}
-                </div>
-              )}
-
-              {/* PASO 5: COMPLETED */}
-              {editStep === "complete" && (
-                <div className="py-16 flex flex-col items-center gap-6">
-                  <div className="w-32 h-32 rounded-full bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center shadow-2xl animate-bounce">
-                    <span className="text-7xl">✅</span>
-                  </div>
-                  <h3 className="text-4xl font-black text-green-400">¡Listo!</h3>
-                  <p className="text-xl text-white text-center">Tu anuncio ha sido actualizado exitosamente</p>
-                  <p className="text-gray-400">Cerrando en unos segundos...</p>
-                </div>
-              )}
-
-              {/* ERROR */}
-              {editStep === "error" && (
-                <div className="py-16 flex flex-col items-center gap-6">
-                  <div className="w-28 h-28 rounded-full bg-red-500/20 flex items-center justify-center border-4 border-red-500">
-                    <span className="text-6xl">❌</span>
-                  </div>
-                  <h3 className="text-3xl font-black text-red-400">Error</h3>
-                  <p className="text-lg text-white text-center max-w-md">{editError || "Hubo un problema. Volviendo al formulario..."}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {showNotificationSettings && <NotificationSettings browserName={browserName} onClose={() => setShowNotificationSettings(false)} />}
-      <CitySelector isOpen={showCitySelector} onClose={() => setShowCitySelector(false)} onSelectCity={handleCitySelect} currentCity={editForm.city} />
       <TicketModal
         isOpen={showTicketModal}
         onClose={() => setShowTicketModal(false)}
