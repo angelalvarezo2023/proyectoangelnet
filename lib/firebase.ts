@@ -499,6 +499,7 @@ export const FirebaseAPI = {
     }
   },
 
+  // ✅ CORREGIDO: Envía comandos pause/resume correctamente
   async togglePausePost(browserName: string, postId: string | undefined, newState: boolean) {
     try {
       const browserData = await this.findBrowserByName(browserName);
@@ -506,15 +507,23 @@ export const FirebaseAPI = {
         return { success: false, error: "Navegador no encontrado" };
       }
 
+      // ✅ PASO 1: Enviar comando a la extensión (pause o resume)
+      const commandType = newState ? 'pause' : 'resume';
+      await this.sendCommand(browserName, commandType, postId ? { postId } : {});
+      
+      console.log(`[FirebaseAPI]: Comando ${commandType} enviado a ${browserName}`);
+
+      // ✅ PASO 2: Actualizar Firebase inmediatamente (feedback visual para el dashboard)
       if (!browserData.isMultiPost || !postId) {
+        // Single post
         await update(ref(database, `browsers/${browserName}`), {
           isPaused: newState,
           lastUpdate: new Date().toISOString(),
         });
-        await this.sendCommand(browserName, newState ? 'pause' : 'resume');
         return { success: true };
       }
 
+      // Multi-post
       await update(ref(database, `browsers/${browserName}/posts/${postId}`), {
         isPaused: newState,
         lastUpdate: new Date().toISOString(),
@@ -522,7 +531,7 @@ export const FirebaseAPI = {
       await update(ref(database, `browsers/${browserName}`), {
         lastUpdate: new Date().toISOString(),
       });
-      await this.sendCommand(browserName, newState ? 'pause' : 'resume', { postId });
+      
       return { success: true };
     } catch (error) {
       return { success: false, error: (error as Error).message };
