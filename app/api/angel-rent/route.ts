@@ -44,18 +44,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
   try {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
-    if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
     
-    // ✅ FIX: Usar timestamp exacto si existe, si no usar 23:59:59 del día rentalEnd
-    if (user.rentalEnd) {
-      const expirationDate = user.rentalEndTimestamp 
-        ? new Date(user.rentalEndTimestamp)
-        : new Date(user.rentalEnd + "T23:59:59");
-        
-      if (new Date() > expirationDate) {
-        return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
-      }
-    }
+    // ✅ Solo verificar que el usuario esté activo (sin bloquear por expiración)
+    if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
     
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
