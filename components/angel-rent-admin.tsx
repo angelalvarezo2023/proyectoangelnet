@@ -8,6 +8,7 @@ interface User {
   proxyUser?: string; proxyPass?: string;
   userAgentKey?: string; userAgent?: string;
   rentalStart?: string; rentalEnd?: string;
+  rentalEndTimestamp?: number; // ✅ NUEVO: Timestamp exacto de expiración
   defaultUrl?: string;
   siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean;
@@ -69,8 +70,14 @@ const BLANK = {
 function rentalDays(u: User) {
   if (!u.rentalEnd) return 9999;
  
-  // ✅ Crear fecha de expiración a las 23:59:59 del día rentalEnd
-  const expirationDate = new Date(u.rentalEnd + "T23:59:59");
+  // ✅ Usar timestamp exacto si existe (incluye las horas configuradas)
+  let expirationDate: Date;
+  if (u.rentalEndTimestamp) {
+    expirationDate = new Date(u.rentalEndTimestamp);
+  } else {
+    // Fallback: Si no hay timestamp, usar 23:59:59 del día rentalEnd
+    expirationDate = new Date(u.rentalEnd + "T23:59:59");
+  }
  
   // Calcular diferencia en milisegundos
   const diffMs = expirationDate.getTime() - Date.now();
@@ -148,8 +155,13 @@ export default function AngelRentAdmin() {
       // Usar los valores guardados originalmente
       setRentDays(String(u.rentalDays));
       setRentHours(String(u.rentalHours));
+    } else if (u.rentalEndTimestamp) {
+      // Usar timestamp exacto si existe
+      const diff = Math.max(0, u.rentalEndTimestamp - Date.now());
+      setRentDays(String(Math.floor(diff / 86400000)));
+      setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
     } else if (u.rentalEnd) {
-      // Fallback: calcular desde la fecha usando la MISMA lógica que rentalDays()
+      // Fallback: calcular desde la fecha usando 23:59:59
       const expDate = new Date(u.rentalEnd + "T23:59:59");
       const diff = Math.max(0, expDate.getTime() - Date.now());
       setRentDays(String(Math.floor(diff / 86400000)));
@@ -167,7 +179,7 @@ export default function AngelRentAdmin() {
     if (!key) { alert("Username inválido"); return; }
     
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CORRECTO DE FECHA
+    // ✅ CÁLCULO CORRECTO DE FECHA Y TIMESTAMP EXACTO
     // Partimos de medianoche del día actual para evitar desfase horario
     // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
@@ -182,6 +194,9 @@ export default function AngelRentAdmin() {
     const rentalEnd = newDate.toISOString().split("T")[0];
     const rentalStart = new Date().toISOString().split("T")[0];
     
+    // ✅ NUEVO: Guardar timestamp exacto de cuándo expira (con las horas incluidas)
+    const rentalEndTimestamp = newDate.getTime();
+    
     // Determine userAgentKey from deviceType
     const uaKey = deviceType === "android" ? "android" : deviceType === "pc" ? "windows" : "iphone";
     const data: User = {
@@ -193,6 +208,7 @@ export default function AngelRentAdmin() {
       userAgentKey: uaKey,
       userAgent: form.userAgent || "",
       rentalStart, rentalEnd,
+      rentalEndTimestamp, // ✅ NUEVO: Timestamp exacto
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
