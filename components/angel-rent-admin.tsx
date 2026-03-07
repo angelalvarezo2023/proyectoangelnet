@@ -179,22 +179,28 @@ export default function AngelRentAdmin() {
     if (!key) { alert("Username inválido"); return; }
     
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CORRECTO DE FECHA Y TIMESTAMP EXACTO
-    // Partimos de medianoche del día actual para evitar desfase horario
+    // ✅ CÁLCULO CORRECTO DE FECHA Y TIMESTAMP EXACTO - USANDO UTC
+    // Usar UTC para evitar problemas de zona horaria
     // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
    
-    const newDate = new Date();
-    newDate.setHours(0, 0, 0, 0);                    // ← Medianoche del día actual
-    newDate.setDate(newDate.getDate() + days);
-    newDate.setHours(newDate.getHours() + hours);
+    // ✅ Usar UTC para evitar problemas de zona horaria
+    const now = new Date();
+    const newDate = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      0, 0, 0, 0  // Medianoche UTC
+    ));
+    newDate.setUTCDate(newDate.getUTCDate() + days);
+    newDate.setUTCHours(newDate.getUTCHours() + hours);
    
     // Extraer solo la fecha (sin hora) en formato YYYY-MM-DD
     const rentalEnd = newDate.toISOString().split("T")[0];
     const rentalStart = new Date().toISOString().split("T")[0];
     
-    // ✅ NUEVO: Guardar timestamp exacto de cuándo expira (con las horas incluidas)
+    // ✅ Guardar timestamp exacto de cuándo expira (con las horas incluidas)
     const rentalEndTimestamp = newDate.getTime();
     
     // Determine userAgentKey from deviceType
@@ -208,7 +214,7 @@ export default function AngelRentAdmin() {
       userAgentKey: uaKey,
       userAgent: form.userAgent || "",
       rentalStart, rentalEnd,
-      rentalEndTimestamp, // ✅ NUEVO: Timestamp exacto
+      rentalEndTimestamp, // ✅ Timestamp exacto en UTC
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
@@ -483,11 +489,24 @@ export default function AngelRentAdmin() {
                 </button>
               ))}
             </div>
-            {(parseInt(rentDays)||0) + (parseInt(rentHours)||0) > 0 && (
-              <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
-                ✅ Renta: {parseInt(rentDays)||0}d {parseInt(rentHours)||0}h → vence {new Date(Date.now() + ((parseInt(rentDays)||0)*86400+(parseInt(rentHours)||0)*3600)*1000).toLocaleDateString("es")}
-              </div>
-            )}
+            {(parseInt(rentDays)||0) + (parseInt(rentHours)||0) > 0 && (() => {
+              const days = parseInt(rentDays) || 0;
+              const hours = parseInt(rentHours) || 0;
+              const now = new Date();
+              const expDate = new Date(Date.UTC(
+                now.getUTCFullYear(),
+                now.getUTCMonth(),
+                now.getUTCDate(),
+                0, 0, 0, 0
+              ));
+              expDate.setUTCDate(expDate.getUTCDate() + days);
+              expDate.setUTCHours(expDate.getUTCHours() + hours);
+              return (
+                <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
+                  ✅ Renta: {days}d {hours}h → vence {expDate.toLocaleDateString("es")}
+                </div>
+              );
+            })()}
             <label style={F.label}>URL por defecto</label>
             <input style={F.input} value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="https://megapersonals.eu" />
             {/* CREDENCIALES */}
