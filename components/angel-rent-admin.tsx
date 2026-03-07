@@ -15,7 +15,7 @@ interface User {
   robotOn?: boolean; robotPaused?: boolean;
   cookies?: string; cookieTs?: number;
   phoneNumber?: string;
-  rentalDays?: number; rentalHours?: number; // ✅ NUEVO
+  rentalDays?: number; rentalHours?: number;
 }
 const UA_OPTS = [
   { value: "iphone", label: "📱 iPhone 15 — Safari" },
@@ -62,15 +62,15 @@ const BLANK = {
   rentalStart: "", rentalEnd: "", defaultUrl: "https://megapersonals.eu",
   siteEmail: "", sitePass: "", notes: "", active: true,
 };
+
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ FUNCIÓN CORREGIDA - Cálculo exacto igual que route.ts
+// ✅ FUNCIÓN CORREGIDA - Sin sumar día extra
 // ═══════════════════════════════════════════════════════════════════════════
 function rentalDays(u: User) {
   if (!u.rentalEnd) return 9999;
  
-  // Crear fecha de expiración: 00:00:00 del día SIGUIENTE (igual que route.ts)
-  const expirationDate = new Date(u.rentalEnd + "T00:00:00");
-  expirationDate.setDate(expirationDate.getDate() + 1); // Añadir 1 día
+  // ✅ Crear fecha de expiración a las 23:59:59 del día rentalEnd
+  const expirationDate = new Date(u.rentalEnd + "T23:59:59");
  
   // Calcular diferencia en milisegundos
   const diffMs = expirationDate.getTime() - Date.now();
@@ -78,6 +78,7 @@ function rentalDays(u: User) {
   // Usar Math.floor para redondear hacia abajo
   return Math.floor(diffMs / 86400000);
 }
+
 // ─── small reusable input ───────────────────────────────────────────────────
 const F = {
   input: {
@@ -149,8 +150,7 @@ export default function AngelRentAdmin() {
       setRentHours(String(u.rentalHours));
     } else if (u.rentalEnd) {
       // Fallback: calcular desde la fecha usando la MISMA lógica que rentalDays()
-      const expDate = new Date(u.rentalEnd + "T00:00:00");
-      expDate.setDate(expDate.getDate() + 1);
+      const expDate = new Date(u.rentalEnd + "T23:59:59");
       const diff = Math.max(0, expDate.getTime() - Date.now());
       setRentDays(String(Math.floor(diff / 86400000)));
       setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
@@ -167,7 +167,7 @@ export default function AngelRentAdmin() {
     if (!key) { alert("Username inválido"); return; }
     
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CORRECTO DE FECHA - parte modificada
+    // ✅ CÁLCULO CORRECTO DE FECHA
     // Partimos de medianoche del día actual para evitar desfase horario
     // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
@@ -199,7 +199,7 @@ export default function AngelRentAdmin() {
       phoneNumber: (form as any).phoneNumber || "",
       updatedAt: new Date().toISOString(),
       ...(editing ? {} : { createdAt: new Date().toISOString() }),
-      // ✅ NUEVO: Guardar días y horas configurados originalmente
+      // ✅ Guardar días y horas configurados originalmente
       rentalDays: days,
       rentalHours: hours,
     } as any;
