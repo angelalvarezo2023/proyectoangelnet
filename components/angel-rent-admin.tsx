@@ -79,10 +79,10 @@ function rentalDays(u: User) {
     expirationDate = new Date(u.rentalEnd + "T23:59:59");
   }
  
-  // Calcular diferencia en milisegundos
+  // Calcular diferencia en milisegundos (PERMITIR NEGATIVOS para deuda)
   const diffMs = expirationDate.getTime() - Date.now();
  
-  // Usar Math.floor para redondear hacia abajo
+  // ✅ Usar Math.floor para redondear (permite negativos)
   return Math.floor(diffMs / 86400000);
 }
 
@@ -179,14 +179,26 @@ export default function AngelRentAdmin() {
     if (!key) { alert("Username inválido"); return; }
     
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CORRECTO - Sumar directamente a la hora actual
+    // ✅ CÁLCULO CON SISTEMA DE DEUDA
+    // Si hay deuda (tiempo vencido), se resta del nuevo tiempo
     // ═══════════════════════════════════════════════════════════════════
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
+    
+    // Calcular si hay deuda (tiempo vencido)
+    let debtMs = 0;
+    if (editing && (form as any).rentalEndTimestamp) {
+      const currentTimestamp = (form as any).rentalEndTimestamp;
+      const now = Date.now();
+      if (now > currentTimestamp) {
+        // Hay deuda - tiempo que ya pasó desde la expiración
+        debtMs = now - currentTimestamp;
+      }
+    }
    
-    // ✅ SIMPLE: Sumar milisegundos directamente a la hora actual
+    // ✅ Sumar tiempo configurado y restar deuda
     const totalMs = (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000);
-    const expirationDate = new Date(Date.now() + totalMs);
+    const expirationDate = new Date(Date.now() + totalMs - debtMs);
    
     // Extraer solo la fecha (sin hora) en formato YYYY-MM-DD
     const rentalEnd = expirationDate.toISOString().split("T")[0];
@@ -315,8 +327,34 @@ export default function AngelRentAdmin() {
                 {keys.map(k => {
                   const u = users[k];
                   const days = rentalDays(u);
-                  const rentColor = !u.rentalEnd ? "rgba(255,255,255,.2)" : days <= 0 ? "#ef4444" : days <= 3 ? "#ef4444" : days <= 7 ? "#f59e0b" : "#22c55e";
-                  const rentLabel = !u.rentalEnd ? "∞" : days <= 0 ? "Expirado" : days + "d";
+                  
+                  // ✅ Sistema de colores con deuda
+                  let rentColor, rentLabel;
+                  if (!u.rentalEnd) {
+                    rentColor = "rgba(255,255,255,.2)";
+                    rentLabel = "∞";
+                  } else if (days < 0) {
+                    // ⚠️ DEUDA (tiempo negativo)
+                    rentColor = "#f59e0b"; // Naranja para deuda
+                    rentLabel = `DEUDA: ${Math.abs(days)}d`;
+                  } else if (days === 0) {
+                    // ⚠️ Expirando HOY
+                    rentColor = "#fbbf24"; // Amarillo
+                    rentLabel = "Hoy";
+                  } else if (days <= 3) {
+                    // ⚠️ Por vencer (1-3 días)
+                    rentColor = "#ef4444"; // Rojo
+                    rentLabel = days + "d";
+                  } else if (days <= 7) {
+                    // ⚠️ Advertencia (4-7 días)
+                    rentColor = "#f59e0b"; // Naranja
+                    rentLabel = days + "d";
+                  } else {
+                    // ✅ Tiempo suficiente (8+ días)
+                    rentColor = "#22c55e"; // Verde
+                    rentLabel = days + "d";
+                  }
+                  
                   return (
                     <tr key={k} style={{ borderTop: "1px solid rgba(255,255,255,.04)" }}>
                       <td style={{ padding: "10px 14px", fontSize: 12 }}><strong>{k}</strong></td>
