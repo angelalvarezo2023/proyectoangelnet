@@ -18,7 +18,7 @@ const CACHE_TTL = 60000;
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
-  rentalEnd?: string; defaultUrl?: string; siteEmail?: string; sitePass?: string;
+  rentalEnd?: string; rentalEndTimestamp?: number; defaultUrl?: string; siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean; phoneNumber?: string;
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
@@ -46,9 +46,12 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (!user) return jres(403, { error: "Usuario no encontrado" });
     if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
     
-    // ✅ FIX: Calcular expiración correctamente - expira a las 23:59:59 del día rentalEnd
+    // ✅ FIX: Usar timestamp exacto si existe, si no usar 23:59:59 del día rentalEnd
     if (user.rentalEnd) {
-      const expirationDate = new Date(user.rentalEnd + "T23:59:59");
+      const expirationDate = user.rentalEndTimestamp 
+        ? new Date(user.rentalEndTimestamp)
+        : new Date(user.rentalEnd + "T23:59:59");
+        
       if (new Date() > expirationDate) {
         return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
       }
@@ -168,11 +171,10 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   
-  // ✅ FIX: Calcular timestamp de expiración correctamente - sin sumar día extra
+  // ✅ FIX: Usar timestamp exacto si existe, si no calcular con 23:59:59
   let endTimestamp = 0;
   if (user.rentalEnd) {
-    const expDate = new Date(user.rentalEnd + "T23:59:59");
-    endTimestamp = expDate.getTime();
+    endTimestamp = user.rentalEndTimestamp || new Date(user.rentalEnd + "T23:59:59").getTime();
   }
   
   const V = {
