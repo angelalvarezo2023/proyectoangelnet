@@ -1134,3 +1134,278 @@ export const SERVICES = [
     gradient: "from-purple-500 to-pink-500",
   },
 ];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🆕 ANGEL RENT API
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface AngelRentUser {
+  username: string;
+  name?: string;
+  proxyHost?: string;
+  proxyPort?: string;
+  proxyUser?: string;
+  proxyPass?: string;
+  userAgentKey?: string;
+  userAgent?: string;
+  rentalStart?: string;
+  rentalEnd?: string;
+  rentalEndTimestamp?: number;
+  defaultUrl?: string;
+  siteEmail?: string;
+  sitePass?: string;
+  notes?: string;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  robotOn?: boolean;
+  robotPaused?: boolean;
+  cookies?: string;
+  cookieTs?: number;
+  phoneNumber?: string;
+  rentalDays?: number;
+  rentalHours?: number;
+}
+
+export interface AngelRentRentalRemaining {
+  days: number;
+  hours: number;
+  minutes: number;
+  isDebt?: boolean;
+}
+
+export interface AngelRentSearchResult {
+  username: string;
+  user: AngelRentUser;
+  rentalRemaining: AngelRentRentalRemaining;
+  isActive: boolean;
+  hasRobot: boolean;
+  isPaused: boolean;
+}
+
+export const AngelRentAPI = {
+  calculateRentalRemaining(user: AngelRentUser): AngelRentRentalRemaining {
+    if (!user.rentalEnd) {
+      return { days: 9999, hours: 0, minutes: 0, isDebt: false };
+    }
+
+    let expirationDate: Date;
+    if (user.rentalEndTimestamp) {
+      expirationDate = new Date(user.rentalEndTimestamp);
+    } else {
+      expirationDate = new Date(user.rentalEnd + "T23:59:59");
+    }
+
+    const diffMs = expirationDate.getTime() - Date.now();
+
+    if (diffMs <= 0) {
+      const debtDiff = Math.abs(diffMs);
+      return {
+        days: -Math.floor(debtDiff / (1000 * 60 * 60 * 24)),
+        hours: Math.floor((debtDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+        minutes: Math.floor((debtDiff % (1000 * 60 * 60)) / (1000 * 60)),
+        isDebt: true,
+      };
+    }
+
+    return {
+      days: Math.floor(diffMs / (1000 * 60 * 60 * 24)),
+      hours: Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+      minutes: Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)),
+      isDebt: false,
+    };
+  },
+
+  async findByClientName(clientName: string): Promise<AngelRentSearchResult | null> {
+    try {
+      const snapshot = await get(ref(database, "proxyUsers"));
+      const users = snapshot.val();
+      if (!users) return null;
+
+      const cleanSearch = clientName.trim().toLowerCase();
+
+      for (const [username, userData] of Object.entries(users)) {
+        const user = userData as AngelRentUser;
+        const userName = (user.name || "").trim().toLowerCase();
+
+        if (userName === cleanSearch) {
+          return {
+            username,
+            user: { ...user, username },
+            rentalRemaining: this.calculateRentalRemaining(user),
+            isActive: user.active ?? true,
+            hasRobot: user.robotOn ?? false,
+            isPaused: user.robotPaused ?? false,
+          };
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error("[AngelRentAPI] Error en findByClientName:", error);
+      return null;
+    }
+  },
+
+  async findAllByClientName(clientName: string): Promise<AngelRentSearchResult[]> {
+    try {
+      const snapshot = await get(ref(database, "proxyUsers"));
+      const users = snapshot.val();
+      if (!users) return [];
+
+      const cleanSearch = clientName.trim().toLowerCase();
+      const results: AngelRentSearchResult[] = [];
+
+      for (const [username, userData] of Object.entries(users)) {
+        const user = userData as AngelRentUser;
+        const userName = (user.name || "").trim().toLowerCase();
+
+        if (userName === cleanSearch) {
+          results.push({
+            username,
+            user: { ...user, username },
+            rentalRemaining: this.calculateRentalRemaining(user),
+            isActive: user.active ?? true,
+            hasRobot: user.robotOn ?? false,
+            isPaused: user.robotPaused ?? false,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error("[AngelRentAPI] Error en findAllByClientName:", error);
+      return [];
+    }
+  },
+
+  async findByUsername(username: string): Promise<AngelRentSearchResult | null> {
+    try {
+      const snapshot = await get(ref(database, `proxyUsers/${username}`));
+      const user = snapshot.val();
+      if (!user) return null;
+
+      return {
+        username,
+        user: { ...user, username },
+        rentalRemaining: this.calculateRentalRemaining(user),
+        isActive: user.active ?? true,
+        hasRobot: user.robotOn ?? false,
+        isPaused: user.robotPaused ?? false,
+      };
+    } catch (error) {
+      console.error("[AngelRentAPI] Error en findByUsername:", error);
+      return null;
+    }
+  },
+
+  async getAllUsers(): Promise<Record<string, AngelRentUser>> {
+    try {
+      const snapshot = await get(ref(database, "proxyUsers"));
+      const users = snapshot.val() || {};
+      
+      const result: Record<string, AngelRentUser> = {};
+      for (const [username, userData] of Object.entries(users)) {
+        result[username] = { ...(userData as AngelRentUser), username };
+      }
+      
+      return result;
+    } catch (error) {
+      console.error("[AngelRentAPI] Error en getAllUsers:", error);
+      return {};
+    }
+  },
+
+  listenToUser(username: string, callback: (result: AngelRentSearchResult | null) => void) {
+    const userRef = ref(database, `proxyUsers/${username}`);
+    const unsubscribe = onValue(userRef, (snapshot) => {
+      const user = snapshot.val();
+      if (user) {
+        callback({
+          username,
+          user: { ...user, username },
+          rentalRemaining: this.calculateRentalRemaining(user),
+          isActive: user.active ?? true,
+          hasRobot: user.robotOn ?? false,
+          isPaused: user.robotPaused ?? false,
+        });
+      } else {
+        callback(null);
+      }
+    });
+    return unsubscribe;
+  },
+
+  listenToAllUsers(callback: (users: Record<string, AngelRentUser>) => void) {
+    const usersRef = ref(database, "proxyUsers");
+    const unsubscribe = onValue(usersRef, (snapshot) => {
+      const users = snapshot.val() || {};
+      
+      const result: Record<string, AngelRentUser> = {};
+      for (const [username, userData] of Object.entries(users)) {
+        result[username] = { ...(userData as AngelRentUser), username };
+      }
+      
+      callback(result);
+    });
+    return unsubscribe;
+  },
+
+  async findByPhoneNumber(phoneNumber: string): Promise<AngelRentSearchResult[]> {
+    try {
+      const snapshot = await get(ref(database, "proxyUsers"));
+      const users = snapshot.val();
+      if (!users) return [];
+
+      const cleanPhone = phoneNumber.replace(/\D/g, "");
+      const results: AngelRentSearchResult[] = [];
+
+      for (const [username, userData] of Object.entries(users)) {
+        const user = userData as AngelRentUser;
+        const userPhone = (user.phoneNumber || "").replace(/\D/g, "");
+
+        if (userPhone === cleanPhone || 
+            (cleanPhone.length >= 10 && userPhone.endsWith(cleanPhone.slice(-10)))) {
+          results.push({
+            username,
+            user: { ...user, username },
+            rentalRemaining: this.calculateRentalRemaining(user),
+            isActive: user.active ?? true,
+            hasRobot: user.robotOn ?? false,
+            isPaused: user.robotPaused ?? false,
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error("[AngelRentAPI] Error en findByPhoneNumber:", error);
+      return [];
+    }
+  },
+
+  formatRentalTime(rental: AngelRentRentalRemaining): string {
+    if (rental.days === 9999) return "Sin renta";
+    
+    const isDebt = rental.isDebt === true;
+    
+    if (isDebt) {
+      const parts = [];
+      const absDays = Math.abs(rental.days);
+      if (absDays > 0) parts.push(`${absDays}d`);
+      if (rental.hours > 0) parts.push(`${rental.hours}h`);
+      if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
+      return `DEUDA: ${parts.join(" ")}`;
+    }
+    
+    if (rental.days === 0 && rental.hours === 0 && rental.minutes === 0) {
+      return "Expirada";
+    }
+    
+    const parts = [];
+    if (rental.days > 0) parts.push(`${rental.days}d`);
+    if (rental.hours > 0) parts.push(`${rental.hours}h`);
+    if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
+    return parts.join(" ");
+  },
+};
