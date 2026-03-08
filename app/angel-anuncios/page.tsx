@@ -4,17 +4,6 @@ import { useState, useEffect } from "react";
 import { AngelRentAPI, type AngelRentSearchResult } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  SearchIcon, 
-  ClockIcon, 
-  PhoneIcon, 
-  LinkIcon, 
-  AlertTriangleIcon,
-  PlayIcon,
-  PauseIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-} from "@/components/icons";
 import { cn } from "@/lib/utils";
 
 export default function AngelAnunciosPage() {
@@ -70,7 +59,7 @@ export default function AngelAnunciosPage() {
         {/* Search Box */}
         <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-lg">
           <div className="mb-4 flex items-center gap-2 text-muted-foreground">
-            <SearchIcon className="h-5 w-5" />
+            <span className="text-xl">🔍</span>
             <span className="text-sm font-medium">Buscar por nombre</span>
           </div>
           
@@ -96,7 +85,7 @@ export default function AngelAnunciosPage() {
                 </>
               ) : (
                 <>
-                  <SearchIcon className="mr-2 h-5 w-5" />
+                  <span className="mr-2">🔍</span>
                   Buscar
                 </>
               )}
@@ -114,9 +103,7 @@ export default function AngelAnunciosPage() {
 
         {!searching && hasSearched && results.length === 0 && (
           <div className="rounded-2xl border border-border bg-card p-12 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-              <SearchIcon className="h-8 w-8 text-muted-foreground" />
-            </div>
+            <div className="mx-auto mb-4 text-6xl">🔍</div>
             <h3 className="mb-2 text-xl font-bold text-foreground">
               No se encontraron anuncios
             </h3>
@@ -140,9 +127,7 @@ export default function AngelAnunciosPage() {
 
         {!hasSearched && (
           <div className="rounded-2xl border border-dashed border-border bg-card/50 p-12 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-              <SearchIcon className="h-8 w-8 text-primary" />
-            </div>
+            <div className="mx-auto mb-4 text-6xl">🔍</div>
             <h3 className="mb-2 text-xl font-bold text-foreground">
               Busca tus anuncios
             </h3>
@@ -236,12 +221,12 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
             {/* Badge Estado Activo/Inactivo */}
             {isActive ? (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-xs font-bold text-accent">
-                <CheckCircleIcon className="h-3.5 w-3.5" />
+                <span>✅</span>
                 Activo
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/20 bg-destructive/10 px-3 py-1 text-xs font-bold text-destructive">
-                <XCircleIcon className="h-3.5 w-3.5" />
+                <span>❌</span>
                 Inactivo
               </span>
             )}
@@ -251,8 +236,8 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Teléfono */}
             <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <PhoneIcon className="h-5 w-5 text-primary" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-xl">
+                📞
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-xs text-muted-foreground">Teléfono</div>
@@ -292,7 +277,7 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
           {/* Alerta de Deuda */}
           {rentalRemaining.isDebt && (
             <div className="rounded-lg border border-warning/20 bg-warning/10 p-3 text-sm text-warning">
-              <AlertTriangleIcon className="mr-1.5 inline h-4 w-4" />
+              <span className="mr-1.5">⚠️</span>
               <strong>Atención:</strong> Tu cuenta tiene deuda. Será eliminada en 48h si no renuevas.
             </div>
           )}
@@ -330,12 +315,12 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
                   </>
                 ) : localPaused ? (
                   <>
-                    <PlayIcon className="mr-2 h-4 w-4" />
+                    <span className="mr-2">▶️</span>
                     Reanudar Robot
                   </>
                 ) : (
                   <>
-                    <PauseIcon className="mr-2 h-4 w-4" />
+                    <span className="mr-2">⏸️</span>
                     Pausar Robot
                   </>
                 )}
@@ -349,7 +334,7 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
             className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
             size="lg"
           >
-            <LinkIcon className="mr-2 h-5 w-5" />
+            <span className="mr-2">🔗</span>
             Ver Anuncio en Vivo
           </Button>
 
