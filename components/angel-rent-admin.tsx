@@ -254,15 +254,6 @@ export default function AngelRentAdmin() {
       .then(() => showToast("🔗 Link copiado"))
       .catch(() => prompt("Copia este link:", url));
   };
-  
-  // ✅ NUEVO: Copiar link de edición (modo admin)
-  const copyEditLink = (k: string) => {
-    const url = `${window.location.origin}/api/angel-rent?u=${k}&mode=edit&url=${encodeURIComponent(users[k].defaultUrl || "https://megapersonals.eu")}`;
-    navigator.clipboard.writeText(url)
-      .then(() => showToast("🔧 Link de edición copiado"))
-      .catch(() => prompt("Copia este link:", url));
-  };
-  
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   // ─── AUTH ────────────────────────────────────────────────────────────────
   if (!authed) return (
@@ -414,13 +405,12 @@ export default function AngelRentAdmin() {
                       <td style={{ padding: "10px 14px" }}>
                         <div style={{ display: "flex", gap: 4 }}>
                           {[
-                            { ico: "✏️", bg: "#3b82f6", fn: () => openEdit(k), title: "Editar" },
-                            { ico: u.active ? "⛔" : "✅", bg: u.active ? "#ef4444" : "#22c55e", fn: () => toggle(k), title: u.active ? "Desactivar" : "Activar" },
-                            { ico: "🔗", bg: "rgba(255,255,255,.08)", fn: () => copyLink(k), title: "Link Normal" },
-                            { ico: "🔧", bg: "#f59e0b", fn: () => copyEditLink(k), title: "Link Edición" },
-                            { ico: "🗑️", bg: "rgba(255,255,255,.06)", fn: () => del(k), title: "Eliminar" },
-                          ].map(({ ico, bg, fn, title }) => (
-                            <button key={ico} onClick={fn} title={title} style={{ padding: "5px 9px", fontSize: 11, background: bg, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>{ico}</button>
+                            { ico: "✏️", bg: "#3b82f6", fn: () => openEdit(k) },
+                            { ico: u.active ? "⛔" : "✅", bg: u.active ? "#ef4444" : "#22c55e", fn: () => toggle(k) },
+                            { ico: "🔗", bg: "rgba(255,255,255,.08)", fn: () => copyLink(k) },
+                            { ico: "🗑️", bg: "rgba(255,255,255,.06)", fn: () => del(k) },
+                          ].map(({ ico, bg, fn }) => (
+                            <button key={ico} onClick={fn} style={{ padding: "5px 9px", fontSize: 11, background: bg, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>{ico}</button>
                           ))}
                         </div>
                       </td>
