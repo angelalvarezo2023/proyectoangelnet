@@ -30,6 +30,8 @@ export async function OPTIONS() { return new Response("", { status: 200, headers
 async function handle(req: NextRequest, method: string): Promise<Response> {
   const sp = new URL(req.url).searchParams;
   const targetUrl = sp.get("url"), username = sp.get("u");
+  const editMode = sp.get("mode") === "edit"; // ✅ Detectar modo edición
+  
   if (!targetUrl) return jres(400, { error: "Falta ?url=" });
   if (!username) return jres(400, { error: "Falta ?u=usuario" });
   if (targetUrl === "__fbpatch__") {
@@ -50,7 +52,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    if (decoded.includes("/users/posts/edit")) {
+    
+    // ✅ Solo bloquear edición si NO está en modo edit
+    if (!editMode && decoded.includes("/users/posts/edit")) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
 <body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
@@ -64,8 +68,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
         { status: 403, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
       );
     }
-    const agent = (PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
-    const pb = `/api/angel-rent?u=${enc(username)}&url=`;
+    
+    // ✅ Si está en modo edit, NO usar proxy (usar IP local)
+    const agent = (!editMode && PH && PT) ? new HttpsProxyAgent(PU && PP ? `http://${PU}:${PP}@${PH}:${PT}` : `http://${PH}:${PT}`) : undefined;
+    const pb = `/api/angel-rent?u=${enc(username)}${editMode ? '&mode=edit' : ''}&url=`;
     let postBody: Buffer | null = null, postCT: string | null = null;
     if (method === "POST") {
       const ab = await req.arrayBuffer();
@@ -85,7 +91,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
-      html = injectUI(html, decoded, username, user);
+      html = injectUI(html, decoded, username, user, editMode); // ✅ Pasar editMode
       rh.set("Content-Type", "text/html; charset=utf-8");
       return new Response(html, { status: 200, headers: rh });
     }
@@ -159,8 +165,8 @@ async function saveCookies(username: string, newCookies: string[], existing: str
   } catch (e) { /* non-critical */ }
 }
 
-function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
-  const pb = `/api/angel-rent?u=${enc(username)}&url=`;
+function injectUI(html: string, curUrl: string, username: string, user: ProxyUser, editMode: boolean = false): string {
+  const pb = `/api/angel-rent?u=${enc(username)}${editMode ? '&mode=edit' : ''}&url=`;
   
   // ✅ FIX: Usar timestamp exacto si existe, si no calcular con 23:59:59
   let endTimestamp = 0;
@@ -177,7 +183,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
     b64e:  JSON.stringify(Buffer.from(user.siteEmail || "").toString("base64")),
     b64p:  JSON.stringify(Buffer.from(user.sitePass  || "").toString("base64")),
     phone: JSON.stringify(user.phoneNumber || ""),
-    plist: JSON.stringify(`/api/angel-rent?u=${enc(username)}&url=${encodeURIComponent("https://megapersonals.eu/users/posts/list")}`),
+    plist: JSON.stringify(`/api/angel-rent?u=${enc(username)}${editMode ? '&mode=edit' : ''}&url=${encodeURIComponent("https://megapersonals.eu/users/posts/list")}`),
+    editMode: editMode ? 'true' : 'false', // ✅ NUEVO: Modo edición
   };
 
   let daysLeft = 999;
@@ -708,6 +715,7 @@ ${modalHtml}
 "use strict";
 var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
+var EDITMODE=${V.editMode}; // ✅ Modo edición
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
@@ -830,6 +838,8 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
   
+  // ✅ Solo bloquear botones si NO está en modo edición
+  if(!EDITMODE){
   setTimeout(function(){
     function blockButton(selector,label){
       var btn=document.querySelector(selector);
@@ -937,6 +947,7 @@ function handlePage(){
       }
     }
   },3000);
+  } // ✅ Fin de condición !EDITMODE
   
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
