@@ -60,7 +60,7 @@ export default function AngelAnunciosPage() {
         <div className="mb-8 rounded-2xl border border-border bg-card p-6 shadow-lg">
           <div className="mb-4 flex items-center gap-2 text-muted-foreground">
             <span className="text-xl">🔍</span>
-            <span className="text-sm font-medium">Buscar por nombre</span>
+            <span className="text-sm font-medium">Buscar por nombre o usuario</span>
           </div>
           
           <div className="flex gap-3">
@@ -69,7 +69,7 @@ export default function AngelAnunciosPage() {
               value={searchName}
               onChange={(e) => setSearchName(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Ejemplo: Amanda, Diana, Sofia..."
+              placeholder="Ejemplo: amanda, amanda2, azul..."
               className="h-12 text-base"
               disabled={searching}
             />
@@ -132,7 +132,7 @@ export default function AngelAnunciosPage() {
               Busca tus anuncios
             </h3>
             <p className="text-sm text-muted-foreground">
-              Ingresa tu nombre en el buscador para ver todos tus anuncios publicados
+              Ingresa tu nombre o usuario para ver todos tus anuncios publicados
             </p>
           </div>
         )}
@@ -142,7 +142,7 @@ export default function AngelAnunciosPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENTE DE TARJETA DE ANUNCIO
+// COMPONENTE DE TARJETA COMPLETA
 // ═══════════════════════════════════════════════════════════════════════════
 
 function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
@@ -150,12 +150,10 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
   const [isToggling, setIsToggling] = useState(false);
   const [localPaused, setLocalPaused] = useState(isPaused);
 
-  // Actualizar estado local cuando cambie el dato de Firebase
   useEffect(() => {
     setLocalPaused(isPaused);
   }, [isPaused]);
 
-  // Calcular estado de la renta
   const getRentalStatus = () => {
     if (rentalRemaining.days === 9999) return "none";
     if (rentalRemaining.isDebt) return "debt";
@@ -167,14 +165,13 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
 
   const rentalStatus = getRentalStatus();
 
-  // Colores según estado
   const rentalColors = {
-    none: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted", icon: "⏰" },
-    debt: { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/20", icon: "💀" },
-    critical: { bg: "bg-destructive/10", text: "text-destructive", border: "border-destructive/20", icon: "🔴" },
-    warning: { bg: "bg-warning/10", text: "text-warning", border: "border-warning/20", icon: "🟡" },
-    caution: { bg: "bg-chart-4/10", text: "text-chart-4", border: "border-chart-4/20", icon: "🟠" },
-    healthy: { bg: "bg-accent/10", text: "text-accent", border: "border-accent/20", icon: "🟢" },
+    none: { bg: "bg-muted", text: "text-muted-foreground", border: "border-muted", icon: "⏰", label: "Sin renta" },
+    debt: { bg: "bg-destructive", text: "text-destructive-foreground", border: "border-destructive", icon: "💀", label: "DEUDA" },
+    critical: { bg: "bg-destructive", text: "text-destructive-foreground", border: "border-destructive", icon: "🔴", label: "CRÍTICO" },
+    warning: { bg: "bg-warning", text: "text-warning-foreground", border: "border-warning", icon: "🟡", label: "HOY" },
+    caution: { bg: "bg-orange-500", text: "text-white", border: "border-orange-500", icon: "🟠", label: "URGENTE" },
+    healthy: { bg: "bg-accent", text: "text-accent-foreground", border: "border-accent", icon: "🟢", label: "ACTIVO" },
   };
 
   const colors = rentalColors[rentalStatus];
@@ -186,10 +183,8 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
     const newState = !localPaused;
     
     try {
-      // Actualizar estado local inmediatamente para feedback visual
       setLocalPaused(newState);
       
-      // Enviar comando a Firebase
       const FB = "https://megapersonals-control-default-rtdb.firebaseio.com";
       await fetch(`${FB}/proxyUsers/${username}/robotPaused.json`, {
         method: "PUT",
@@ -198,7 +193,6 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
       });
     } catch (error) {
       console.error("Error al cambiar estado del robot:", error);
-      // Revertir en caso de error
       setLocalPaused(!newState);
     } finally {
       setIsToggling(false);
@@ -207,143 +201,196 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
 
   const livePostUrl = user.defaultUrl || "https://megapersonals.eu";
 
+  // Formatear fecha de última actualización
+  const lastUpdate = user.updatedAt 
+    ? new Date(user.updatedAt).toLocaleDateString("es", { 
+        day: "2-digit", 
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      })
+    : "N/A";
+
   return (
-    <div className="group rounded-2xl border border-border bg-card p-6 shadow-sm transition-all hover:shadow-lg">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        {/* Left Side - Info Principal */}
-        <div className="flex-1 space-y-4">
-          {/* Nombre + Badge */}
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-2xl font-bold text-foreground">
-              {user.name || username}
-            </h3>
-            
-            {/* Badge Estado Activo/Inactivo */}
-            {isActive ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/20 bg-accent/10 px-3 py-1 text-xs font-bold text-accent">
-                <span>✅</span>
-                Activo
-              </span>
+    <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-br from-card to-card/50 shadow-lg transition-all hover:shadow-xl">
+      {/* Header de la tarjeta */}
+      <div className={cn(
+        "border-b p-4",
+        colors.bg,
+        colors.border
+      )}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/10 text-2xl backdrop-blur-sm">
+              {user.name ? user.name.charAt(0).toUpperCase() : username.charAt(0).toUpperCase()}
+            </div>
+            <div>
+              <h3 className={cn("text-xl font-bold", colors.text)}>
+                {user.name || username}
+              </h3>
+              <p className={cn("text-sm opacity-90", colors.text)}>
+                {colors.icon} {colors.label}
+              </p>
+            </div>
+          </div>
+          
+          {/* Badge de estado */}
+          <div className={cn(
+            "rounded-full border-2 px-4 py-1.5 text-sm font-bold",
+            isActive 
+              ? "border-white/30 bg-white/20 text-white" 
+              : "border-destructive/30 bg-destructive/20 text-destructive-foreground"
+          )}>
+            {isActive ? "✅ ACTIVO" : "⛔ INACTIVO"}
+          </div>
+        </div>
+      </div>
+
+      {/* Contenido principal */}
+      <div className="p-6 space-y-6">
+        {/* Grid de información */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Teléfono */}
+          <div className="rounded-xl border border-border bg-secondary/30 p-4">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>📞</span>
+              TELÉFONO
+            </div>
+            {user.phoneNumber ? (
+              <div className="font-mono text-2xl font-bold text-primary">
+                {user.phoneNumber}
+              </div>
             ) : (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-destructive/20 bg-destructive/10 px-3 py-1 text-xs font-bold text-destructive">
-                <span>❌</span>
-                Inactivo
-              </span>
+              <div className="text-sm italic text-muted-foreground">
+                Auto-detectando...
+              </div>
             )}
           </div>
 
-          {/* Grid de información */}
-          <div className="grid gap-3 sm:grid-cols-2">
-            {/* Teléfono */}
-            <div className="flex items-center gap-3 rounded-xl border border-border bg-secondary/30 p-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-xl">
-                📞
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-muted-foreground">Teléfono</div>
-                {user.phoneNumber ? (
-                  <div className="font-mono text-sm font-bold text-foreground truncate">
-                    {user.phoneNumber}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground italic">
-                    Auto-detectando...
-                  </div>
-                )}
-              </div>
+          {/* Tiempo de Renta */}
+          <div className={cn(
+            "rounded-xl border p-4",
+            rentalRemaining.isDebt 
+              ? "border-destructive/30 bg-destructive/10"
+              : "border-accent/30 bg-accent/10"
+          )}>
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <span>⏰</span>
+              TIEMPO DE RENTA
             </div>
-
-            {/* Tiempo de Renta */}
             <div className={cn(
-              "flex items-center gap-3 rounded-xl border p-3",
-              colors.bg,
-              colors.border
+              "text-2xl font-bold",
+              rentalRemaining.isDebt ? "text-destructive" : "text-accent"
             )}>
-              <div className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-lg text-xl",
-                colors.bg
-              )}>
-                {colors.icon}
+              {AngelRentAPI.formatRentalTime(rentalRemaining)}
+            </div>
+            {user.rentalEnd && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                Vence: {new Date(user.rentalEnd).toLocaleDateString("es")}
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-xs text-muted-foreground">Tiempo de Renta</div>
-                <div className={cn("text-sm font-bold truncate", colors.text)}>
-                  {AngelRentAPI.formatRentalTime(rentalRemaining)}
+            )}
+          </div>
+        </div>
+
+        {/* Alerta de Deuda */}
+        {rentalRemaining.isDebt && (
+          <div className="rounded-xl border-2 border-destructive bg-destructive/20 p-4">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <div className="font-bold text-destructive">¡ATENCIÓN! Cuenta con DEUDA</div>
+                <div className="text-sm text-destructive/80">
+                  Tu cuenta será eliminada en 48h si no renuevas
                 </div>
               </div>
             </div>
           </div>
+        )}
 
-          {/* Alerta de Deuda */}
-          {rentalRemaining.isDebt && (
-            <div className="rounded-lg border border-warning/20 bg-warning/10 p-3 text-sm text-warning">
-              <span className="mr-1.5">⚠️</span>
-              <strong>Atención:</strong> Tu cuenta tiene deuda. Será eliminada en 48h si no renuevas.
+        {/* Robot Automático */}
+        {hasRobot && (
+          <div className="rounded-xl border border-border bg-secondary/30 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                <span>🤖</span>
+                ROBOT AUTOMÁTICO
+              </div>
+              <div className={cn(
+                "rounded-full border px-3 py-1 text-xs font-bold",
+                localPaused
+                  ? "border-warning/30 bg-warning/10 text-warning"
+                  : "border-accent/30 bg-accent/10 text-accent"
+              )}>
+                {localPaused ? "⏸ PAUSADO" : "⚡ ACTIVO"}
+              </div>
+            </div>
+            
+            <Button
+              onClick={handleToggleRobot}
+              disabled={isToggling || !isActive}
+              className={cn(
+                "w-full",
+                localPaused
+                  ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                  : "bg-orange-500 text-white hover:bg-orange-600"
+              )}
+              size="lg"
+            >
+              {isToggling ? (
+                <>
+                  <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Procesando...
+                </>
+              ) : localPaused ? (
+                <>
+                  <span className="mr-2 text-lg">▶️</span>
+                  Reanudar Robot
+                </>
+              ) : (
+                <>
+                  <span className="mr-2 text-lg">⏸️</span>
+                  Pausar Robot
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+
+        {/* Información adicional */}
+        <div className="grid gap-3 text-sm">
+          {user.proxyHost && (
+            <div className="flex items-center justify-between rounded-lg border border-border bg-secondary/20 px-3 py-2">
+              <span className="text-muted-foreground">🌐 Proxy:</span>
+              <span className="font-mono text-xs">{user.proxyHost}:{user.proxyPort}</span>
             </div>
           )}
-
-          {/* Notas (si existen) */}
+          
           {user.notes && (
-            <div className="rounded-lg border border-border bg-secondary/30 p-3 text-sm text-muted-foreground">
-              📝 {user.notes}
+            <div className="rounded-lg border border-border bg-secondary/20 p-3">
+              <div className="mb-1 text-xs font-semibold text-muted-foreground">📝 NOTAS</div>
+              <div className="text-foreground">{user.notes}</div>
             </div>
           )}
         </div>
 
-        {/* Right Side - Acciones */}
-        <div className="flex flex-col gap-3 lg:w-64">
-          {/* Estado del Robot */}
-          {hasRobot && (
-            <div className="rounded-xl border border-border bg-secondary/30 p-3">
-              <div className="mb-2 text-xs font-medium text-muted-foreground">
-                🤖 Robot Automático
-              </div>
-              <Button
-                onClick={handleToggleRobot}
-                disabled={isToggling || !isActive}
-                className={cn(
-                  "w-full",
-                  localPaused
-                    ? "bg-accent/10 text-accent hover:bg-accent/20"
-                    : "bg-chart-4/10 text-chart-4 hover:bg-chart-4/20"
-                )}
-              >
-                {isToggling ? (
-                  <>
-                    <div className="mr-2 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    Cambiando...
-                  </>
-                ) : localPaused ? (
-                  <>
-                    <span className="mr-2">▶️</span>
-                    Reanudar Robot
-                  </>
-                ) : (
-                  <>
-                    <span className="mr-2">⏸️</span>
-                    Pausar Robot
-                  </>
-                )}
-              </Button>
-            </div>
-          )}
+        {/* Botón Ver Anuncio */}
+        <Button
+          onClick={() => window.open(livePostUrl, "_blank")}
+          className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+          size="lg"
+        >
+          <span className="mr-2 text-lg">🔗</span>
+          Ver Anuncio en Vivo
+        </Button>
 
-          {/* Ver Anuncio en Vivo */}
-          <Button
-            onClick={() => window.open(livePostUrl, "_blank")}
-            className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            size="lg"
-          >
-            <span className="mr-2">🔗</span>
-            Ver Anuncio en Vivo
-          </Button>
-
-          {/* Username (info técnica) */}
-          <div className="rounded-lg bg-muted/50 px-3 py-2 text-center">
-            <div className="text-xs text-muted-foreground">ID de cuenta</div>
-            <div className="font-mono text-xs font-medium text-foreground">
-              {username}
-            </div>
+        {/* Footer con info técnica */}
+        <div className="grid grid-cols-2 gap-3 border-t border-border pt-4 text-xs text-muted-foreground">
+          <div>
+            <span className="font-semibold">ID:</span> {username}
+          </div>
+          <div className="text-right">
+            <span className="font-semibold">Actualizado:</span> {lastUpdate}
           </div>
         </div>
       </div>
