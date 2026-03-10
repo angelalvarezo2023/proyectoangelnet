@@ -142,7 +142,7 @@ export default function AngelAnunciosPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// COMPONENTE DE TARJETA - DISEÑO EXACTO COMO IMAGEN 3
+// COMPONENTE DE TARJETA CON PRÓXIMO BUMP
 // ═══════════════════════════════════════════════════════════════════════════
 
 function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
@@ -208,7 +208,23 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
     };
   };
 
+  // ✅ Calcular PRÓXIMO BUMP
+  const calculateNextBump = () => {
+    const nextAt = (user as any).nextBumpAt;
+    if (!nextAt || !hasRobot || localPaused) return null;
+    
+    const diff = Math.max(0, nextAt - currentTime);
+    const minutes = Math.floor(diff / 60000);
+    const seconds = Math.floor((diff % 60000) / 1000);
+    
+    return {
+      text: `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`,
+      isClose: minutes < 2
+    };
+  };
+
   const rentalInfo = calculateRentalTime();
+  const nextBump = calculateNextBump();
 
   const handleToggleRobot = async () => {
     if (!hasRobot) return;
@@ -354,6 +370,21 @@ function AnuncioCard({ data }: { data: AngelRentSearchResult }) {
                 {localPaused ? "⏸ PAUSADO" : "⚡ ACTIVO"}
               </div>
             </div>
+            
+            {/* ✅ PRÓXIMO BUMP */}
+            {nextBump && (
+              <div className="mb-3 rounded-lg border border-purple-500/30 bg-purple-950/20 p-3">
+                <div className="mb-1 text-xs font-bold uppercase tracking-wider text-purple-400">
+                  ⏱ Próximo Bump
+                </div>
+                <div className={cn(
+                  "font-mono text-3xl font-black",
+                  nextBump.isClose ? "text-yellow-400" : "text-purple-400"
+                )}>
+                  {nextBump.text}
+                </div>
+              </div>
+            )}
             
             <Button
               onClick={handleToggleRobot}
