@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// ANGEL RENT - DISEÑO PREMIUM MEJORADO (VERSIÓN CORREGIDA)
+// ANGEL RENT - DISEÑO PREMIUM MEJORADO (VERSIÓN CORREGIDA + PRÓXIMO BUMP)
 // ✅ Bug fix: Eliminado el día extra que se sumaba al tiempo de renta
+// ✅ NUEVO: saveRobotState y schedNext guardan nextAt en Firebase
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -702,7 +703,10 @@ ${modalHtml}
 </div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
-  // [El JavaScript permanece igual, solo cambia la lógica de cálculo que ya está corregida arriba]
+  // ═══════════════════════════════════════════════════════════════════
+  // ✅ JAVASCRIPT CON MODIFICACIONES PARA PRÓXIMO BUMP
+  // Las funciones saveRobotState y schedNext fueron modificadas
+  // ═══════════════════════════════════════════════════════════════════
   const script = `<script>
 (function(){
 "use strict";
@@ -780,7 +784,20 @@ function updateUI(){
   updateFakeUI();
 }
 
-function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
+// ✅ ════════════════════════════════════════════════════════════════════════
+// ✅ MODIFICACIÓN 1: schedNext ahora guarda en Firebase
+// ✅ ════════════════════════════════════════════════════════════════════════
+function schedNext(){
+  var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));
+  var s=gst();
+  s.nextAt=Date.now()+secs*1000;
+  sst(s);
+  addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");
+  
+  // ✅ NUEVO: Guardar en Firebase inmediatamente
+  saveRobotState(s.on, s.paused || false);
+}
+
 function goList(ms){setTimeout(function(){window.location.href=PLIST;},ms||1500);}
 function rnd(n){return Math.floor(Math.random()*n);}
 function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
@@ -800,7 +817,25 @@ function startTick(){
   },1000);
 }
 
-function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
+// ✅ ════════════════════════════════════════════════════════════════════════
+// ✅ MODIFICACIÓN 2: saveRobotState ahora envía nextAt a Firebase
+// ✅ ════════════════════════════════════════════════════════════════════════
+function saveRobotState(on,paused){
+  try{
+    var s=gst();
+    var nextAt = s.nextAt || 0;
+    
+    fetch("/api/angel-rent-state?u="+UNAME,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        robotOn:on,
+        robotPaused:paused,
+        nextAt:nextAt  // ✅ NUEVO: Guardar próximo bump en Firebase
+      })
+    });
+  }catch(e){}
+}
 
 function toggleRobot(){
   var s=gst();
