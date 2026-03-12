@@ -1,16 +1,35 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AngelRentAPI, type AngelRentSearchResult } from "@/lib/firebase";
+import { AngelRentAPI } from "@/lib/firebase";
 import { Input } from "@/components/ui/input";
+import { ref, onValue, getDatabase } from "firebase/database";
+
+// ✅ INTERFAZ EXACTA de Firebase
+interface FirebaseUser {
+  name?: string;
+  phoneNumber?: string;
+  active?: boolean;
+  robotOn?: boolean;
+  robotPaused?: boolean;
+  nextBumpAt?: number;
+  rentalEnd?: string;
+  rentalEndTimestamp?: number;
+  defaultUrl?: string;
+}
+
+interface SearchResult {
+  username: string;
+  user: FirebaseUser;
+}
 
 export default function AngelAnunciosPage() {
   const [searchName, setSearchName] = useState("");
-  const [results, setResults] = useState<AngelRentSearchResult[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
-  // ✅ Actualizar cada segundo para tiempo de renta y countdown
+  // ✅ Actualizar reloj cada segundo
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentTime(Date.now());
@@ -18,13 +37,17 @@ export default function AngelAnunciosPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // ✅ BÚSQUEDA: Encuentra usuarios por nombre
   const handleSearch = async () => {
     if (!searchName.trim()) return;
     
     setSearching(true);
     try {
       const found = await AngelRentAPI.findAllByClientName(searchName.trim());
-      setResults(found);
+      setResults(found.map(r => ({
+        username: r.username,
+        user: r.user as FirebaseUser
+      })));
     } catch (error) {
       console.error("Error buscando:", error);
       setResults([]);
@@ -34,11 +57,10 @@ export default function AngelAnunciosPage() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleSearch();
-    }
+    if (e.key === "Enter") handleSearch();
   };
 
+  // ✅ PAUSAR ROBOT: Actualiza Firebase directamente
   const togglePause = async (username: string, currentPaused: boolean) => {
     try {
       const newState = !currentPaused;
@@ -46,7 +68,7 @@ export default function AngelAnunciosPage() {
       // Actualizar UI optimista
       setResults(prev => prev.map(r => 
         r.username === username 
-          ? { ...r, isPaused: newState }
+          ? { ...r, user: { ...r.user, robotPaused: newState } }
           : r
       ));
 
@@ -59,24 +81,24 @@ export default function AngelAnunciosPage() {
       });
     } catch (error) {
       console.error("Error actualizando pausa:", error);
-      // Revertir cambio en caso de error
+      // Revertir en caso de error
       setResults(prev => prev.map(r => 
         r.username === username 
-          ? { ...r, isPaused: currentPaused }
+          ? { ...r, user: { ...r.user, robotPaused: currentPaused } }
           : r
       ));
     }
   };
 
-  // ✅ Calcular tiempo de renta en tiempo real (CON FIX DE ZONA HORARIA UTC)
-  const calculateRentalTime = (user: AngelRentSearchResult) => {
-    if (!user.user.rentalEnd) {
+  // ✅ CALCULAR TIEMPO DE RENTA (desde Firebase timestamp con UTC)
+  const calculateRentalTime = (user: FirebaseUser) => {
+    if (!user.rentalEnd) {
       return { text: "Sin renta", color: "text-gray-400", emoji: "♾️", isDebt: false };
     }
 
-    // ✅ FIX: Usar UTC agregando "Z" al final para evitar discrepancias entre dispositivos
-    const endTimestamp = user.user.rentalEndTimestamp || 
-      new Date(user.user.rentalEnd + "T23:59:59Z").getTime();
+    // ✅ Usar timestamp exacto de Firebase (ya en UTC)
+    const endTimestamp = user.rentalEndTimestamp || 
+      new Date(user.rentalEnd + "T23:59:59Z").getTime();
     
     const diffMs = endTimestamp - currentTime;
     const isDebt = diffMs < 0;
@@ -139,7 +161,7 @@ export default function AngelAnunciosPage() {
     };
   };
 
-  // ✅ Calcular próximo bump countdown
+  // ✅ PRÓXIMO BUMP: Lee directamente de Firebase
   const calculateNextBump = (nextBumpAt?: number) => {
     if (!nextBumpAt) return null;
     
@@ -149,6 +171,33 @@ export default function AngelAnunciosPage() {
     
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
+
+  // ✅ LISTENER EN TIEMPO REAL: Sincroniza automáticamente cuando Firebase cambia
+  useEffect(() => {
+    if (results.length === 0) return;
+
+    const database = getDatabase();
+    const unsubscribes: (() => void)[] = [];
+
+    results.forEach(result => {
+      const userRef = ref(database, `proxyUsers/${result.username}`);
+      const unsubscribe = onValue(userRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          setResults(prev => prev.map(r => 
+            r.username === result.username 
+              ? { ...r, user: data as FirebaseUser }
+              : r
+          ));
+        }
+      });
+      unsubscribes.push(unsubscribe);
+    });
+
+    return () => {
+      unsubscribes.forEach(unsub => unsub());
+    };
+  }, [results.map(r => r.username).join(',')]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black p-4">
@@ -202,8 +251,10 @@ export default function AngelAnunciosPage() {
             </div>
             
             {results.map((result) => {
-              const rentalInfo = calculateRentalTime(result);
+              const rentalInfo = calculateRentalTime(result.user);
               const nextBump = calculateNextBump(result.user.nextBumpAt);
+              const hasRobot = result.user.robotOn ?? false;
+              const isPaused = result.user.robotPaused ?? false;
               
               return (
                 <div
@@ -272,9 +323,9 @@ export default function AngelAnunciosPage() {
                         🤖 Robot Automático
                       </div>
                       <div className="flex items-center gap-2">
-                        {result.hasRobot ? (
+                        {hasRobot ? (
                           <>
-                            {result.isPaused ? (
+                            {isPaused ? (
                               <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded-full text-sm font-bold text-yellow-400">
                                 ⏸ PAUSADO
                               </span>
@@ -293,7 +344,7 @@ export default function AngelAnunciosPage() {
                     </div>
 
                     {/* Próximo Bump */}
-                    {result.hasRobot && !result.isPaused && nextBump && (
+                    {hasRobot && !isPaused && nextBump && (
                       <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
                         <div className="text-xs font-bold text-purple-300 mb-2 uppercase tracking-wider flex items-center gap-2">
                           ⏱ Próximo Bump
@@ -310,16 +361,16 @@ export default function AngelAnunciosPage() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-3">
-                    {result.hasRobot && (
+                    {hasRobot && (
                       <button
-                        onClick={() => togglePause(result.username, result.isPaused)}
+                        onClick={() => togglePause(result.username, isPaused)}
                         className={`flex-1 min-w-[200px] px-6 py-3 rounded-xl font-bold text-white transition-all shadow-lg ${
-                          result.isPaused
+                          isPaused
                             ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 hover:shadow-green-500/50"
                             : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 hover:shadow-orange-500/50"
                         }`}
                       >
-                        {result.isPaused ? "▶️ Reanudar Robot" : "⏸ Pausar Robot"}
+                        {isPaused ? "▶️ Reanudar Robot" : "⏸ Pausar Robot"}
                       </button>
                     )}
                     
