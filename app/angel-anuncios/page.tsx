@@ -90,24 +90,29 @@ export default function AngelAnunciosPage() {
     }
   };
 
-  // ✅ CALCULAR TIEMPO DE RENTA (desde Firebase timestamp con UTC)
+  // ✅ CALCULAR TIEMPO DE RENTA - CORREGIDO
+  // USA EL TIMESTAMP EXACTO DE FIREBASE (rentalEndTimestamp)
   const calculateRentalTime = (user: FirebaseUser) => {
     if (!user.rentalEnd) {
       return { text: "Sin renta", color: "text-gray-400", emoji: "♾️", isDebt: false };
     }
 
-    // ✅ Usar timestamp exacto de Firebase (ya en UTC)
+    // ✅ PRIORIDAD 1: Usar rentalEndTimestamp si existe (más preciso)
+    // ✅ PRIORIDAD 2: Calcular desde rentalEnd con UTC
     const endTimestamp = user.rentalEndTimestamp || 
       new Date(user.rentalEnd + "T23:59:59Z").getTime();
     
+    // ✅ Calcular diferencia en milisegundos
     const diffMs = endTimestamp - currentTime;
     const isDebt = diffMs < 0;
     const absDiffMs = Math.abs(diffMs);
 
+    // ✅ Convertir a días, horas, minutos
     const days = Math.floor(absDiffMs / 86400000);
     const hours = Math.floor((absDiffMs % 86400000) / 3600000);
     const minutes = Math.floor((absDiffMs % 3600000) / 60000);
 
+    // ✅ CASO 1: Deuda
     if (isDebt) {
       return {
         text: `Deuda: ${days}d ${hours}h ${minutes}m`,
@@ -117,6 +122,7 @@ export default function AngelAnunciosPage() {
       };
     }
 
+    // ✅ CASO 2: Menos de 1 hora
     if (days === 0 && hours === 0) {
       return {
         text: `${minutes}m`,
@@ -126,6 +132,7 @@ export default function AngelAnunciosPage() {
       };
     }
 
+    // ✅ CASO 3: Menos de 24 horas
     if (days === 0) {
       return {
         text: `${hours}h ${minutes}m`,
@@ -135,6 +142,7 @@ export default function AngelAnunciosPage() {
       };
     }
 
+    // ✅ CASO 4: Menos de 2 días
     if (days < 2) {
       return {
         text: `${days}d ${hours}h`,
@@ -144,6 +152,7 @@ export default function AngelAnunciosPage() {
       };
     }
 
+    // ✅ CASO 5: Menos de 3 días
     if (days < 3) {
       return {
         text: `${days}d ${hours}h`,
@@ -153,6 +162,7 @@ export default function AngelAnunciosPage() {
       };
     }
 
+    // ✅ CASO 6: 3 días o más
     return {
       text: `${days}d ${hours}h`,
       color: "text-green-500",
@@ -161,7 +171,7 @@ export default function AngelAnunciosPage() {
     };
   };
 
-  // ✅ PRÓXIMO BUMP: Lee directamente de Firebase
+  // ✅ PRÓXIMO BUMP - LEE DIRECTAMENTE DE FIREBASE
   const calculateNextBump = (nextBumpAt?: number) => {
     if (!nextBumpAt) return null;
     
@@ -386,9 +396,23 @@ export default function AngelAnunciosPage() {
                     </a>
                   </div>
 
-                  {/* ID Footer */}
-                  <div className="mt-4 pt-4 border-t border-white/10 text-xs text-gray-500">
-                    ID: {result.username}
+                  {/* Debug Info - TEMPORAL */}
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <details className="text-xs text-gray-500">
+                      <summary className="cursor-pointer hover:text-gray-400">Debug Info</summary>
+                      <div className="mt-2 space-y-1 font-mono">
+                        <div>ID: {result.username}</div>
+                        <div>rentalEndTimestamp: {result.user.rentalEndTimestamp || "N/A"}</div>
+                        <div>nextBumpAt: {result.user.nextBumpAt || "N/A"}</div>
+                        <div>Ahora: {currentTime}</div>
+                        {result.user.rentalEndTimestamp && (
+                          <div>Diferencia Renta: {Math.floor((result.user.rentalEndTimestamp - currentTime) / 1000 / 60)} min</div>
+                        )}
+                        {result.user.nextBumpAt && (
+                          <div>Diferencia Bump: {Math.floor((result.user.nextBumpAt - currentTime) / 1000 / 60)} min</div>
+                        )}
+                      </div>
+                    </details>
                   </div>
                 </div>
               );
