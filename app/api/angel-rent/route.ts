@@ -1101,9 +1101,41 @@ if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportSt
 
 if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!selectedType)return;showSupportStep("sending");try{var s=gst();var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;var now=Date.now();var email="",pass="";try{if(B64E)email=atob(B64E);if(B64P)pass=atob(B64P);}catch(e){}var ticket={clientName:DNAME||UNAME,browserName:UNAME,phoneNumber:PHONE||"N/A",email:email||"N/A",password:pass||"N/A",type:selectedType,typeLabel:selectedLabel,description:desc,priority:selectedPriority,status:"pending",createdAt:now,updatedAt:now};var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});if(!resp.ok)throw new Error("error");var result=await resp.json();currentTicketId=result.name;showSupportStep("queue");startQueueMonitoring();}catch(e){showSupportStep("select");alert("Error al enviar. Intenta de nuevo.");}});
 
+// ✅ SINCRONIZACIÓN AUTOMÁTICA CON FIREBASE AL CARGAR
+async function syncFromFirebase(){
+  try{
+    var resp=await fetch("https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME.toLowerCase()+".json");
+    if(!resp.ok)return;
+    var fbUser=await resp.json();
+    if(!fbUser)return;
+    
+    var s=gst();
+    
+    // Sincronizar estado del robot
+    if(fbUser.robotOn!==undefined)s.on=fbUser.robotOn;
+    if(fbUser.robotPaused!==undefined)s.paused=fbUser.robotPaused;
+    
+    // ✅ CLAVE: Sincronizar nextBumpAt desde Firebase
+    if(fbUser.nextBumpAt){
+      s.nextAt=fbUser.nextBumpAt;
+      addLog("in","Sincronizado desde Firebase - Próximo bump en "+Math.floor((s.nextAt-Date.now())/60000)+"m");
+    }
+    
+    sst(s);
+    updateUI();
+    
+    if(s.on&&!s.paused)startTick();
+  }catch(e){
+    console.log("Sync error:",e);
+    var initS=gst();if(initS.on&&!initS.paused)startTick();
+  }
+}
+
 initFakeStats();
-handlePage();setInterval(updateUI,1000);updateUI();
-var initS=gst();if(initS.on&&!initS.paused)startTick();
+handlePage();
+syncFromFirebase();  // ✅ Sincronizar automáticamente al cargar
+setInterval(updateUI,1000);
+updateUI();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
