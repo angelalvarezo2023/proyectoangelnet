@@ -68,14 +68,15 @@ export default function AngelAnunciosPage() {
     }
   };
 
-  // ✅ Calcular tiempo de renta en tiempo real
+  // ✅ Calcular tiempo de renta en tiempo real (CON FIX DE ZONA HORARIA UTC)
   const calculateRentalTime = (user: AngelRentSearchResult) => {
     if (!user.user.rentalEnd) {
       return { text: "Sin renta", color: "text-gray-400", emoji: "♾️", isDebt: false };
     }
 
+    // ✅ FIX: Usar UTC agregando "Z" al final para evitar discrepancias entre dispositivos
     const endTimestamp = user.user.rentalEndTimestamp || 
-      new Date(user.user.rentalEnd + "T23:59:59").getTime();
+      new Date(user.user.rentalEnd + "T23:59:59Z").getTime();
     
     const diffMs = endTimestamp - currentTime;
     const isDebt = diffMs < 0;
@@ -299,6 +300,9 @@ export default function AngelAnunciosPage() {
                         </div>
                         <div className="text-2xl font-black text-purple-400 font-mono">
                           {nextBump}
+                        </div>
+                        <div className="text-xs text-purple-300 mt-1">
+                          minutos:segundos
                         </div>
                       </div>
                     )}
