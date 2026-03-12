@@ -1160,6 +1160,7 @@ export interface AngelRentUser {
   updatedAt?: string;
   robotOn?: boolean;
   robotPaused?: boolean;
+  nextBumpAt?: number;
   cookies?: string;
   cookieTs?: number;
   phoneNumber?: string;
