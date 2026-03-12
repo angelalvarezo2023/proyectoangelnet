@@ -280,28 +280,15 @@ export default function AngelAnunciosPage() {
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-3">
-                    {hasRobot && (
-                      <button
-                        onClick={() => togglePause(result.username, isPaused)}
-                        className={`flex-1 min-w-[200px] px-6 py-3.5 rounded-xl font-bold text-white transition-all shadow-lg ${
-                          isPaused
-                            ? "bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 hover:shadow-emerald-500/50"
-                            : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 hover:shadow-orange-500/50"
-                        }`}
-                      >
-                        {isPaused ? "▶️ Reanudar Robot" : "⏸ Pausar Robot"}
-                      </button>
-                    )}
-                    
                     <a
                       href={`/api/angel-rent?u=${result.username}&url=${encodeURIComponent(
                         result.user.defaultUrl || "https://megapersonals.eu/users/posts/list"
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-[200px] px-6 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 text-center"
+                      className="flex-1 px-6 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 text-center"
                     >
-                      🔗 Ver Anuncio
+                      🔗 Ver Anuncio en Vivo
                     </a>
                   </div>
 
