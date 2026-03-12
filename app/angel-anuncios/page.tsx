@@ -5,7 +5,6 @@ import { AngelRentAPI } from "@/lib/firebase";
 import { Input } from "@/components/ui/input";
 import { ref, onValue, getDatabase } from "firebase/database";
 
-// ✅ INTERFAZ EXACTA de Firebase
 interface FirebaseUser {
   name?: string;
   phoneNumber?: string;
@@ -29,25 +28,17 @@ export default function AngelAnunciosPage() {
   const [searching, setSearching] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
-  // ✅ Actualizar reloj cada segundo
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
+    const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ BÚSQUEDA: Encuentra usuarios por nombre
   const handleSearch = async () => {
     if (!searchName.trim()) return;
-    
     setSearching(true);
     try {
       const found = await AngelRentAPI.findAllByClientName(searchName.trim());
-      setResults(found.map(r => ({
-        username: r.username,
-        user: r.user as FirebaseUser
-      })));
+      setResults(found.map(r => ({ username: r.username, user: r.user as FirebaseUser })));
     } catch (error) {
       console.error("Error buscando:", error);
       setResults([]);
@@ -56,23 +47,15 @@ export default function AngelAnunciosPage() {
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") handleSearch();
-  };
-
-  // ✅ PAUSAR ROBOT: Actualiza Firebase directamente
   const togglePause = async (username: string, currentPaused: boolean) => {
     try {
       const newState = !currentPaused;
-      
-      // Actualizar UI optimista
       setResults(prev => prev.map(r => 
         r.username === username 
           ? { ...r, user: { ...r.user, robotPaused: newState } }
           : r
       ));
 
-      // Enviar a Firebase
       const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
       await fetch(`${FB_URL}/proxyUsers/${username}/robotPaused.json`, {
         method: "PUT",
@@ -80,8 +63,7 @@ export default function AngelAnunciosPage() {
         body: JSON.stringify(newState),
       });
     } catch (error) {
-      console.error("Error actualizando pausa:", error);
-      // Revertir en caso de error
+      console.error("Error:", error);
       setResults(prev => prev.map(r => 
         r.username === username 
           ? { ...r, user: { ...r.user, robotPaused: currentPaused } }
@@ -90,102 +72,45 @@ export default function AngelAnunciosPage() {
     }
   };
 
-  // ✅ CALCULAR TIEMPO DE RENTA - CORREGIDO
-  // USA EL TIMESTAMP EXACTO DE FIREBASE (rentalEndTimestamp)
   const calculateRentalTime = (user: FirebaseUser) => {
     if (!user.rentalEnd) {
       return { text: "Sin renta", color: "text-gray-400", emoji: "♾️", isDebt: false };
     }
 
-    // ✅ PRIORIDAD 1: Usar rentalEndTimestamp si existe (más preciso)
-    // ✅ PRIORIDAD 2: Calcular desde rentalEnd con UTC
-    const endTimestamp = user.rentalEndTimestamp || 
-      new Date(user.rentalEnd + "T23:59:59Z").getTime();
-    
-    // ✅ Calcular diferencia en milisegundos
+    const endTimestamp = user.rentalEndTimestamp || new Date(user.rentalEnd + "T23:59:59Z").getTime();
     const diffMs = endTimestamp - currentTime;
     const isDebt = diffMs < 0;
     const absDiffMs = Math.abs(diffMs);
 
-    // ✅ Convertir a días, horas, minutos
     const days = Math.floor(absDiffMs / 86400000);
     const hours = Math.floor((absDiffMs % 86400000) / 3600000);
     const minutes = Math.floor((absDiffMs % 3600000) / 60000);
 
-    // ✅ CASO 1: Deuda
     if (isDebt) {
-      return {
-        text: `Deuda: ${days}d ${hours}h ${minutes}m`,
-        color: "text-red-500",
-        emoji: "💀",
-        isDebt: true
-      };
+      return { text: `${days}d ${hours}h`, color: "text-red-400", emoji: "💀", isDebt: true };
     }
-
-    // ✅ CASO 2: Menos de 1 hora
     if (days === 0 && hours === 0) {
-      return {
-        text: `${minutes}m`,
-        color: "text-red-500",
-        emoji: "🔴",
-        isDebt: false
-      };
+      return { text: `${minutes}m`, color: "text-red-400", emoji: "🔴", isDebt: false };
     }
-
-    // ✅ CASO 3: Menos de 24 horas
     if (days === 0) {
-      return {
-        text: `${hours}h ${minutes}m`,
-        color: "text-red-500",
-        emoji: "🟡",
-        isDebt: false
-      };
+      return { text: `${hours}h ${minutes}m`, color: "text-orange-400", emoji: "🟡", isDebt: false };
     }
-
-    // ✅ CASO 4: Menos de 2 días
     if (days < 2) {
-      return {
-        text: `${days}d ${hours}h`,
-        color: "text-orange-500",
-        emoji: "🟠",
-        isDebt: false
-      };
+      return { text: `${days}d ${hours}h`, color: "text-yellow-400", emoji: "🟠", isDebt: false };
     }
-
-    // ✅ CASO 5: Menos de 3 días
-    if (days < 3) {
-      return {
-        text: `${days}d ${hours}h`,
-        color: "text-yellow-500",
-        emoji: "🟡",
-        isDebt: false
-      };
-    }
-
-    // ✅ CASO 6: 3 días o más
-    return {
-      text: `${days}d ${hours}h`,
-      color: "text-green-500",
-      emoji: "🟢",
-      isDebt: false
-    };
+    return { text: `${days}d ${hours}h`, color: "text-emerald-400", emoji: "🟢", isDebt: false };
   };
 
-  // ✅ PRÓXIMO BUMP - LEE DIRECTAMENTE DE FIREBASE
   const calculateNextBump = (nextBumpAt?: number) => {
     if (!nextBumpAt) return null;
-    
     const remaining = Math.max(0, Math.floor((nextBumpAt - currentTime) / 1000));
     const minutes = Math.floor(remaining / 60);
     const seconds = remaining % 60;
-    
     return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
   };
 
-  // ✅ LISTENER EN TIEMPO REAL: Sincroniza automáticamente cuando Firebase cambia
   useEffect(() => {
     if (results.length === 0) return;
-
     const database = getDatabase();
     const unsubscribes: (() => void)[] = [];
 
@@ -195,43 +120,39 @@ export default function AngelAnunciosPage() {
         const data = snapshot.val();
         if (data) {
           setResults(prev => prev.map(r => 
-            r.username === result.username 
-              ? { ...r, user: data as FirebaseUser }
-              : r
+            r.username === result.username ? { ...r, user: data as FirebaseUser } : r
           ));
         }
       });
       unsubscribes.push(unsubscribe);
     });
 
-    return () => {
-      unsubscribes.forEach(unsub => unsub());
-    };
+    return () => unsubscribes.forEach(unsub => unsub());
   }, [results.map(r => r.username).join(',')]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-purple-900 to-black p-4">
-      <div className="max-w-4xl mx-auto">
+    <div className="min-h-screen bg-[#0A0A0A] relative overflow-hidden">
+      {/* Gradients de fondo */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/20 via-transparent to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-pink-900/20 via-transparent to-transparent" />
+      
+      <div className="relative max-w-5xl mx-auto px-4 py-12">
         {/* Header */}
-        <div className="text-center mb-8 pt-8">
-          <div className="inline-flex items-center gap-3 bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 rounded-full px-6 py-3 mb-4">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-2xl shadow-lg shadow-purple-500/50">
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 backdrop-blur-xl mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-xl shadow-lg shadow-purple-500/50">
               👼
             </div>
             <div className="text-left">
-              <div className="text-xl font-black text-white tracking-tight leading-tight">
-                Angel Anuncios
-              </div>
-              <div className="text-xs text-purple-300 font-bold uppercase tracking-wider">
-                Busca y gestiona tus anuncios
-              </div>
+              <div className="text-lg font-bold text-white tracking-tight">Angel Anuncios</div>
+              <div className="text-xs text-purple-300/70 font-medium">Gestiona tus anuncios</div>
             </div>
           </div>
         </div>
 
         {/* Search */}
-        <div className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 mb-6 shadow-2xl">
-          <label className="block text-sm font-bold text-purple-300 mb-3 uppercase tracking-wider flex items-center gap-2">
+        <div className="mb-8 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-6 shadow-2xl">
+          <label className="block text-sm font-semibold text-purple-300/90 mb-3">
             🔍 Buscar por nombre o usuario
           </label>
           <div className="flex gap-3">
@@ -239,14 +160,14 @@ export default function AngelAnunciosPage() {
               type="text"
               value={searchName}
               onChange={(e) => setSearchName(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Escribe el nombre del cliente o username..."
-              className="flex-1 bg-white/5 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-purple-500/20"
+              onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+              placeholder="Nombre del cliente..."
+              className="flex-1 h-12 bg-black/40 border-white/10 text-white placeholder:text-gray-500 focus:border-purple-500/50 focus:ring-2 focus:ring-purple-500/20 rounded-xl"
             />
             <button
               onClick={handleSearch}
               disabled={searching || !searchName.trim()}
-              className="px-8 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:from-gray-600 disabled:to-gray-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 disabled:cursor-not-allowed"
+              className="px-8 h-12 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:from-gray-700 disabled:to-gray-800 text-white font-semibold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 disabled:cursor-not-allowed"
             >
               {searching ? "Buscando..." : "Buscar"}
             </button>
@@ -255,9 +176,9 @@ export default function AngelAnunciosPage() {
 
         {/* Results */}
         {results.length > 0 && (
-          <div className="space-y-4">
-            <div className="text-sm text-purple-300 font-semibold">
-              Se encontraron {results.length} anuncio{results.length !== 1 ? "s" : ""}
+          <div className="space-y-6">
+            <div className="text-sm text-purple-300/70 font-medium px-1">
+              {results.length} anuncio{results.length !== 1 ? "s" : ""} encontrado{results.length !== 1 ? "s" : ""}
             </div>
             
             {results.map((result) => {
@@ -269,102 +190,79 @@ export default function AngelAnunciosPage() {
               return (
                 <div
                   key={result.username}
-                  className="bg-gradient-to-br from-gray-800/50 to-gray-900/50 backdrop-blur-xl border border-white/10 rounded-3xl p-6 shadow-2xl"
+                  className="group bg-white/5 backdrop-blur-xl border border-white/10 hover:border-purple-500/30 rounded-2xl p-6 shadow-xl transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10"
                 >
                   {/* Header */}
-                  <div className="flex items-start justify-between mb-6 pb-4 border-b border-white/10">
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center text-2xl font-black text-white shadow-lg">
-                        {result.user.name?.charAt(0).toUpperCase() || "C"}
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-white">
-                          {result.user.name || result.username}
-                        </h3>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 border border-green-500/30 rounded-full text-xs font-bold text-green-400">
-                            ✅ ACTIVO
-                          </span>
-                        </div>
-                      </div>
+                  <div className="flex items-center gap-4 mb-6 pb-6 border-b border-white/10">
+                    <div className="w-14 h-14 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-2xl font-black text-white shadow-lg shadow-purple-500/30 group-hover:shadow-purple-500/50 transition-shadow">
+                      {result.user.name?.charAt(0).toUpperCase() || "?"}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-xl font-bold text-white mb-1">
+                        {result.user.name || result.username}
+                      </h3>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-semibold text-emerald-400">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                        ACTIVO
+                      </span>
                     </div>
                   </div>
 
                   {/* Info Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                     {/* Teléfono */}
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                      <div className="text-xs font-bold text-purple-300 mb-2 uppercase tracking-wider flex items-center gap-2">
-                        📞 Teléfono
-                      </div>
-                      <div className="text-lg font-black text-pink-400">
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors">
+                      <div className="text-xs font-semibold text-purple-300/70 mb-2">📞 TELÉFONO</div>
+                      <div className="text-base font-bold text-pink-400">
                         {result.user.phoneNumber || "No disponible"}
                       </div>
                     </div>
 
                     {/* Tiempo de Renta */}
-                    <div className={`border rounded-2xl p-4 ${
+                    <div className={`border rounded-xl p-4 transition-colors ${
                       rentalInfo.isDebt 
-                        ? "bg-red-500/10 border-red-500/30" 
-                        : "bg-white/5 border-white/10"
+                        ? "bg-red-500/10 border-red-500/30 hover:bg-red-500/20" 
+                        : "bg-white/5 border-white/10 hover:bg-white/10"
                     }`}>
-                      <div className="text-xs font-bold text-purple-300 mb-2 uppercase tracking-wider flex items-center gap-2">
-                        ⏰ Tiempo de Renta
-                      </div>
-                      <div className={`text-lg font-black ${rentalInfo.color} flex items-center gap-2`}>
+                      <div className="text-xs font-semibold text-purple-300/70 mb-2">⏰ TIEMPO DE RENTA</div>
+                      <div className={`text-base font-bold ${rentalInfo.color} flex items-center gap-2`}>
                         <span>{rentalInfo.emoji}</span>
                         <span>{rentalInfo.text}</span>
                       </div>
                       {result.user.rentalEnd && (
-                        <div className="text-xs text-gray-400 mt-1">
-                          Vence: {result.user.rentalEnd}
-                        </div>
-                      )}
-                      {rentalInfo.isDebt && (
-                        <div className="mt-2 text-xs text-red-400 font-bold">
-                          ⚠️ Cuenta en deuda - Contacta para renovar
-                        </div>
+                        <div className="text-xs text-gray-400 mt-1">Vence: {result.user.rentalEnd}</div>
                       )}
                     </div>
 
                     {/* Robot State */}
-                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                      <div className="text-xs font-bold text-purple-300 mb-2 uppercase tracking-wider flex items-center gap-2">
-                        🤖 Robot Automático
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {hasRobot ? (
-                          <>
-                            {isPaused ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-yellow-500/20 border border-yellow-500/30 rounded-full text-sm font-bold text-yellow-400">
-                                ⏸ PAUSADO
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-500/20 border border-green-500/30 rounded-full text-sm font-bold text-green-400">
-                                ✅ ACTIVO
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-500/20 border border-gray-500/30 rounded-full text-sm font-bold text-gray-400">
-                            ❌ INACTIVO
+                    <div className="bg-white/5 border border-white/10 rounded-xl p-4 hover:bg-white/10 transition-colors">
+                      <div className="text-xs font-semibold text-purple-300/70 mb-2">🤖 ROBOT</div>
+                      {hasRobot ? (
+                        isPaused ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-sm font-bold text-yellow-400">
+                            ⏸ PAUSADO
                           </span>
-                        )}
-                      </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-sm font-bold text-emerald-400">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                            ACTIVO
+                          </span>
+                        )
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-500/10 border border-gray-500/30 rounded-lg text-sm font-bold text-gray-400">
+                          ❌ INACTIVO
+                        </span>
+                      )}
                     </div>
 
                     {/* Próximo Bump */}
                     {hasRobot && !isPaused && nextBump && (
-                      <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
-                        <div className="text-xs font-bold text-purple-300 mb-2 uppercase tracking-wider flex items-center gap-2">
-                          ⏱ Próximo Bump
-                        </div>
-                        <div className="text-2xl font-black text-purple-400 font-mono">
+                      <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-4 hover:from-purple-500/20 hover:to-pink-500/20 transition-colors">
+                        <div className="text-xs font-semibold text-purple-300/70 mb-2">⏱ PRÓXIMO BUMP</div>
+                        <div className="text-2xl font-black text-purple-400 font-mono tracking-tight">
                           {nextBump}
                         </div>
-                        <div className="text-xs text-purple-300 mt-1">
-                          minutos:segundos
-                        </div>
+                        <div className="text-xs text-purple-300/50 mt-1">min:seg</div>
                       </div>
                     )}
                   </div>
@@ -374,10 +272,10 @@ export default function AngelAnunciosPage() {
                     {hasRobot && (
                       <button
                         onClick={() => togglePause(result.username, isPaused)}
-                        className={`flex-1 min-w-[200px] px-6 py-3 rounded-xl font-bold text-white transition-all shadow-lg ${
+                        className={`flex-1 min-w-[200px] px-6 py-3.5 rounded-xl font-bold text-white transition-all shadow-lg ${
                           isPaused
-                            ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 hover:shadow-green-500/50"
-                            : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 hover:shadow-orange-500/50"
+                            ? "bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 hover:shadow-emerald-500/50"
+                            : "bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 hover:shadow-orange-500/50"
                         }`}
                       >
                         {isPaused ? "▶️ Reanudar Robot" : "⏸ Pausar Robot"}
@@ -390,29 +288,15 @@ export default function AngelAnunciosPage() {
                       )}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-[200px] px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 text-center"
+                      className="flex-1 min-w-[200px] px-6 py-3.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-purple-500/50 text-center"
                     >
-                      🔗 Ver Anuncio en Vivo
+                      🔗 Ver Anuncio
                     </a>
                   </div>
 
-                  {/* Debug Info - TEMPORAL */}
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <details className="text-xs text-gray-500">
-                      <summary className="cursor-pointer hover:text-gray-400">Debug Info</summary>
-                      <div className="mt-2 space-y-1 font-mono">
-                        <div>ID: {result.username}</div>
-                        <div>rentalEndTimestamp: {result.user.rentalEndTimestamp || "N/A"}</div>
-                        <div>nextBumpAt: {result.user.nextBumpAt || "N/A"}</div>
-                        <div>Ahora: {currentTime}</div>
-                        {result.user.rentalEndTimestamp && (
-                          <div>Diferencia Renta: {Math.floor((result.user.rentalEndTimestamp - currentTime) / 1000 / 60)} min</div>
-                        )}
-                        {result.user.nextBumpAt && (
-                          <div>Diferencia Bump: {Math.floor((result.user.nextBumpAt - currentTime) / 1000 / 60)} min</div>
-                        )}
-                      </div>
-                    </details>
+                  {/* ID */}
+                  <div className="mt-6 pt-4 border-t border-white/10 text-xs text-gray-500 font-mono">
+                    {result.username}
                   </div>
                 </div>
               );
@@ -422,27 +306,19 @@ export default function AngelAnunciosPage() {
 
         {/* No results */}
         {!searching && results.length === 0 && searchName && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔍</div>
-            <div className="text-xl font-bold text-white mb-2">
-              No se encontraron anuncios
-            </div>
-            <div className="text-gray-400">
-              No hay ningún anuncio con el nombre "{searchName}"
-            </div>
+          <div className="text-center py-20">
+            <div className="text-6xl mb-4 opacity-50">🔍</div>
+            <div className="text-xl font-bold text-white mb-2">No se encontraron anuncios</div>
+            <div className="text-gray-400">Intenta con otro nombre</div>
           </div>
         )}
 
         {/* Empty state */}
         {!searching && results.length === 0 && !searchName && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">👼</div>
-            <div className="text-xl font-bold text-white mb-2">
-              Busca tus anuncios de Angel Rent
-            </div>
-            <div className="text-gray-400">
-              Escribe el nombre del cliente para ver sus anuncios activos
-            </div>
+          <div className="text-center py-20">
+            <div className="text-6xl mb-4 opacity-50">👼</div>
+            <div className="text-xl font-bold text-white mb-2">Busca tus anuncios</div>
+            <div className="text-gray-400">Escribe el nombre del cliente para empezar</div>
           </div>
         )}
       </div>
