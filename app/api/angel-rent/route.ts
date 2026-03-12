@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANGEL RENT - DISEÑO PREMIUM MEJORADO (VERSIÓN CORREGIDA)
 // ✅ Bug fix: Eliminado el día extra que se sumaba al tiempo de renta
+// ✅ Bug fix: Detección automática de error "Too many requests" y vuelta al listado
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -702,7 +703,6 @@ ${modalHtml}
 </div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
-  // [El JavaScript permanece igual, solo cambia la lógica de cálculo que ya está corregida arriba]
   const script = `<script>
 (function(){
 "use strict";
@@ -825,6 +825,17 @@ function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);add
 
 function autoOK(){var done=false;var chk=setInterval(function(){if(done)return;var btns=document.querySelectorAll("button,a,input[type=button],input[type=submit]");for(var i=0;i<btns.length;i++){var t=(btns[i].innerText||btns[i].value||"").trim().toLowerCase();if(t==="ok"||t==="okay"||t==="done"||t==="continue"||t==="continuar"){done=true;clearInterval(chk);var b=btns[i];setTimeout(function(){try{b.click();}catch(e){}goList(2000);},500);return;}}},400);setTimeout(function(){if(!done){clearInterval(chk);goList(600);}},8000);}
 
+// ✅ FIX: Detectar error "Too many requests" y volver al listado automáticamente
+function checkRateLimit(){
+  var body=document.body?document.body.innerText:"";
+  if(body.indexOf("Too many requests")!==-1||body.indexOf("Allow one request per")!==-1){
+    addLog("er","Rate limit — esperando 6s...");
+    goList(6000);
+    return true;
+  }
+  return false;
+}
+
 function handlePage(){
   var u=CUR;
   var RK="ar_ret_"+UNAME;
@@ -939,7 +950,19 @@ function handlePage(){
   },3000);
   
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
-  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
+  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}
+  if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
+  // ✅ FIX: Detectar rate limit en páginas de bump/repost antes de procesar
+  if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){
+    setTimeout(function(){
+      if(!checkRateLimit()){autoOK();goList(2000);}
+    },1500);
+    return;
+  }
+  if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
+  // ✅ FIX: Detectar rate limit en cualquier página cuando el robot está activo
+  setTimeout(function(){checkRateLimit();},1500);
+  if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(body.indexOf("too many requests")!==-1||body.indexOf("allow one request per")!==-1){addLog("er","Rate limit — esperando 6s...");goList(6000);return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
 
 function injectLoginLogo(){if(document.getElementById("ar-lhdr"))return;var hdr=document.createElement("div");hdr.id="ar-lhdr";hdr.innerHTML='<div class="lw"><div class="li">👼</div><div class="lt"><span class="ln">Angel Rent</span><span class="ls">Tu anuncio, siempre arriba</span></div></div>';var form=document.querySelector("form");if(form&&form.parentNode)form.parentNode.insertBefore(hdr,form);else if(document.body)document.body.insertBefore(hdr,document.body.firstChild);}
 
