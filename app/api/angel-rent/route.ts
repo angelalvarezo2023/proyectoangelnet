@@ -1101,7 +1101,7 @@ if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportSt
 
 if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!selectedType)return;showSupportStep("sending");try{var s=gst();var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;var now=Date.now();var email="",pass="";try{if(B64E)email=atob(B64E);if(B64P)pass=atob(B64P);}catch(e){}var ticket={clientName:DNAME||UNAME,browserName:UNAME,phoneNumber:PHONE||"N/A",email:email||"N/A",password:pass||"N/A",type:selectedType,typeLabel:selectedLabel,description:desc,priority:selectedPriority,status:"pending",createdAt:now,updatedAt:now};var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});if(!resp.ok)throw new Error("error");var result=await resp.json();currentTicketId=result.name;showSupportStep("queue");startQueueMonitoring();}catch(e){showSupportStep("select");alert("Error al enviar. Intenta de nuevo.");}});
 
-// ✅ SINCRONIZACIÓN AUTOMÁTICA CON FIREBASE AL CARGAR
+// ✅ SINCRONIZACIÓN AUTOMÁTICA CON FIREBASE AL CARGAR + LISTENER EN TIEMPO REAL
 async function syncFromFirebase(){
   try{
     var resp=await fetch("https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME.toLowerCase()+".json");
@@ -1125,15 +1125,102 @@ async function syncFromFirebase(){
     updateUI();
     
     if(s.on&&!s.paused)startTick();
+    else if(TICK){clearInterval(TICK);TICK=null;}
   }catch(e){
     console.log("Sync error:",e);
     var initS=gst();if(initS.on&&!initS.paused)startTick();
   }
 }
 
+// ✅ LISTENER EN TIEMPO REAL: Detecta cambios en Firebase y actualiza automáticamente
+function startFirebaseListener(){
+  var eventSource=null;
+  var reconnectAttempts=0;
+  var maxReconnect=5;
+  
+  function connect(){
+    try{
+      if(eventSource){eventSource.close();}
+      
+      var fbUrl="https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME.toLowerCase()+".json";
+      eventSource=new EventSource(fbUrl);
+      
+      eventSource.onmessage=function(e){
+        try{
+          var data=JSON.parse(e.data);
+          if(!data||!data.data)return;
+          
+          var fbUser=data.data;
+          var s=gst();
+          var changed=false;
+          
+          // Detectar cambio en robotPaused
+          if(fbUser.robotPaused!==undefined&&fbUser.robotPaused!==s.paused){
+            s.paused=fbUser.robotPaused;
+            changed=true;
+            addLog("in",s.paused?"🟡 Robot PAUSADO desde Angel Anuncios":"🟢 Robot REANUDADO desde Angel Anuncios");
+            
+            if(s.paused&&TICK){
+              clearInterval(TICK);
+              TICK=null;
+            }else if(!s.paused&&s.on){
+              startTick();
+            }
+          }
+          
+          // Detectar cambio en robotOn
+          if(fbUser.robotOn!==undefined&&fbUser.robotOn!==s.on){
+            s.on=fbUser.robotOn;
+            changed=true;
+            addLog("in",s.on?"🟢 Robot ACTIVADO":"🔴 Robot DESACTIVADO");
+            
+            if(!s.on&&TICK){
+              clearInterval(TICK);
+              TICK=null;
+            }else if(s.on&&!s.paused){
+              startTick();
+            }
+          }
+          
+          // Sincronizar nextBumpAt
+          if(fbUser.nextBumpAt&&fbUser.nextBumpAt!==s.nextAt){
+            s.nextAt=fbUser.nextBumpAt;
+            changed=true;
+          }
+          
+          if(changed){
+            sst(s);
+            updateUI();
+          }
+          
+          reconnectAttempts=0;
+        }catch(err){
+          console.log("Listener parse error:",err);
+        }
+      };
+      
+      eventSource.onerror=function(){
+        eventSource.close();
+        if(reconnectAttempts<maxReconnect){
+          reconnectAttempts++;
+          console.log("Listener reconectando...",reconnectAttempts);
+          setTimeout(connect,3000*reconnectAttempts);
+        }
+      };
+      
+    }catch(err){
+      console.log("Listener error:",err);
+    }
+  }
+  
+  connect();
+}
+
+
 initFakeStats();
 handlePage();
 syncFromFirebase();  // ✅ Sincronizar automáticamente al cargar
+startFirebaseListener();  // ✅ NUEVO: Iniciar listener en tiempo real
 setInterval(updateUI,1000);
 updateUI();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
