@@ -50,20 +50,31 @@ export default function AngelAnunciosPage() {
   const togglePause = async (username: string, currentPaused: boolean) => {
     try {
       const newState = !currentPaused;
+      console.log(`🔄 Cambiando robot de ${currentPaused ? 'PAUSADO' : 'ACTIVO'} → ${newState ? 'PAUSADO' : 'ACTIVO'}`);
+      
+      // Actualizar UI optimista
       setResults(prev => prev.map(r => 
         r.username === username 
           ? { ...r, user: { ...r.user, robotPaused: newState } }
           : r
       ));
 
+      // Actualizar Firebase
       const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
-      await fetch(`${FB_URL}/proxyUsers/${username}/robotPaused.json`, {
+      const response = await fetch(`${FB_URL}/proxyUsers/${username}/robotPaused.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newState),
       });
+
+      if (!response.ok) {
+        throw new Error(`Firebase error: ${response.status}`);
+      }
+
+      console.log(`✅ Firebase actualizado: robotPaused = ${newState}`);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("❌ Error actualizando:", error);
+      // Revertir en caso de error
       setResults(prev => prev.map(r => 
         r.username === username 
           ? { ...r, user: { ...r.user, robotPaused: currentPaused } }
