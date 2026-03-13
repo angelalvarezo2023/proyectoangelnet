@@ -287,6 +287,13 @@ export default function AngelRentAdmin() {
       .catch(() => prompt("Copia este link:", url));
   };
 
+  const copyClientLink = (k: string) => {
+    const url = `${window.location.origin}/cliente?u=${k}`;
+    navigator.clipboard.writeText(url)
+      .then(() => showToast("👤 Link del cliente copiado"))
+      .catch(() => prompt("Link del cliente:", url));
+  };
+
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
   // ─── AUTH ─────────────────────────────────────────────────────────────────
@@ -490,7 +497,8 @@ export default function AngelRentAdmin() {
                         <div style={{ display: "flex", gap: 4 }}>
                           <button onClick={() => openEdit(k)} title="Editar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(99,102,241,.2)", color: "#818cf8", border: "1px solid rgba(99,102,241,.3)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✎</button>
                           <button onClick={() => toggle(k)} title={u.active ? "Desactivar" : "Activar"} style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: u.active ? "rgba(239,68,68,.15)" : "rgba(74,222,128,.15)", color: u.active ? "#f87171" : "#4ade80", border: `1px solid ${u.active ? "rgba(239,68,68,.25)" : "rgba(74,222,128,.25)"}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>{u.active ? "⊘" : "✓"}</button>
-                          <button onClick={() => copyLink(k)} title="Copiar link" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>⎘</button>
+                          <button onClick={() => copyLink(k)} title="Copiar link proxy" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>⎘</button>
+                          <button onClick={() => copyClientLink(k)} title="Link panel cliente" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,.12)", color: "#c084fc", border: "1px solid rgba(168,85,247,.25)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>👤</button>
                           <button onClick={() => del(k)} title="Eliminar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.03)", color: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✕</button>
                         </div>
                       </td>
