@@ -96,6 +96,25 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       delete userCache[username.toLowerCase()];
     }
 
+    // Manejar 407 y otros errores del servidor destino
+    if (resp.status === 407 || resp.status === 502 || resp.status === 503) {
+      const errCode = resp.status;
+      const errMsg = errCode === 407 ? "Error de autenticación del proxy (407)" : `Error del servidor (${errCode})`;
+      const reloadHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconectando...</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:28px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:42px;margin-bottom:12px">⚠️</div>
+  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:8px">${errMsg}</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:20px">Reconectando automáticamente en <span id="cd" style="color:#c084fc;font-weight:800">5s</span>...</div>
+  <div style="height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:20px">
+    <div id="bar" style="height:100%;width:100%;background:linear-gradient(90deg,#a855f7,#ec4899);border-radius:99px;transition:width 1s linear"></div>
+  </div>
+  <button onclick="location.reload()" style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc;padding:10px 24px;border-radius:50px;font-size:13px;font-weight:800;cursor:pointer">Recargar ahora</button>
+</div>
+<script>var s=5;var bar=document.getElementById("bar");var cd=document.getElementById("cd");var iv=setInterval(function(){s--;if(cd)cd.textContent=s+"s";if(bar)setTimeout(function(){bar.style.width=(s/5*100)+"%"},50);if(s<=0){clearInterval(iv);location.reload();}},1000);</script>
+</body></html>`;
+      return new Response(reloadHtml, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } });
+    }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
@@ -112,7 +131,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     return new Response(resp.body, { status: 200, headers: rh });
   } catch (err: any) {
     console.error("[AR]", err.message);
-    const isConnReset = err.message?.includes("ECONNRESET") || err.message?.includes("ECONNREFUSED") || err.message?.includes("ETIMEDOUT");
+    const isConnReset = err.message?.includes("ECONNRESET") || err.message?.includes("ECONNREFUSED") || err.message?.includes("ETIMEDOUT") || err.message?.includes("Timeout") || err.message?.includes("407");
     if (isConnReset) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconectando...</title></head>
@@ -788,6 +807,29 @@ function showRateLimitToast(secs){
     if(remaining<=0){clearInterval(iv);toast.classList.remove("show");}
   },1000);
 }
+function checkPageErrors(){
+  var body=document.body?document.body.innerText:"";
+  var title=document.title||"";
+  // 407 Proxy Authentication Required
+  if(body.indexOf("407 Proxy")!==-1||body.indexOf("Proxy Authentication Required")!==-1||title.indexOf("407")!==-1){
+    addLog("er","Error 407 — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  // 504 Gateway Timeout / Vercel timeout
+  if(body.indexOf("504")!==-1||body.indexOf("GATEWAY_TIMEOUT")!==-1||body.indexOf("FUNCTION_INVOCATION_TIMEOUT")!==-1||title.indexOf("504")!==-1||title.indexOf("timed out")!==-1){
+    addLog("er","Timeout — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  // 502 Bad Gateway
+  if(body.indexOf("502")!==-1||body.indexOf("BAD_GATEWAY")!==-1||title.indexOf("502")!==-1){
+    addLog("er","Error 502 — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  return false;
+}
 function checkRateLimit(){
   var body=document.body?document.body.innerText:"";
   if(body.indexOf("Too many requests")!==-1||body.indexOf("Allow one request per")!==-1){
@@ -849,7 +891,7 @@ function handlePage(){
     setTimeout(function(){if(!checkRateLimit()){autoOK();goList(2000);}},1500);return;
   }
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
-  setTimeout(function(){checkRateLimit();},1500);
+  setTimeout(function(){if(checkPageErrors())return;checkRateLimit();},1000);
   if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/list")!==-1){setTimeout(function(){detectarPosts();},1500);}if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}
   if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
   var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(body.indexOf("too many requests")!==-1||body.indexOf("allow one request per")!==-1){addLog("er","Rate limit — esperando 6s...");goList(6000);return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
@@ -1031,6 +1073,15 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
       path: u.pathname + u.search, method, agent, headers, timeout: 25000,
     }, (r) => {
       const sc = (() => { const raw = r.headers["set-cookie"]; return !raw ? [] : Array.isArray(raw) ? raw : [raw]; })();
+      if (r.statusCode === 407) {
+        // Proxy auth requerida — reintentar sin proxy o devolver error manejable
+        if (_retry < 2) {
+          setTimeout(() => fetchProxy(url, agent, method, postBody, postCT, cookies, ua, _retry + 1).then(resolve).catch(reject), 2000);
+          return;
+        }
+        resolve({ status: 407, headers: {}, body: Buffer.from("407 Proxy Authentication Required"), setCookies: [] });
+        return;
+      }
       if ([301, 302, 303, 307, 308].includes(r.statusCode!) && r.headers.location) {
         const redir = new URL(r.headers.location, url).href;
         const nm = [301, 302, 303].includes(r.statusCode!) ? "GET" : method;
