@@ -306,7 +306,7 @@ export default function AngelRentCliente() {
                     {robotPaused ? "Pausado" : "Activo"}
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginTop: 1 }}>
-                    {bumpCount > 0 ? `${bumpCount} bump${bumpCount !== 1 ? "s" : ""} en esta sesión` : "Esperando primer bump"}
+                    {bumpCount > 0 ? `${bumpCount} bump${bumpCount !== 1 ? "s" : ""} realizados` : "Sin bumps aún"}
                   </div>
                 </div>
               </div>
