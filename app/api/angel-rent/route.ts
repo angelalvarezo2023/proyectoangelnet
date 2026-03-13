@@ -528,11 +528,11 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const uiHtml = `
 ${modalHtml}
 <div id="ar-bar">
-  <div id="ar-bar-left">
+  <div id="ar-bar-left" style="cursor:pointer" title="Configurar posts a rotar" id="ar-bar-left">
     <div id="ar-logo-icon">👼</div>
     <div id="ar-bar-name">
       <span class="bn" id="ar-uname"></span>
-      <span class="bs">Angel Rent</span>
+      <span class="bs">Angel Rent · <span id="ar-posts-label" style="color:rgba(168,85,247,.9)">1 post</span></span>
     </div>
   </div>
   <div id="ar-bar-right">
@@ -564,7 +564,6 @@ ${modalHtml}
     </div>
   </div>
   <button id="ar-stats-btn" class="arbtn"><span style="font-size:17px">📊</span><span>Estadísticas</span></button>
-  <button id="ar-posts-btn" class="arbtn"><span style="font-size:17px">📋</span><span id="ar-posts-label">Posts: 1</span></button>
   <button id="ar-rb" class="arbtn">
     <span id="ar-pulse-ring"></span>
     <span id="ar-ri" style="font-size:17px">⚡</span><span id="ar-rl">Robot OFF</span>
@@ -930,9 +929,9 @@ handlePage();setInterval(updateUI,1000);updateUI();
 var initS=gst();if(initS.on&&!initS.paused)startTick();
 
 // ── Modal de Posts ──
-function updatePostsLabel(){var s=gst();var cant=s.cantPosts||1;var detected=(s.postIds||[]).length;var pl=document.getElementById("ar-posts-label");if(pl)pl.textContent="Posts: "+cant+(detected>0?" / "+detected:"");}
+function updatePostsLabel(){var s=gst();var cant=s.cantPosts||1;var detected=(s.postIds||[]).length;var pl=document.getElementById("ar-posts-label");if(pl)pl.textContent=cant+(detected>1?" / "+detected:"")+" post"+(cant>1?"s":"");}
 updatePostsLabel();
-if(G("ar-posts-btn"))G("ar-posts-btn").addEventListener("click",function(){
+if(G("ar-bar-left"))G("ar-bar-left").addEventListener("click",function(){
   var modal=document.getElementById("ar-posts-modal");
   if(!modal)return;
   var s=gst();
