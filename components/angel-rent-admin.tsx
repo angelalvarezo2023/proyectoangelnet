@@ -8,7 +8,7 @@ interface User {
   proxyUser?: string; proxyPass?: string;
   userAgentKey?: string; userAgent?: string;
   rentalStart?: string; rentalEnd?: string;
-  rentalEndTimestamp?: number; // ✅ NUEVO: Timestamp exacto de expiración
+  rentalEndTimestamp?: number;
   defaultUrl?: string;
   siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean;
@@ -18,23 +18,12 @@ interface User {
   phoneNumber?: string;
   rentalDays?: number; rentalHours?: number;
 }
-const UA_OPTS = [
-  { value: "iphone", label: "📱 iPhone 15 — Safari" },
-  { value: "iphone14", label: "📱 iPhone 14 — Safari" },
-  { value: "android", label: "🤖 Galaxy S24 — Chrome" },
-  { value: "android_pixel", label: "🤖 Pixel 8 — Chrome" },
-  { value: "windows", label: "💻 Windows 10 — Chrome" },
-  { value: "windows11", label: "💻 Windows 11 — Edge" },
-  { value: "mac", label: "🍎 MacBook — Safari" },
-  { value: "custom", label: "✏️ Personalizado" },
-];
 const UA_SHORT: Record<string, string> = {
   iphone: "📱 iPhone 15", iphone14: "📱 iPhone 14",
   android: "🤖 Galaxy S24", android_pixel: "🤖 Pixel 8",
   windows: "💻 Win 10", windows11: "💻 Win 11",
   mac: "🍎 Mac", custom: "✏️ Custom",
 };
-// ── User-Agent generators ─────────────────────────────────────────────────────
 const UA_IPHONES = [
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
@@ -64,29 +53,38 @@ const BLANK = {
   siteEmail: "", sitePass: "", notes: "", active: true,
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ✅ FUNCIÓN CORREGIDA - Sin sumar día extra
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Días restantes (puede ser negativo = vencido) ────────────────────────────
 function rentalDays(u: User) {
   if (!u.rentalEnd) return 9999;
- 
-  // ✅ Usar timestamp exacto si existe (incluye las horas configuradas)
-  let expirationDate: Date;
+  let exp: number;
   if (u.rentalEndTimestamp) {
-    expirationDate = new Date(u.rentalEndTimestamp);
+    exp = u.rentalEndTimestamp;
   } else {
-    // Fallback: Si no hay timestamp, usar 23:59:59 del día rentalEnd
-    expirationDate = new Date(u.rentalEnd + "T23:59:59");
+    // Fallback UTC para evitar diferencias de zona horaria
+    const [y, m, d] = u.rentalEnd.split("-").map(Number);
+    exp = Date.UTC(y, m - 1, d, 23, 59, 59);
   }
- 
-  // Calcular diferencia en milisegundos (PERMITIR NEGATIVOS para deuda)
-  const diffMs = expirationDate.getTime() - Date.now();
- 
-  // ✅ Usar Math.floor para redondear (permite negativos)
-  return Math.floor(diffMs / 86400000);
+  return Math.floor((exp - Date.now()) / 86400000);
 }
 
-// ─── small reusable input ───────────────────────────────────────────────────
+// ── Tiempo restante real en días + horas desde rentalEndTimestamp ─────────────
+function remainingFromTimestamp(ts: number | undefined, rentalEnd: string | undefined): { days: number; hours: number } {
+  let exp = 0;
+  if (ts) {
+    exp = ts;
+  } else if (rentalEnd) {
+    const [y, m, d] = rentalEnd.split("-").map(Number);
+    exp = Date.UTC(y, m - 1, d, 23, 59, 59);
+  }
+  if (!exp) return { days: 30, hours: 0 };
+  const diffMs = exp - Date.now();
+  // ✅ Permitir negativos para mostrar deuda real
+  const totalHours = Math.trunc(diffMs / 3600000); // horas totales (puede ser negativo)
+  const days = Math.trunc(totalHours / 24);
+  const hours = Math.abs(totalHours % 24);
+  return { days, hours };
+}
+
 const F = {
   input: {
     width: "100%", boxSizing: "border-box" as const,
@@ -100,6 +98,7 @@ const F = {
     letterSpacing: ".5px", marginBottom: 4, marginTop: 12,
   },
 };
+
 export default function AngelRentAdmin() {
   const [authed, setAuthed] = useState(false);
   const [pass, setPass] = useState("");
@@ -113,12 +112,14 @@ export default function AngelRentAdmin() {
   const [rentDays, setRentDays] = useState("30");
   const [rentHours, setRentHours] = useState("0");
   const [useLocalProxy, setUseLocalProxy] = useState(false);
+
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("ar_admin") === "ok") {
       setAuthed(true);
       load();
     }
   }, []);
+
   const load = useCallback(async () => {
     setBusy(true);
     try {
@@ -127,13 +128,16 @@ export default function AngelRentAdmin() {
     } catch (e: any) { alert("Error: " + e.message); }
     finally { setBusy(false); }
   }, []);
+
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2500); }
+
   const doLogin = () => {
     if (pass === ADMIN_PASS) {
       localStorage.setItem("ar_admin", "ok");
       setAuthed(true); load();
     } else alert("Contraseña incorrecta");
   };
+
   const openNew = () => {
     setForm({ ...BLANK });
     setDeviceType("iphone");
@@ -141,73 +145,58 @@ export default function AngelRentAdmin() {
     setUseLocalProxy(false);
     setEditing(null); setModal(true);
   };
+
   const openEdit = (k: string) => {
     const u = users[k] as any;
     setForm({ ...BLANK, ...u, username: k });
-    // Detect device type from userAgentKey
     const key = u.userAgentKey || "iphone";
-    setDeviceType(key.startsWith("android") || key === "android" ? "android" : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc" : "iphone");
-   
-    // ═══════════════════════════════════════════════════════════════════
-    // ✅ USAR VALORES GUARDADOS EN FIREBASE (si existen)
-    // ═══════════════════════════════════════════════════════════════════
-    if (u.rentalDays !== undefined && u.rentalHours !== undefined) {
-      // Usar los valores guardados originalmente
-      setRentDays(String(u.rentalDays));
-      setRentHours(String(u.rentalHours));
-    } else if (u.rentalEndTimestamp) {
-      // Usar timestamp exacto si existe
-      const diff = Math.max(0, u.rentalEndTimestamp - Date.now());
-      setRentDays(String(Math.floor(diff / 86400000)));
-      setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
-    } else if (u.rentalEnd) {
-      // Fallback: calcular desde la fecha usando 23:59:59
-      const expDate = new Date(u.rentalEnd + "T23:59:59");
-      const diff = Math.max(0, expDate.getTime() - Date.now());
-      setRentDays(String(Math.floor(diff / 86400000)));
-      setRentHours(String(Math.floor((diff % 86400000) / 3600000)));
-    } else {
-      setRentDays("30");
-      setRentHours("0");
-    }
-   
+    setDeviceType(
+      key.startsWith("android") || key === "android" ? "android"
+      : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc"
+      : "iphone"
+    );
+
+    // ✅ SIEMPRE mostrar tiempo RESTANTE real, no los días originales
+    const { days, hours } = remainingFromTimestamp(u.rentalEndTimestamp, u.rentalEnd);
+    setRentDays(String(days));
+    setRentHours(String(hours));
+
     setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
   };
+
+  // ── Ajuste rápido de días sobre el tiempo actual ──────────────────────────
+  const adjustDays = (delta: number) => {
+    // Operar en horas totales para manejar deuda correctamente
+    setRentDays(prev => {
+      const currentDays = parseInt(prev) || 0;
+      const currentHours = parseInt(rentHours) || 0;
+      // Horas totales actuales (puede ser negativo si hay deuda)
+      const totalHoursNow = (currentDays * 24) + (currentDays < 0 ? -currentHours : currentHours);
+      const totalHoursNext = totalHoursNow + (delta * 24);
+      const nextDays = Math.trunc(totalHoursNext / 24);
+      const nextHours = Math.abs(totalHoursNext % 24);
+      setRentHours(String(nextHours));
+      return String(nextDays);
+    });
+  };
+
   const save = async () => {
     const key = form.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
     if (!key) { alert("Username inválido"); return; }
-    
-    // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO CON SISTEMA DE DEUDA
-    // Si hay deuda (tiempo vencido), se resta del nuevo tiempo
-    // ═══════════════════════════════════════════════════════════════════
+
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
-    
-    // Calcular si hay deuda (tiempo vencido)
-    let debtMs = 0;
-    if (editing && (form as any).rentalEndTimestamp) {
-      const currentTimestamp = (form as any).rentalEndTimestamp;
-      const now = Date.now();
-      if (now > currentTimestamp) {
-        // Hay deuda - tiempo que ya pasó desde la expiración
-        debtMs = now - currentTimestamp;
-      }
-    }
-   
-    // ✅ Sumar tiempo configurado y restar deuda
-    const totalMs = (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000);
-    const expirationDate = new Date(Date.now() + totalMs - debtMs);
-   
-    // Extraer solo la fecha (sin hora) en formato YYYY-MM-DD
-    const rentalEnd = expirationDate.toISOString().split("T")[0];
+    // ✅ Si días son negativos (deuda), las horas se restan también
+    const sign = days < 0 ? -1 : 1;
+    const totalMs = (days * 86400000) + (sign * (hours * 3600000));
+
+    // ✅ Timestamp = ahora + tiempo restante (puede resultar en el pasado si hay deuda)
+    const rentalEndTimestamp = Date.now() + totalMs;
+    const expDate = new Date(rentalEndTimestamp);
+    const rentalEnd = expDate.toISOString().split("T")[0];
     const rentalStart = new Date().toISOString().split("T")[0];
-    
-    // ✅ Guardar timestamp exacto de cuándo expira
-    const rentalEndTimestamp = expirationDate.getTime();
-    
-    // Determine userAgentKey from deviceType
+
     const uaKey = deviceType === "android" ? "android" : deviceType === "pc" ? "windows" : "iphone";
     const data: User = {
       name: form.name,
@@ -218,17 +207,17 @@ export default function AngelRentAdmin() {
       userAgentKey: uaKey,
       userAgent: form.userAgent || "",
       rentalStart, rentalEnd,
-      rentalEndTimestamp, // ✅ Timestamp exacto
+      rentalEndTimestamp, // ✅ UTC puro, igual en todos los dispositivos
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
       phoneNumber: (form as any).phoneNumber || "",
       updatedAt: new Date().toISOString(),
       ...(editing ? {} : { createdAt: new Date().toISOString() }),
-      // ✅ Guardar días y horas configurados originalmente
       rentalDays: days,
       rentalHours: hours,
     } as any;
+
     await fetch(`${FB}/proxyUsers/${key}.json`, {
       method: editing ? "PATCH" : "PUT",
       headers: { "Content-Type": "application/json" },
@@ -236,6 +225,7 @@ export default function AngelRentAdmin() {
     });
     setModal(false); showToast("✅ Guardado"); await load();
   };
+
   const toggle = async (k: string) => {
     await fetch(`${FB}/proxyUsers/${k}.json`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
@@ -243,19 +233,23 @@ export default function AngelRentAdmin() {
     });
     load();
   };
+
   const del = async (k: string) => {
     if (!confirm(`¿Eliminar "${k}"?`)) return;
     await fetch(`${FB}/proxyUsers/${k}.json`, { method: "DELETE" });
     load();
   };
+
   const copyLink = (k: string) => {
     const url = `${window.location.origin}/api/angel-rent?u=${k}&url=${encodeURIComponent(users[k].defaultUrl || "https://megapersonals.eu")}`;
     navigator.clipboard.writeText(url)
       .then(() => showToast("🔗 Link copiado"))
       .catch(() => prompt("Copia este link:", url));
   };
+
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
-  // ─── AUTH ────────────────────────────────────────────────────────────────
+
+  // ─── AUTH ─────────────────────────────────────────────────────────────────
   if (!authed) return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a1a", padding: 20 }}>
       <div style={{ maxWidth: 340, width: "100%", background: "#111827", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: 32, textAlign: "center" }}>
@@ -272,7 +266,8 @@ export default function AngelRentAdmin() {
       </div>
     </div>
   );
-  // ─── STATS ───────────────────────────────────────────────────────────────
+
+  // ─── STATS ────────────────────────────────────────────────────────────────
   const keys = Object.keys(users).sort();
   const stats = {
     total: keys.length,
@@ -280,7 +275,16 @@ export default function AngelRentAdmin() {
     expiring: keys.filter(k => { const d = rentalDays(users[k]); return !!users[k].rentalEnd && d > 0 && d <= 3; }).length,
     expired: keys.filter(k => !!users[k].rentalEnd && rentalDays(users[k]) <= 0).length,
   };
-  // ─── MAIN ────────────────────────────────────────────────────────────────
+
+  // Calcular preview de expiración para el modal
+  const previewDays = parseInt(rentDays) || 0;
+  const previewHours = parseInt(rentHours) || 0;
+  // ✅ Respetar signo para deuda
+  const previewSign = previewDays < 0 ? -1 : 1;
+  const previewMs = (previewDays * 86400000) + (previewSign * previewHours * 3600000);
+  const previewExp = new Date(Date.now() + previewMs);
+
+  // ─── MAIN ─────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: "#0a0a1a", minHeight: "100vh", color: "#fff", fontFamily: "-apple-system, sans-serif" }}>
       <div style={{ maxWidth: 920, margin: "0 auto", padding: 16 }}>
@@ -296,6 +300,7 @@ export default function AngelRentAdmin() {
             <button onClick={load} style={{ padding: "8px 12px", background: "rgba(255,255,255,.07)", color: "#aaa", border: "none", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>🔄</button>
           </div>
         </div>
+
         {/* Stats */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
           {[
@@ -310,6 +315,7 @@ export default function AngelRentAdmin() {
             </div>
           ))}
         </div>
+
         {/* Table */}
         <div style={{ background: "#111827", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, overflow: "auto" }}>
           {busy ? (
@@ -327,34 +333,20 @@ export default function AngelRentAdmin() {
                 {keys.map(k => {
                   const u = users[k];
                   const days = rentalDays(u);
-                  
-                  // ✅ Sistema de colores con deuda
                   let rentColor, rentLabel;
                   if (!u.rentalEnd) {
-                    rentColor = "rgba(255,255,255,.2)";
-                    rentLabel = "∞";
+                    rentColor = "rgba(255,255,255,.2)"; rentLabel = "∞";
                   } else if (days < 0) {
-                    // ⚠️ DEUDA (tiempo negativo)
-                    rentColor = "#f59e0b"; // Naranja para deuda
-                    rentLabel = `DEUDA: ${Math.abs(days)}d`;
+                    rentColor = "#f59e0b"; rentLabel = `VENCIDO ${Math.abs(days)}d`;
                   } else if (days === 0) {
-                    // ⚠️ Expirando HOY
-                    rentColor = "#fbbf24"; // Amarillo
-                    rentLabel = "Hoy";
+                    rentColor = "#fbbf24"; rentLabel = "Hoy";
                   } else if (days <= 3) {
-                    // ⚠️ Por vencer (1-3 días)
-                    rentColor = "#ef4444"; // Rojo
-                    rentLabel = days + "d";
+                    rentColor = "#ef4444"; rentLabel = days + "d";
                   } else if (days <= 7) {
-                    // ⚠️ Advertencia (4-7 días)
-                    rentColor = "#f59e0b"; // Naranja
-                    rentLabel = days + "d";
+                    rentColor = "#f59e0b"; rentLabel = days + "d";
                   } else {
-                    // ✅ Tiempo suficiente (8+ días)
-                    rentColor = "#22c55e"; // Verde
-                    rentLabel = days + "d";
+                    rentColor = "#22c55e"; rentLabel = days + "d";
                   }
-                  
                   return (
                     <tr key={k} style={{ borderTop: "1px solid rgba(255,255,255,.04)" }}>
                       <td style={{ padding: "10px 14px", fontSize: 12 }}><strong>{k}</strong></td>
@@ -379,11 +371,9 @@ export default function AngelRentAdmin() {
                       </td>
                       <td style={{ padding: "10px 14px" }}>
                         {u.robotOn === true ? (
-                          u.robotPaused ? (
-                            <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(245,158,11,.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.2)" }}>⏸ Pausado</span>
-                          ) : (
-                            <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(34,197,94,.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,.2)" }}>⚡ ON</span>
-                          )
+                          u.robotPaused
+                            ? <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(245,158,11,.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.2)" }}>⏸ Pausado</span>
+                            : <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(34,197,94,.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,.2)" }}>⚡ ON</span>
                         ) : (
                           <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.25)", border: "1px solid rgba(255,255,255,.08)" }}>OFF</span>
                         )}
@@ -422,7 +412,8 @@ export default function AngelRentAdmin() {
           )}
         </div>
       </div>
-      {/* ── MODAL ─────────────────────────────────────────────────────────── */}
+
+      {/* ── MODAL ──────────────────────────────────────────────────────────── */}
       {modal && (
         <div onClick={e => { if (e.target === e.currentTarget) setModal(false); }}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -430,16 +421,18 @@ export default function AngelRentAdmin() {
             <h3 style={{ fontSize: 15, marginBottom: 16, color: "#fff" }}>
               {editing ? `✏️ Editar: ${editing}` : "➕ Nuevo Usuario"}
             </h3>
+
             {/* Username */}
             <label style={F.label}>Username (login)</label>
             <input style={{ ...F.input, opacity: editing ? .5 : 1 }} value={form.username} disabled={!!editing}
               onChange={e => set("username", e.target.value.toLowerCase())} placeholder="diana" />
+
             {/* Nombre */}
             <label style={F.label}>Nombre completo</label>
             <input style={F.input} value={form.name || ""} onChange={e => set("name", e.target.value)} placeholder="Diana Martinez" />
+
             {/* PROXY */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>🌐 Configuración de Proxy</div>
-            {/* Local IP toggle */}
             <button onClick={() => setUseLocalProxy(!useLocalProxy)} style={{ width: "100%", padding: "8px 12px", marginBottom: 10, background: useLocalProxy ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.04)", border: `1px solid ${useLocalProxy ? "rgba(34,197,94,.4)" : "rgba(255,255,255,.1)"}`, borderRadius: 8, color: useLocalProxy ? "#4ade80" : "rgba(255,255,255,.5)", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
               <span>{useLocalProxy ? "✅" : "○"}</span> Usar IP Local (sin proxy externo)
             </button>
@@ -465,9 +458,9 @@ export default function AngelRentAdmin() {
                 </div>
               </div>
             </>)}
+
             {/* DEVICE */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>📱 Dispositivo</div>
-            {/* 3 big device buttons */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
               {([["iphone","📱","iPhone"],["android","🤖","Android"],["pc","💻","PC"]] as const).map(([type, icon, label]) => (
                 <button key={type} onClick={() => { setDeviceType(type); set("userAgent", ""); }}
@@ -476,7 +469,6 @@ export default function AngelRentAdmin() {
                 </button>
               ))}
             </div>
-            {/* User Agent field + buttons */}
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
               <div style={{ flex: 1 }}>
                 <label style={F.label}>User Agent</label>
@@ -498,8 +490,14 @@ export default function AngelRentAdmin() {
                 {form.userAgent}
               </div>
             )}
-            {/* RENTA */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>📅 Tiempo de Renta</div>
+
+            {/* ── RENTA ── */}
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>
+              📅 Tiempo de Renta
+              {editing && <span style={{ marginLeft: 8, fontSize: 10, color: "rgba(99,102,241,.8)", background: "rgba(99,102,241,.1)", padding: "2px 8px", borderRadius: 99, border: "1px solid rgba(99,102,241,.2)" }}>Tiempo restante actual</span>}
+            </div>
+
+            {/* Inputs días y horas */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
                 <label style={F.label}>Días</label>
@@ -510,28 +508,58 @@ export default function AngelRentAdmin() {
                 <input type="number" min="0" max="23" style={F.input} value={rentHours} onChange={e => setRentHours(e.target.value)} placeholder="0" />
               </div>
             </div>
-            {/* Quick preset buttons */}
+
+            {/* Botones +/- rápidos */}
             <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" as const }}>
-              {[["7d","7","0"],["15d","15","0"],["30d","30","0"],["1d","1","0"],["12h","0","12"]].map(([label,d,h]) => (
+              {/* Presets rápidos (nuevo usuario) */}
+              {!editing && [["7d","7","0"],["15d","15","0"],["30d","30","0"],["1d","1","0"],["12h","0","12"]].map(([label,d,h]) => (
                 <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
                   style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.6)", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
                   {label}
                 </button>
               ))}
+              {/* Botones +/- para edición */}
+              {editing && <>
+                <div style={{ width: "100%", fontSize: 10, color: "rgba(255,255,255,.25)", marginBottom: 2 }}>Ajuste rápido sobre tiempo restante:</div>
+                {[
+                  { label: "−1d", delta: -1, color: "#ef4444" },
+                  { label: "−7d", delta: -7, color: "#ef4444" },
+                  { label: "+1d", delta: 1, color: "#22c55e" },
+                  { label: "+7d", delta: 7, color: "#22c55e" },
+                  { label: "+15d", delta: 15, color: "#22c55e" },
+                  { label: "+30d", delta: 30, color: "#22c55e" },
+                ].map(({ label, delta, color }) => (
+                  <button key={label} onClick={() => adjustDays(delta)}
+                    style={{ padding: "5px 12px", borderRadius: 99, border: `1px solid ${color}44`, background: `${color}11`, color: color, cursor: "pointer", fontSize: 11, fontWeight: 800 }}>
+                    {label}
+                  </button>
+                ))}
+              </>}
             </div>
-            {(parseInt(rentDays)||0) + (parseInt(rentHours)||0) > 0 && (() => {
-              const days = parseInt(rentDays) || 0;
-              const hours = parseInt(rentHours) || 0;
-              const totalMs = (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000);
-              const expDate = new Date(Date.now() + totalMs);
-              return (
-                <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
-                  ✅ Renta: {days}d {hours}h → vence {expDate.toLocaleDateString("es")} a las {expDate.toLocaleTimeString("es", {hour: '2-digit', minute: '2-digit'})}
-                </div>
-              );
-            })()}
+
+            {/* Preview vencimiento */}
+            {(previewDays !== 0 || previewHours !== 0) && previewMs > 0 && (
+              <div style={{ marginTop: 8, padding: "10px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
+                ✅ Renta: {previewDays}d {previewHours}h → vence el{" "}
+                <span style={{ color: "#fff" }}>
+                  {previewExp.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })} a las {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            )}
+            {(previewDays !== 0 || previewHours !== 0) && previewMs < 0 && (
+              <div style={{ marginTop: 8, padding: "10px 12px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 8, fontSize: 11, color: "#f87171", fontWeight: 700 }}>
+                ⚠️ Deuda: {Math.abs(previewDays)}d {previewHours}h — el cliente sigue vencido hasta que se salde
+              </div>
+            )}
+            {previewDays === 0 && previewHours === 0 && (
+              <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 8, fontSize: 11, color: "#f87171", fontWeight: 700 }}>
+                ⚠️ Sin tiempo de renta configurado
+              </div>
+            )}
+
             <label style={F.label}>URL por defecto</label>
             <input style={F.input} value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="https://megapersonals.eu" />
+
             {/* CREDENCIALES */}
             <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 4 }}>🔑 Credenciales del sitio (auto-login)</div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -551,6 +579,7 @@ export default function AngelRentAdmin() {
               <option value="true">✅ Activo</option>
               <option value="false">⛔ Inactivo</option>
             </select>
+
             <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
               <button onClick={() => setModal(false)} style={{ flex: 1, padding: 11, background: "rgba(255,255,255,.07)", color: "#aaa", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
               <button onClick={save} style={{ flex: 1, padding: 11, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>Guardar</button>
