@@ -112,6 +112,28 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     return new Response(resp.body, { status: 200, headers: rh });
   } catch (err: any) {
     console.error("[AR]", err.message);
+    const isConnReset = err.message?.includes("ECONNRESET") || err.message?.includes("ECONNREFUSED") || err.message?.includes("ETIMEDOUT");
+    if (isConnReset) {
+      return new Response(
+        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconectando...</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:28px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:42px;margin-bottom:12px">🔄</div>
+  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:8px">Conexión interrumpida</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:20px">El proxy tuvo un problema de red. Reconectando en <span id="cd" style="color:#c084fc;font-weight:800">5s</span>...</div>
+  <div style="height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:20px">
+    <div id="bar" style="height:100%;width:100%;background:linear-gradient(90deg,#a855f7,#ec4899);border-radius:99px;transition:width 1s linear"></div>
+  </div>
+  <button onclick="location.reload()" style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc;padding:10px 24px;border-radius:50px;font-size:13px;font-weight:800;cursor:pointer">Recargar ahora</button>
+</div>
+<script>
+var s=5;var bar=document.getElementById("bar");var cd=document.getElementById("cd");
+var iv=setInterval(function(){s--;if(cd)cd.textContent=s+"s";if(bar)setTimeout(function(){bar.style.width=(s/5*100)+"%"},50);if(s<=0){clearInterval(iv);location.reload();}},1000);
+</script>
+</body></html>`,
+        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
+      );
+    }
     return jres(500, { error: err.message });
   }
 }
@@ -182,7 +204,16 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   
   let endTimestamp = 0;
   if (user.rentalEnd) {
-    endTimestamp = user.rentalEndTimestamp || new Date(user.rentalEnd + "T23:59:59").getTime();
+    if (user.rentalEndTimestamp) {
+      endTimestamp = user.rentalEndTimestamp;
+    } else {
+      // Parsear siempre como UTC para que sea igual en todos los dispositivos.
+      // "2026-03-16" -> fin del dia en UTC: 2026-03-16T23:59:59Z
+      const [y, m, d] = user.rentalEnd.split("-").map(Number);
+      endTimestamp = Date.UTC(y, m - 1, d, 23, 59, 59);
+      // Guardar el timestamp en Firebase para no volver a calcularlo
+      fbPatch(username, { rentalEndTimestamp: endTimestamp }).catch(() => {});
+    }
   }
   
   const V = {
@@ -678,7 +709,7 @@ function updateUI(){
   updateFakeUI();
 }
 
-function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
+function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({nextBumpAt:s.nextAt,bumpCount:s.cnt||0})}).catch(function(){});}catch(e){}}
 function goList(ms){setTimeout(function(){window.location.href=PLIST;},ms||1500);}
 function rnd(n){return Math.floor(Math.random()*n);}
 function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
@@ -686,7 +717,7 @@ function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<
 function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\d+$/.test(s[i]))return s[i];return null;}
 function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
 
-async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
+async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
 
 function startTick(){
   if(TICK)return;
@@ -697,6 +728,9 @@ function startTick(){
 }
 
 function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
+var FB_USER="https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME+".json";
+function syncFromFirebase(){try{fetch(FB_USER).then(function(r){return r.json();}).then(function(d){if(!d)return;var s=gst();var fbPaused=!!d.robotPaused;if(fbPaused!==s.paused){s.paused=fbPaused;sst(s);addLog("in",fbPaused?"Pausado remotamente":"Reanudado remotamente");updateUI();}}).catch(function(){});}catch(e){}}
+setInterval(syncFromFirebase,15000);
 
 function toggleRobot(){
   var s=gst();var ring=document.getElementById("ar-pulse-ring");
@@ -913,7 +947,7 @@ function getUA(u: ProxyUser) {
   return UA_MAP[u.userAgentKey || ""] || UA_MAP.iphone;
 }
 
-function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | null, postCT: string | null, cookies: string, ua: string): Promise<FetchResult> {
+function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | null, postCT: string | null, cookies: string, ua: string, _retry = 0): Promise<FetchResult> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
@@ -951,7 +985,11 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
       });
       r.on("error", reject);
     });
-    req.on("error", reject);
+    req.on("error", (e: any) => {
+      if ((e.code === "ECONNRESET" || e.code === "ECONNREFUSED" || e.code === "ETIMEDOUT") && _retry < 2) {
+        setTimeout(() => fetchProxy(url, agent, method, postBody, postCT, cookies, ua, _retry + 1).then(resolve).catch(reject), 1500);
+      } else { reject(e); }
+    });
     req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
     if (method === "POST" && postBody) req.write(postBody);
     req.end();
