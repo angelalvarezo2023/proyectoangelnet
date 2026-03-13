@@ -205,63 +205,40 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const warnDays = daysLeft;
 
   const css = `<style id="ar-css">
-/* ─── Barra superior con glassmorphism ───────────────────────────────── */
-#ar-bar{
-  position:fixed;top:0;left:0;right:0;z-index:2147483647;
-  background:rgba(10,3,24,.85);
-  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
-  border-bottom:1px solid rgba(168,85,247,.2);
-  box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;
-  height:48px;display:flex;align-items:center;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;-ms-overflow-style:none;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-}
-#ar-bar::-webkit-scrollbar{display:none}
-.ars{
-  display:flex;align-items:center;gap:5px;
-  padding:0 14px;height:100%;flex-shrink:0;
-  border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;
-  transition:background .2s;
-}
-.ars:hover{background:rgba(255,255,255,.03)}
-.ars:first-child{padding-left:10px}
-@media (max-width: 768px) {
-  #ar-bar{height:44px}
-  .ars{padding:0 10px;gap:4px}
-  .ars:first-child{padding-left:8px}
-  .arl{font-size:8px;letter-spacing:.7px}
-  .arv{font-size:11px}
-  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
-  @media (max-width: 480px) {
-    .ars-hide-mobile{display:none!important}
-  }
-}
-.arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
-.arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
-#ar-dot{
-  width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;
-  transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0);
-}
-#ar-dot.on{
-  background:#22c55e;
-  box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);
-  animation:ar-pulse-dot 2s ease infinite;
-}
-#ar-dot.blink{
-  background:#f59e0b;
-  animation:ar-blink 1.2s ease-in-out infinite;
-}
-@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2)}50%{box-shadow:0 0 20px rgba(34,197,94,1), 0 0 0 8px rgba(34,197,94,.1)}}
-@keyframes ar-blink{0%,100%{opacity:1;transform:scale(1.1)}50%{opacity:.2;transform:scale(.7)}}
+/* ─── Barra superior — Opción A ──────────────────────────────────────── */
+#ar-bar{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgba(10,3,24,.95);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(168,85,247,.15);height:52px;display:flex;align-items:center;padding:0 14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+#ar-bar-left{display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0}
+#ar-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;box-shadow:0 4px 12px rgba(168,85,247,.4)}
+#ar-bar-name .bn{font-size:13px;font-weight:900;color:#fff;line-height:1.2;display:block}
+#ar-bar-name .bs{font-size:9px;color:rgba(168,85,247,.7);font-weight:700;letter-spacing:.5px;display:block}
+#ar-bar-right{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.ar-pill{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:99px;padding:5px 12px;white-space:nowrap}
+.ar-pill-label{font-size:10px;color:rgba(255,255,255,.4);font-weight:700}
+.ar-pill-val{font-size:12px;font-weight:800;color:#fff}
+#ar-robot-pill{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.25)}
+#ar-robot-pill .ar-pill-val{color:#4ade80}
+#ar-robot-pill.off{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+#ar-robot-pill.off .ar-pill-val{color:rgba(255,255,255,.3)}
+#ar-robot-pill.paused{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.25)}
+#ar-robot-pill.paused .ar-pill-val{color:#fbbf24}
+#ar-bar-line{position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,#a855f7 30%,#22c55e 70%,transparent 100%);opacity:0;transition:opacity .6s;pointer-events:none}
+#ar-bar-line.on{opacity:.7}
+#ar-dot{width:6px;height:6px;border-radius:50%;background:#374151;flex-shrink:0;transition:all .3s}
+#ar-dot.on{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,1);animation:ar-pulse-dot 2s ease infinite}
+#ar-dot.blink{background:#f59e0b;animation:ar-blink 1.2s ease-in-out infinite}
+@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 8px rgba(34,197,94,1)}50%{box-shadow:0 0 16px rgba(34,197,94,1),0 0 24px rgba(34,197,94,.4)}}
+@keyframes ar-blink{0%,100%{opacity:1}50%{opacity:.2}}
 .arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#c084fc!important}
-#ar-logo-icon{
-  width:28px;height:28px;
-  background:linear-gradient(135deg,#a855f7,#ec4899);
-  border-radius:9px;display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;
-  box-shadow:0 4px 12px rgba(168,85,247,.4);
-}
+@media(max-width:480px){#ar-bar{padding:0 10px}.ar-pill{padding:4px 9px}.ar-pill-label{display:none}.ar-pill-val{font-size:11px}#ar-bar-name .bs{display:none}}
+/* ─── Toast rate limit ───────────────────────────────────────────────── */
+#ar-rl-toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:2147483648;display:none;align-items:center;gap:12px;background:rgba(10,3,24,.97);border:1px solid rgba(239,68,68,.4);border-radius:16px;padding:14px 18px;min-width:260px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,sans-serif}
+@keyframes ar-toast-in{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+#ar-rl-toast.show{display:flex;animation:ar-toast-in .3s cubic-bezier(.34,1.56,.64,1)}
+#ar-rl-toast .ticon{width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.15);border:1.5px solid rgba(239,68,68,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#ar-rl-toast .ttitle{font-size:13px;font-weight:900;color:#fff;margin-bottom:3px}
+#ar-rl-toast .tsub{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:7px}
+#ar-rl-toast .tbar-wrap{height:3px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden}
+#ar-rl-toast .tbar-fill{height:100%;background:linear-gradient(90deg,#ef4444,#f97316);border-radius:99px;width:100%;transition:width 1s linear}
 #ar-btns{
   position:fixed;bottom:24px;right:16px;z-index:2147483647;
   display:flex;flex-direction:column;gap:12px;align-items:flex-end;
@@ -472,7 +449,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline;
 }
 #ar-promo{
-  position:fixed;top:48px;left:0;right:0;z-index:2147483646;
+  position:fixed;top:52px;left:0;right:0;z-index:2147483646;
   background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
   padding:5px 14px;text-align:center;
   font-family:-apple-system,BlinkMacSystemFont,sans-serif;
@@ -520,18 +497,23 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const uiHtml = `
 ${modalHtml}
 <div id="ar-bar">
-  <div class="ars">
+  <div id="ar-bar-left">
     <div id="ar-logo-icon">👼</div>
-    <span style="font-size:12px;font-weight:900;color:#fff;letter-spacing:-.3px">Angel Rent</span>
+    <div id="ar-bar-name">
+      <span class="bn" id="ar-uname"></span>
+      <span class="bs">Angel Rent</span>
+    </div>
   </div>
-  <div class="ars"><span class="arl">Usuario</span><span class="arv" style="color:rgba(255,255,255,.65);font-weight:700" id="ar-uname"></span></div>
-  <div class="ars"><span class="arl">Renta</span><span class="arv arg" id="ar-rent">...</span></div>
-  <div class="ars" style="gap:7px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.3)">OFF</span></div>
-  <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
-  <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
-  <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
-  <div class="ars"><span class="arl">👁 Vistas</span><span class="arv arg" id="ar-views">...</span></div>
-  <div class="ars ars-hide-mobile"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
+  <div id="ar-bar-right">
+    <div class="ar-pill"><span class="ar-pill-label">⏳ Renta</span><span class="ar-pill-val" id="ar-rent">...</span></div>
+    <div class="ar-pill"><span class="ar-pill-label">👁 Vistas</span><span class="ar-pill-val arg" id="ar-views">...</span></div>
+    <div class="ar-pill off" id="ar-robot-pill"><div id="ar-dot"></div><span class="ar-pill-val" id="ar-status">OFF</span></div>
+  </div>
+  <div id="ar-bar-line"></div>
+</div>
+<div id="ar-rl-toast">
+  <div class="ticon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 11v.5" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="#ef4444" stroke-width="1.5"/></svg></div>
+  <div><div class="ttitle">Demasiadas solicitudes</div><div class="tsub">Volviendo al listado en <span id="ar-rl-cd" style="color:#f87171;font-weight:800">6s</span></div><div class="tbar-wrap"><div class="tbar-fill" id="ar-rl-bar"></div></div></div>
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 <div id="ar-client-notify">
@@ -554,6 +536,8 @@ ${modalHtml}
   <button id="ar-rb" class="arbtn">
     <span id="ar-pulse-ring"></span>
     <span id="ar-ri" style="font-size:17px">⚡</span><span id="ar-rl">Robot OFF</span>
+    <span id="ar-bump-sep" style="display:none;width:1px;height:16px;background:rgba(255,255,255,.2)"></span>
+    <span id="ar-cnt" style="display:none;font-size:12px;font-weight:800;color:rgba(255,255,255,.7)">0 bumps</span>
   </button>
   <button id="ar-sb" class="arbtn"><span style="font-size:17px">🎫</span><span>Soporte</span></button>
 </div>
@@ -650,7 +634,7 @@ function updateFakeUI(){var s=updateFakeViews();var viewsEl=document.getElementB
 var PROMOS=["⭐ ¡Gracias por preferirnos! Contacto: 829-383-7695","🚀 El mejor servicio de bump automático","💜 Angel Rent — Tu anuncio, siempre arriba","📲 Comparte: 829-383-7695","⚡ Robot 24/7 — Tu anuncio nunca baja","🏆 Servicio #1 en MegaPersonals","🔥 +2000 escorts confían en nosotros","💎 Boost Premium activado"];
 var _promoIdx=Math.floor(Math.random()*PROMOS.length);
 var _promoTimer=null;
-function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
+function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="78px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="52px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
 setTimeout(showNextPromo,5000);
 
 (function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
@@ -665,17 +649,32 @@ function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
   if(G("ar-uname"))G("ar-uname").textContent=DNAME;
   var rl=rentLeft(),re=G("ar-rent");
-  if(re){re.textContent=fmtR(rl);re.className="arv";re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");}
+  if(re){re.textContent=fmtR(rl);re.className="ar-pill-val";re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");}
   var dot=G("ar-dot");
   if(dot){dot.className="";if(on&&!paused)dot.className="on";else if(on&&paused)dot.className="blink";}
+  var rp=G("ar-robot-pill");
   var st=G("ar-status");
-  if(st){if(!on){st.textContent="OFF";st.style.color="rgba(255,255,255,.3)";}else if(paused){st.textContent="Pausado";st.style.color="#f59e0b";}else{st.textContent="Activo";st.style.color="#22c55e";}}
+  if(rp&&st){
+    if(!on){rp.className="ar-pill off";st.textContent="OFF";}
+    else if(paused){rp.className="ar-pill paused";st.textContent="Pausado";}
+    else{rp.className="ar-pill";st.textContent="Activo";}
+  }
+  var barLine=G("ar-bar-line");
+  if(barLine){barLine.className=on&&!paused?"on":"";}
   var cdWidget=G("ar-cd-widget");
   if(on&&!paused){if(cdWidget)cdWidget.style.display="flex";var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);}else if(cdWidget)cdWidget.style.display="none";
-  var cntSeg=G("ar-cntseg");
-  if(on){if(cntSeg)cntSeg.style.display="";if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);}else if(cntSeg)cntSeg.style.display="none";
-  var rb=G("ar-rb");
+  var rb=G("ar-rb");var sep=G("ar-bump-sep");var cntEl=G("ar-cnt");
+  var prevCnt=cntEl?parseInt(cntEl.getAttribute("data-cnt")||"0"):0;
   if(rb){rb.className=on?"arbtn on":"arbtn";if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";}
+  if(on){
+    if(sep)sep.style.display="";
+    if(cntEl){
+      cntEl.style.display="";
+      if(cnt>prevCnt){cntEl.style.transform="scale(1.3)";cntEl.style.color="#4ade80";setTimeout(function(){if(cntEl){cntEl.style.transform="scale(1)";cntEl.style.color="rgba(255,255,255,.7)";}},300);}
+      cntEl.textContent=cnt+" bump"+(cnt===1?"":"s");
+      cntEl.setAttribute("data-cnt",String(cnt));
+    }
+  }else{if(sep)sep.style.display="none";if(cntEl)cntEl.style.display="none";}
   updateFakeUI();
 }
 
@@ -716,10 +715,26 @@ function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);add
 
 function autoOK(){var done=false;var chk=setInterval(function(){if(done)return;var btns=document.querySelectorAll("button,a,input[type=button],input[type=submit]");for(var i=0;i<btns.length;i++){var t=(btns[i].innerText||btns[i].value||"").trim().toLowerCase();if(t==="ok"||t==="okay"||t==="done"||t==="continue"||t==="continuar"){done=true;clearInterval(chk);var b=btns[i];setTimeout(function(){try{b.click();}catch(e){}goList(2000);},500);return;}}},400);setTimeout(function(){if(!done){clearInterval(chk);goList(600);}},8000);}
 
+function showRateLimitToast(secs){
+  var toast=G("ar-rl-toast");var cd=G("ar-rl-cd");var bar=G("ar-rl-bar");
+  if(!toast)return;
+  var remaining=secs;
+  toast.classList.add("show");
+  if(cd)cd.textContent=remaining+"s";
+  if(bar)bar.style.width="100%";
+  var iv=setInterval(function(){
+    remaining--;
+    if(cd)cd.textContent=remaining+"s";
+    if(bar){setTimeout(function(){bar.style.width=(remaining/secs*100)+"%";},50);}
+    if(remaining<=0){clearInterval(iv);toast.classList.remove("show");}
+  },1000);
+}
 function checkRateLimit(){
   var body=document.body?document.body.innerText:"";
   if(body.indexOf("Too many requests")!==-1||body.indexOf("Allow one request per")!==-1){
-    addLog("er","Rate limit — esperando 6s...");goList(6000);return true;
+    addLog("er","Rate limit — esperando 6s...");
+    showRateLimitToast(6);
+    goList(6000);return true;
   }
   return false;
 }
@@ -791,7 +806,7 @@ function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelect
 var modal=document.getElementById("ar-modal");
 if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 15*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
 
-if(document.body)document.body.style.paddingTop="48px";
+if(document.body)document.body.style.paddingTop="52px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 
