@@ -78,10 +78,16 @@ function remainingFromTimestamp(ts: number | undefined, rentalEnd: string | unde
   }
   if (!exp) return { days: 30, hours: 0 };
   const diffMs = exp - Date.now();
-  // ✅ Permitir negativos para mostrar deuda real
-  const totalHours = Math.trunc(diffMs / 3600000); // horas totales (puede ser negativo)
-  const days = Math.trunc(totalHours / 24);
-  const hours = Math.abs(totalHours % 24);
+  // Calcular en minutos para mayor precisión
+  const totalMins = Math.trunc(diffMs / 60000); // minutos totales (negativo = deuda)
+  const totalHoursFloor = Math.trunc(totalMins / 60);
+  const days = Math.trunc(totalHoursFloor / 24);
+  const hours = Math.abs(totalHoursFloor % 24);
+  // Si hay deuda pero days=0, devolver hours negativo para indicar deuda sub-24h
+  // Usamos days=-0 no existe, así que si totalMins<0 y days=0, forzamos days negativo como señal
+  if (totalMins < 0 && days === 0) {
+    return { days: -0.001, hours }; // señal de deuda < 1 día
+  }
   return { days, hours };
 }
 
@@ -158,10 +164,29 @@ export default function AngelRentAdmin() {
       : "iphone"
     );
 
-    // ✅ SIEMPRE mostrar tiempo RESTANTE real (incluyendo deuda con signo negativo)
-    const { days, hours } = remainingFromTimestamp(u.rentalEndTimestamp, u.rentalEnd);
-    setRentDays(String(days));
-    setRentHours(String(hours)); // horas siempre positivas, el signo lo lleva days
+    // ✅ Calcular tiempo restante real con signo (negativo = deuda)
+    const expTs = u.rentalEndTimestamp || (() => {
+      if (!u.rentalEnd) return 0;
+      const [y,m,d] = u.rentalEnd.split("-").map(Number);
+      return Date.UTC(y,m-1,d,23,59,59);
+    })();
+    if (expTs) {
+      const diffMs2 = expTs - Date.now();
+      const isDebt = diffMs2 < 0;
+      const absMs = Math.abs(diffMs2);
+      const absDays = Math.floor(absMs / 86400000);
+      const absHours = Math.floor((absMs % 86400000) / 3600000);
+      // Para deuda: si hay días completos => días negativo; si <24h => días=0, horas negativas
+      if (isDebt) {
+        setRentDays(absDays > 0 ? String(-absDays) : "0");
+        setRentHours(absDays > 0 ? String(absHours) : String(-absHours));
+      } else {
+        setRentDays(String(absDays));
+        setRentHours(String(absHours));
+      }
+    } else {
+      setRentDays("30"); setRentHours("0");
+    }
 
     setRentMode("add"); // default: agregar tiempo al existente
     setUseLocalProxy(!u.proxyHost);
@@ -170,17 +195,19 @@ export default function AngelRentAdmin() {
 
   // ── Ajuste rápido de días sobre el tiempo actual ──────────────────────────
   const adjustDays = (delta: number) => {
-    // Operar en horas totales para manejar deuda correctamente
     setRentDays(prev => {
       const currentDays = parseInt(prev) || 0;
       const currentHours = parseInt(rentHours) || 0;
-      // Horas totales actuales (puede ser negativo si hay deuda)
-      const totalHoursNow = (currentDays * 24) + (currentDays < 0 ? -currentHours : currentHours);
-      const totalHoursNext = totalHoursNow + (delta * 24);
-      const nextDays = Math.trunc(totalHoursNext / 24);
-      const nextHours = Math.abs(totalHoursNext % 24);
-      setRentHours(String(nextHours));
-      return String(nextDays);
+      // Convertir todo a minutos totales con signo correcto
+      const dSign = currentDays < 0 ? -1 : currentHours < 0 ? -1 : 1;
+      const totalMinsNow = dSign * ((Math.abs(currentDays) * 1440) + (Math.abs(currentHours) * 60));
+      const totalMinsNext = totalMinsNow + (delta * 1440);
+      const isNeg = totalMinsNext < 0;
+      const absMins = Math.abs(totalMinsNext);
+      const nextDays = Math.floor(absMins / 1440);
+      const nextHours = Math.floor((absMins % 1440) / 60);
+      setRentHours(isNeg ? (nextDays > 0 ? String(nextHours) : String(-nextHours)) : String(nextHours));
+      return isNeg ? (nextDays > 0 ? String(-nextDays) : "0") : String(nextDays);
     });
   };
 
@@ -190,7 +217,10 @@ export default function AngelRentAdmin() {
 
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
-    const inputMs = (days * 86400000) + (hours * 3600000);
+    // Determinar signo: si días<0 O horas<0, estamos en deuda
+    const isNegInput = days < 0 || hours < 0;
+    const sign = isNegInput ? -1 : 1;
+    const inputMs = sign * ((Math.abs(days) * 86400000) + (Math.abs(hours) * 3600000));
 
     let rentalEndTimestamp: number;
     if (rentMode === "set") {
@@ -289,7 +319,9 @@ export default function AngelRentAdmin() {
   // Calcular preview de expiración para el modal
   const previewDays = parseInt(rentDays) || 0;
   const previewHours = parseInt(rentHours) || 0;
-  const previewInputMs = (previewDays * 86400000) + (previewHours * 3600000);
+  const previewIsNeg = previewDays < 0 || previewHours < 0;
+  const previewSign = previewIsNeg ? -1 : 1;
+  const previewInputMs = previewSign * ((Math.abs(previewDays) * 86400000) + (Math.abs(previewHours) * 3600000));
   // Calcular timestamp final según modo
   const previewFinalTs = rentMode === "set"
     ? Date.now() + previewInputMs
@@ -648,7 +680,6 @@ export default function AngelRentAdmin() {
                 );
               })()}
               {previewInputMs === 0 && (() => {
-                // Si el cliente tiene deuda, mostrarla aunque no haya ingresado tiempo
                 const currentTs = (form as any).rentalEndTimestamp;
                 const hasDebt = currentTs && currentTs < Date.now();
                 if (hasDebt) {
@@ -658,9 +689,11 @@ export default function AngelRentAdmin() {
                   const dm = Math.floor((debtMs0 % 3600000) / 60000);
                   const lbl = dd > 0 ? `${dd}d ${dh}h` : dh > 0 ? `${dh}h ${dm}m` : `${dm}m`;
                   return (
-                    <div style={{ padding: "10px 14px", background: "rgba(245,158,11,.07)", border: "1px solid rgba(245,158,11,.25)", borderRadius: 10, fontSize: 11 }}>
-                      <div style={{ color: "#fbbf24", fontWeight: 800, marginBottom: 2 }}>⏰ Deuda actual: {lbl}</div>
-                      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>Ingresa tiempo para ver cuánto quedará después de descontar la deuda</div>
+                    <div style={{ padding: "12px 14px", background: "rgba(251,146,60,.07)", border: "1px solid rgba(251,146,60,.25)", borderRadius: 10 }}>
+                      <div style={{ color: "#fb923c", fontWeight: 800, fontSize: 12, marginBottom: 3 }}>⏰ Deuda actual: {lbl}</div>
+                      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
+                        {rentMode === "add" ? "Ingresa cuánto tiempo quieres agregar — la deuda se descontará automáticamente" : "Ingresa el nuevo tiempo total que tendrá el cliente"}
+                      </div>
                     </div>
                   );
                 }
