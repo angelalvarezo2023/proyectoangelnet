@@ -158,10 +158,10 @@ export default function AngelRentAdmin() {
       : "iphone"
     );
 
-    // ✅ SIEMPRE mostrar tiempo RESTANTE real, no los días originales
+    // ✅ SIEMPRE mostrar tiempo RESTANTE real (incluyendo deuda con signo negativo)
     const { days, hours } = remainingFromTimestamp(u.rentalEndTimestamp, u.rentalEnd);
     setRentDays(String(days));
-    setRentHours(String(hours));
+    setRentHours(String(hours)); // horas siempre positivas, el signo lo lleva days
 
     setRentMode("add"); // default: agregar tiempo al existente
     setUseLocalProxy(!u.proxyHost);
@@ -350,7 +350,12 @@ export default function AngelRentAdmin() {
                   if (!u.rentalEnd) {
                     rentColor = "rgba(255,255,255,.2)"; rentLabel = "∞";
                   } else if (days < 0) {
-                    rentColor = "#f59e0b"; rentLabel = `VENCIDO ${Math.abs(days)}d`;
+                    rentColor = "#f59e0b";
+                    // Calcular horas de deuda exactas desde el timestamp
+                    const debtMs2 = u.rentalEndTimestamp ? Date.now() - u.rentalEndTimestamp : Math.abs(days) * 86400000;
+                    const debtD = Math.floor(debtMs2 / 86400000);
+                    const debtH = Math.floor((debtMs2 % 86400000) / 3600000);
+                    rentLabel = debtD > 0 ? `DEBE ${debtD}d ${debtH}h` : `DEBE ${debtH}h`;
                   } else if (days === 0) {
                     rentColor = "#fbbf24"; rentLabel = "Hoy";
                   } else if (days <= 3) {
@@ -583,21 +588,48 @@ export default function AngelRentAdmin() {
                   </div>
                 </div>
               )}
-              {previewInputMs > 0 && previewMs <= 0 && (
-                <div style={{ padding: "10px 14px", background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 10, fontSize: 11 }}>
-                  <div style={{ color: "#f87171", fontWeight: 800, marginBottom: 4 }}>
-                    ⚠️ Deuda restante: {Math.abs(Math.ceil(previewMs / 86400000))}d — el cliente sigue vencido
+              {previewInputMs > 0 && previewMs <= 0 && (() => {
+                const debtMs = Math.abs(previewMs);
+                const debtDays = Math.floor(debtMs / 86400000);
+                const debtHours = Math.floor((debtMs % 86400000) / 3600000);
+                const debtMins = Math.floor((debtMs % 3600000) / 60000);
+                const debtLabel = debtDays > 0
+                  ? `${debtDays}d ${debtHours}h`
+                  : debtHours > 0 ? `${debtHours}h ${debtMins}m` : `${debtMins}m`;
+                return (
+                  <div style={{ padding: "10px 14px", background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 10, fontSize: 11 }}>
+                    <div style={{ color: "#f87171", fontWeight: 800, marginBottom: 4 }}>
+                      ⚠️ Deuda restante: {debtLabel} — el cliente sigue vencido
+                    </div>
+                    <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
+                      Agrega más tiempo para saldar la deuda completa
+                    </div>
                   </div>
-                  <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
-                    Agrega más tiempo para saldar la deuda completa
+                );
+              })()}
+              {previewInputMs === 0 && (() => {
+                // Si el cliente tiene deuda, mostrarla aunque no haya ingresado tiempo
+                const currentTs = (form as any).rentalEndTimestamp;
+                const hasDebt = currentTs && currentTs < Date.now();
+                if (hasDebt) {
+                  const debtMs0 = Date.now() - currentTs;
+                  const dd = Math.floor(debtMs0 / 86400000);
+                  const dh = Math.floor((debtMs0 % 86400000) / 3600000);
+                  const dm = Math.floor((debtMs0 % 3600000) / 60000);
+                  const lbl = dd > 0 ? `${dd}d ${dh}h` : dh > 0 ? `${dh}h ${dm}m` : `${dm}m`;
+                  return (
+                    <div style={{ padding: "10px 14px", background: "rgba(245,158,11,.07)", border: "1px solid rgba(245,158,11,.25)", borderRadius: 10, fontSize: 11 }}>
+                      <div style={{ color: "#fbbf24", fontWeight: 800, marginBottom: 2 }}>⏰ Deuda actual: {lbl}</div>
+                      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>Ingresa tiempo para ver cuánto quedará después de descontar la deuda</div>
+                    </div>
+                  );
+                }
+                return (
+                  <div style={{ padding: "8px 14px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+                    Ingresa días u horas para ver el resultado
                   </div>
-                </div>
-              )}
-              {previewInputMs === 0 && (
-                <div style={{ padding: "8px 14px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-                  Ingresa días u horas para ver el resultado
-                </div>
-              )}
+                );
+              })()}
             </div>
             {/* ════════════════════════════════════ */}
                         <label style={F.label}>URL por defecto</label>
