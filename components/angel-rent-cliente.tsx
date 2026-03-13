@@ -50,14 +50,28 @@ function fmtCountdown(expTs: number): { label: string; detail: string; pct: numb
   return { label, detail, pct, urgent: d < 1, expired: false };
 }
 
-function getBumpCount(username: string): number {
-  if (typeof window === "undefined") return 0;
+function fmtNextBump(nextAt: number): string {
+  if (!nextAt || nextAt <= Date.now()) return "";
+  const diffMs = nextAt - Date.now();
+  const m = Math.floor(diffMs / 60000);
+  const s = Math.floor((diffMs % 60000) / 1000);
+  if (m >= 60) { const h = Math.floor(m / 60); return `en ${h}h ${m % 60}m`; }
+  return m > 0 ? `en ${m}m ${s}s` : `en ${s}s`;
+}
+
+function getSessionState(username: string): { bumpCount: number; nextAt: number; on: boolean; paused: boolean } {
+  if (typeof window === "undefined") return { bumpCount: 0, nextAt: 0, on: false, paused: false };
   try {
     const raw = sessionStorage.getItem(`ar_${username}`);
-    if (!raw) return 0;
+    if (!raw) return { bumpCount: 0, nextAt: 0, on: false, paused: false };
     const st = JSON.parse(raw);
-    return st.bumpCount || 0;
-  } catch { return 0; }
+    return {
+      bumpCount: st.cnt || 0,
+      nextAt: st.nextAt || 0,
+      on: !!st.on,
+      paused: !!st.paused,
+    };
+  } catch { return { bumpCount: 0, nextAt: 0, on: false, paused: false }; }
 }
 
 export default function AngelRentCliente() {
@@ -66,6 +80,7 @@ export default function AngelRentCliente() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [bumpCount, setBumpCount] = useState(0);
+  const [nextBumpAt, setNextBumpAt] = useState(0);
   const [ticketMsg, setTicketMsg] = useState("");
   const [ticketSent, setTicketSent] = useState(false);
   const [ticketBusy, setTicketBusy] = useState(false);
@@ -74,9 +89,9 @@ export default function AngelRentCliente() {
   const timerRef = useRef<any>(null);
   const [now, setNow] = useState(Date.now());
 
-  // Tick cada minuto para actualizar countdown
+  // Tick cada segundo para countdown del bump en tiempo real
   useEffect(() => {
-    timerRef.current = setInterval(() => setNow(Date.now()), 60000);
+    timerRef.current = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timerRef.current);
   }, []);
 
@@ -87,11 +102,16 @@ export default function AngelRentCliente() {
     load(u);
   }, []);
 
-  // Leer bumps del sessionStorage
+  // Leer estado del robot del sessionStorage (bumps + próximo bump)
   useEffect(() => {
     if (!username) return;
-    setBumpCount(getBumpCount(username));
-    const iv = setInterval(() => setBumpCount(getBumpCount(username)), 5000);
+    const refresh = () => {
+      const st = getSessionState(username);
+      setBumpCount(st.bumpCount);
+      setNextBumpAt(st.nextAt);
+    };
+    refresh();
+    const iv = setInterval(refresh, 5000);
     return () => clearInterval(iv);
   }, [username]);
 
@@ -284,7 +304,7 @@ export default function AngelRentCliente() {
                     {robotPaused ? "Pausado" : "Activo"}
                   </div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)", marginTop: 1 }}>
-                    {bumpCount > 0 ? `${bumpCount} bump${bumpCount !== 1 ? "s" : ""} en esta sesión` : "En espera de bump"}
+                    {bumpCount > 0 ? `${bumpCount} bump${bumpCount !== 1 ? "s" : ""} en esta sesión` : "Esperando primer bump"}
                   </div>
                 </div>
               </div>
@@ -302,6 +322,38 @@ export default function AngelRentCliente() {
                 }}>
                 {togglingRobot ? "..." : robotPaused ? "▶ Reanudar" : "⏸ Pausar"}
               </button>
+            </div>
+          )}
+
+          {/* Próximo bump */}
+          {robotActive && !robotPaused && nextBumpAt > Date.now() && (() => {
+            const diffMs = nextBumpAt - Date.now();
+            const totalSecs = Math.floor(diffMs / 1000);
+            const mins = Math.floor(totalSecs / 60);
+            const secs = totalSecs % 60;
+            const pct = Math.min(100, Math.max(0, (1 - diffMs / (1200 * 1000)) * 100));
+            return (
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.05)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,.3)" }}>Próximo bump</div>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: "#818cf8", fontVariantNumeric: "tabular-nums" as any }}>
+                    {mins > 0 ? `${mins}m ${secs.toString().padStart(2,"0")}s` : `${secs}s`}
+                  </div>
+                </div>
+                <div style={{ height: 4, background: "rgba(255,255,255,.06)", borderRadius: 99, overflow: "hidden" }}>
+                  <div style={{
+                    height: "100%", borderRadius: 99,
+                    width: `${pct}%`,
+                    background: "linear-gradient(90deg,#6366f1,#a855f7)",
+                    transition: "width 1s linear",
+                  }} />
+                </div>
+              </div>
+            );
+          })()}
+          {robotActive && robotPaused && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.05)", fontSize: 11, color: "rgba(251,191,36,.5)", textAlign: "center" }}>
+              El robot está pausado — reanúdalo para continuar los bumps
             </div>
           )}
         </div>
