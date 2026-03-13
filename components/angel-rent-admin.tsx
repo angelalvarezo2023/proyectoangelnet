@@ -170,24 +170,10 @@ export default function AngelRentAdmin() {
       const [y,m,d] = u.rentalEnd.split("-").map(Number);
       return Date.UTC(y,m-1,d,23,59,59);
     })();
-    if (expTs) {
-      const diffMs2 = expTs - Date.now();
-      const isDebt = diffMs2 < 0;
-      const absMs = Math.abs(diffMs2);
-      const absDays = Math.floor(absMs / 86400000);
-      const absHours = Math.floor((absMs % 86400000) / 3600000);
-      // Para deuda: si hay días completos => días negativo; si <24h => días=0, horas negativas
-      if (isDebt) {
-        setRentDays(absDays > 0 ? String(-absDays) : "0");
-        setRentHours(absDays > 0 ? String(absHours) : String(-absHours));
-      } else {
-        setRentDays(String(absDays));
-        setRentHours(String(absHours));
-      }
-    } else {
-      setRentDays("30"); setRentHours("0");
-    }
-
+    // En modo "add" siempre empezamos en 0 — el usuario ingresa cuánto tiempo NUEVO agrega
+    // La deuda se descuenta automáticamente en save()
+    setRentDays("0");
+    setRentHours("0");
     setRentMode("add"); // default: agregar tiempo al existente
     setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
@@ -628,39 +614,70 @@ export default function AngelRentAdmin() {
                 </button>
               </div>
 
-              {/* Inputs días + horas */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
-                <div>
-                  <label style={F.label}>Días</label>
-                  <input type="number" min="0" style={F.input} value={rentDays} onChange={e => setRentDays(e.target.value)} placeholder="0" />
-                </div>
-                <div>
-                  <label style={F.label}>Horas</label>
-                  <input type="number" min="0" max="23" style={F.input} value={rentHours} onChange={e => setRentHours(e.target.value)} placeholder="0" />
-                </div>
-              </div>
-
               {/* Presets rápidos */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 10 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 12 }}>
                 {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"],["12h","0","12"]].map(([label,d,h]) => (
                   <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
                     style={{
-                      padding: "5px 14px", borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 700,
-                      border: rentMode === "add" ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(99,102,241,.3)",
-                      background: rentMode === "add" ? "rgba(34,197,94,.08)" : "rgba(99,102,241,.08)",
+                      padding: "8px 16px", borderRadius: 99, cursor: "pointer", fontSize: 12, fontWeight: 800,
+                      border: rentMode === "add" ? "1px solid rgba(34,197,94,.4)" : "1px solid rgba(99,102,241,.4)",
+                      background: rentMode === "add"
+                        ? (rentDays === d && rentHours === h ? "rgba(34,197,94,.25)" : "rgba(34,197,94,.06)")
+                        : (rentDays === d && rentHours === h ? "rgba(99,102,241,.25)" : "rgba(99,102,241,.06)"),
                       color: rentMode === "add" ? "#4ade80" : "#a5b4fc",
+                      transition: "all .15s",
                     }}>
                     {label}
                   </button>
                 ))}
               </div>
 
+              {/* Input días + horas moderno */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: "12px 16px" }}>
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 6 }}>Días</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    <button onClick={() => setRentDays(d => String(Math.max(0, (parseInt(d)||0) - 1)))}
+                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                    <input type="number" min="0" style={{ width: 60, textAlign: "center", background: "transparent", border: "none", fontSize: 26, fontWeight: 900, color: "#fff", outline: "none", MozAppearance: "textfield" as any }}
+                      value={rentDays} onChange={e => setRentDays(e.target.value)} />
+                    <button onClick={() => setRentDays(d => String((parseInt(d)||0) + 1))}
+                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                  </div>
+                </div>
+                <div style={{ width: 1, height: 40, background: "rgba(255,255,255,.08)" }} />
+                <div style={{ flex: 1, textAlign: "center" }}>
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 6 }}>Horas</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+                    <button onClick={() => setRentHours(h => String(Math.max(0, (parseInt(h)||0) - 1)))}
+                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
+                    <input type="number" min="0" max="23" style={{ width: 60, textAlign: "center", background: "transparent", border: "none", fontSize: 26, fontWeight: 900, color: "#fff", outline: "none", MozAppearance: "textfield" as any }}
+                      value={rentHours} onChange={e => setRentHours(e.target.value)} />
+                    <button onClick={() => setRentHours(h => String(Math.min(23, (parseInt(h)||0) + 1)))}
+                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                  </div>
+                </div>
+              </div>
+
               {/* Preview resultado */}
               {previewInputMs > 0 && previewMs > 0 && (
                 <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.07)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 10, fontSize: 11 }}>
-                  <div style={{ color: "#4ade80", fontWeight: 800, marginBottom: 4 }}>
-                    ✅ {rentMode === "set" ? "Quedará en" : "Resultado:"} {previewDays}d {previewHours}h
-                  </div>
+                  {(() => {
+                    const resultMs = previewMs;
+                    const rDays = Math.floor(resultMs / 86400000);
+                    const rHours = Math.floor((resultMs % 86400000) / 3600000);
+                    const currentTs = (form as any).rentalEndTimestamp;
+                    const hadDebt = currentTs && currentTs < Date.now();
+                    const debtMs = hadDebt ? Date.now() - currentTs : 0;
+                    const debtDays = Math.floor(debtMs / 86400000);
+                    const debtHours = Math.floor((debtMs % 86400000) / 3600000);
+                    return (
+                      <div style={{ color: "#4ade80", fontWeight: 800, marginBottom: 4 }}>
+                        ✅ Quedará con {rDays}d {rHours}h
+                        {hadDebt && <span style={{ color: "rgba(255,255,255,.4)", fontWeight: 400 }}> (descontando {debtDays > 0 ? `${debtDays}d ${debtHours}h` : `${debtHours}h`} de deuda)</span>}
+                      </div>
+                    );
+                  })()}
                   <div style={{ color: "rgba(255,255,255,.5)", fontSize: 10 }}>
                     Vence el <span style={{ color: "#fff", fontWeight: 700 }}>
                       {previewExp.toLocaleDateString("es", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })} a las {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
