@@ -282,7 +282,7 @@ export default function AngelRentAdmin() {
   const stats = {
     total: keys.length,
     active: keys.filter(k => users[k].active).length,
-    expiring: keys.filter(k => { const d = rentalDays(users[k]); return !!users[k].rentalEnd && d > 0 && d <= 3; }).length,
+    expiring: keys.filter(k => { const d = rentalDays(users[k]); return !!users[k].rentalEnd && d >= 0 && d <= 1; }).length,
     expired: keys.filter(k => !!users[k].rentalEnd && rentalDays(users[k]) <= 0).length,
   };
 
@@ -297,129 +297,169 @@ export default function AngelRentAdmin() {
   const previewMs = previewFinalTs - Date.now(); // positivo = tiempo restante, negativo = deuda
   const previewExp = new Date(previewFinalTs);
 
+  // helpers para formato de tiempo
+  function fmtExpiry(u: User): { label: string; sub: string; color: string; bg: string } {
+    if (!u.rentalEnd) return { label: "Sin límite", sub: "", color: "rgba(255,255,255,.3)", bg: "rgba(255,255,255,.05)" };
+    const exp = u.rentalEndTimestamp || (() => { const [y,m,d] = u.rentalEnd!.split("-").map(Number); return Date.UTC(y,m-1,d,23,59,59); })();
+    const diffMs = exp - Date.now();
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffD = Math.floor(diffMs / 86400000);
+    const remH = Math.floor((diffMs % 86400000) / 3600000);
+    const expDate = new Date(exp);
+    const dateFmt = expDate.toLocaleDateString("es", { day: "2-digit", month: "short" });
+    const timeFmt = expDate.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
+    if (diffMs < 0) {
+      const debtMs = Math.abs(diffMs);
+      const dd = Math.floor(debtMs / 86400000);
+      const dh = Math.floor((debtMs % 86400000) / 3600000);
+      const lbl = dd > 0 ? `Debe ${dd}d ${dh}h` : `Debe ${dh}h`;
+      return { label: lbl, sub: `venció ${dateFmt}`, color: "#fb923c", bg: "rgba(251,146,60,.12)" };
+    }
+    if (diffH < 24) {
+      return { label: `${diffH}h ${Math.floor((diffMs%3600000)/60000)}m`, sub: `hoy ${timeFmt}`, color: "#f87171", bg: "rgba(248,113,113,.12)" };
+    }
+    if (diffD <= 1) {
+      return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#f87171", bg: "rgba(248,113,113,.12)" };
+    }
+    if (diffD <= 3) {
+      return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#fbbf24", bg: "rgba(251,191,36,.12)" };
+    }
+    return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#4ade80", bg: "rgba(74,222,128,.1)" };
+  }
+
   // ─── MAIN ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: "#0a0a1a", minHeight: "100vh", color: "#fff", fontFamily: "-apple-system, sans-serif" }}>
-      <div style={{ maxWidth: 920, margin: "0 auto", padding: 16 }}>
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 }}>
+    <div style={{ background: "#080b14", minHeight: "100vh", color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
+      <div style={{ maxWidth: 980, margin: "0 auto", padding: "16px 16px" }}>
+
+        {/* ── Header ── */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 24 }}>👼</span>
-            <span style={{ fontSize: 18, fontWeight: 700 }}>Angel Rent · Admin</span>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👼</div>
+            <div>
+              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.3px" }}>Angel Rent</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", letterSpacing: ".5px", textTransform: "uppercase" }}>Panel de control</div>
+            </div>
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {toast && <span style={{ fontSize: 12, color: "#22c55e", padding: "6px 12px", background: "rgba(34,197,94,.1)", borderRadius: 8, border: "1px solid rgba(34,197,94,.2)" }}>{toast}</span>}
-            <button onClick={openNew} style={{ padding: "8px 16px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>+ Nuevo Usuario</button>
-            <button onClick={load} style={{ padding: "8px 12px", background: "rgba(255,255,255,.07)", color: "#aaa", border: "none", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>🔄</button>
+            {toast && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4ade80", padding: "6px 14px", background: "rgba(74,222,128,.08)", borderRadius: 99, border: "1px solid rgba(74,222,128,.2)" }}>
+                <span style={{ fontSize: 14 }}>✓</span> {toast}
+              </div>
+            )}
+            <button onClick={openNew} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-.1px" }}>
+              <span style={{ fontSize: 16 }}>+</span> Nuevo usuario
+            </button>
+            <button onClick={load} style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, fontSize: 14, cursor: "pointer" }}>↻</button>
           </div>
         </div>
 
-        {/* Stats */}
+        {/* ── Stats cards ── */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
           {[
-            { n: stats.total, l: "Total", c: "#3b82f6" },
-            { n: stats.active, l: "Activos", c: "#22c55e" },
-            { n: stats.expiring, l: "Por vencer", c: "#f59e0b" },
-            { n: stats.expired, l: "Expirados", c: "#ef4444" },
-          ].map(({ n, l, c }) => (
-            <div key={l} style={{ background: "#111827", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, padding: "14px 10px", textAlign: "center" }}>
-              <div style={{ fontSize: 26, fontWeight: 900, color: c }}>{n}</div>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".5px", marginTop: 2 }}>{l}</div>
+            { n: stats.total, l: "Total usuarios", c: "#818cf8", icon: "◈" },
+            { n: stats.active, l: "Activos", c: "#4ade80", icon: "●" },
+            { n: stats.expiring, l: "Por vencer hoy", c: "#fbbf24", icon: "◐" },
+            { n: stats.expired, l: "Vencidos / deuda", c: "#f87171", icon: "○" },
+          ].map(({ n, l, c, icon }) => (
+            <div key={l} style={{ background: "#0f1420", border: "1px solid rgba(255,255,255,.06)", borderRadius: 14, padding: "16px 14px", position: "relative", overflow: "hidden" }}>
+              <div style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>{l}</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontSize: 30, fontWeight: 800, color: c, lineHeight: 1 }}>{n}</span>
+                <span style={{ fontSize: 16, color: c, opacity: .4 }}>{icon}</span>
+              </div>
             </div>
           ))}
         </div>
 
-        {/* Table */}
-        <div style={{ background: "#111827", border: "1px solid rgba(255,255,255,.06)", borderRadius: 12, overflow: "auto" }}>
+        {/* ── Table ── */}
+        <div style={{ background: "#0f1420", border: "1px solid rgba(255,255,255,.06)", borderRadius: 14, overflow: "auto" }}>
           {busy ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,.25)", fontSize: 13 }}>Cargando...</div>
+            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,.2)", fontSize: 13 }}>Cargando...</div>
           ) : keys.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 40, color: "rgba(255,255,255,.25)", fontSize: 13 }}>No hay usuarios. Crea uno arriba.</div>
+            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,.2)", fontSize: 13 }}>Sin usuarios. Crea uno arriba.</div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 600 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
               <thead>
-                <tr>{["Usuario", "Nombre", "Proxy / Device", "Renta", "Estado", "🤖 Robot", "📞 Teléfono", "Acciones"].map(h => (
-                  <th key={h} style={{ background: "rgba(255,255,255,.03)", textAlign: "left", padding: "10px 14px", fontSize: 9, textTransform: "uppercase", letterSpacing: ".5px", color: "rgba(255,255,255,.3)", whiteSpace: "nowrap" }}>{h}</th>
-                ))}</tr>
+                <tr style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
+                  {["Usuario / Nombre", "Proxy · Dispositivo", "Tiempo de renta", "Estado", "Robot", "Teléfono", ""].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "10px 14px", fontSize: 10, textTransform: "uppercase", letterSpacing: ".6px", color: "rgba(255,255,255,.22)", fontWeight: 600, whiteSpace: "nowrap", background: "rgba(255,255,255,.02)" }}>{h}</th>
+                  ))}
+                </tr>
               </thead>
               <tbody>
-                {keys.map(k => {
+                {keys.map((k, idx) => {
                   const u = users[k];
-                  const days = rentalDays(u);
-                  let rentColor, rentLabel;
-                  if (!u.rentalEnd) {
-                    rentColor = "rgba(255,255,255,.2)"; rentLabel = "∞";
-                  } else if (days < 0) {
-                    rentColor = "#f59e0b";
-                    // Calcular horas de deuda exactas desde el timestamp
-                    const debtMs2 = u.rentalEndTimestamp ? Date.now() - u.rentalEndTimestamp : Math.abs(days) * 86400000;
-                    const debtD = Math.floor(debtMs2 / 86400000);
-                    const debtH = Math.floor((debtMs2 % 86400000) / 3600000);
-                    rentLabel = debtD > 0 ? `DEBE ${debtD}d ${debtH}h` : `DEBE ${debtH}h`;
-                  } else if (days === 0) {
-                    rentColor = "#fbbf24"; rentLabel = "Hoy";
-                  } else if (days <= 3) {
-                    rentColor = "#ef4444"; rentLabel = days + "d";
-                  } else if (days <= 7) {
-                    rentColor = "#f59e0b"; rentLabel = days + "d";
-                  } else {
-                    rentColor = "#22c55e"; rentLabel = days + "d";
-                  }
+                  const { label: rentLabel, sub: rentSub, color: rentColor, bg: rentBg } = fmtExpiry(u);
+                  const isEven = idx % 2 === 0;
                   return (
-                    <tr key={k} style={{ borderTop: "1px solid rgba(255,255,255,.04)" }}>
-                      <td style={{ padding: "10px 14px", fontSize: 12 }}><strong>{k}</strong></td>
-                      <td style={{ padding: "10px 14px", fontSize: 12, color: "rgba(255,255,255,.7)" }}>{u.name || "—"}</td>
-                      <td style={{ padding: "10px 14px", fontSize: 11 }}>
+                    <tr key={k} style={{ borderTop: "1px solid rgba(255,255,255,.03)", background: isEven ? "transparent" : "rgba(255,255,255,.01)" }}>
+
+                      {/* Usuario */}
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-.1px" }}>{k}</div>
+                        <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 1 }}>{u.name || "—"}</div>
+                      </td>
+
+                      {/* Proxy */}
+                      <td style={{ padding: "12px 14px" }}>
                         {u.proxyHost
-                          ? <span style={{ fontFamily: "monospace", color: "#94a3b8" }}>{u.proxyHost}:{u.proxyPort}</span>
-                          : <span style={{ color: "rgba(255,255,255,.2)", fontSize: 10 }}>Sin proxy</span>}
-                        <br />
-                        <span style={{ fontSize: 10, color: "#64748b" }}>{UA_SHORT[u.userAgentKey || "iphone"] || "📱"}</span>
+                          ? <div style={{ fontSize: 11, fontFamily: "monospace", color: "#7dd3fc" }}>{u.proxyHost}<span style={{ color: "rgba(255,255,255,.2)" }}>:{u.proxyPort}</span></div>
+                          : <div style={{ fontSize: 10, color: "rgba(255,255,255,.15)" }}>IP local</div>}
+                        <div style={{ fontSize: 10, color: "rgba(255,255,255,.25)", marginTop: 2 }}>{UA_SHORT[u.userAgentKey || "iphone"] || "—"}</div>
                       </td>
-                      <td style={{ padding: "10px 14px", fontSize: 12 }}>
-                        <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: rentColor + "22", color: rentColor, border: `1px solid ${rentColor}44` }}>
-                          {rentLabel}
-                        </span>
-                        {u.rentalEnd && <div style={{ fontSize: 9, color: "rgba(255,255,255,.18)", marginTop: 2 }}>{u.rentalEnd}</div>}
+
+                      {/* Renta */}
+                      <td style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: rentColor, background: rentBg, padding: "3px 10px", borderRadius: 99, display: "inline-block" }}>
+                            {rentLabel}
+                          </span>
+                          {rentSub && <span style={{ fontSize: 9, color: "rgba(255,255,255,.2)", paddingLeft: 2 }}>{rentSub}</span>}
+                        </div>
                       </td>
-                      <td style={{ padding: "10px 14px" }}>
-                        <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: u.active ? "rgba(34,197,94,.1)" : "rgba(239,68,68,.1)", color: u.active ? "#22c55e" : "#ef4444", border: `1px solid ${u.active ? "rgba(34,197,94,.2)" : "rgba(239,68,68,.2)"}` }}>
+
+                      {/* Estado */}
+                      <td style={{ padding: "12px 14px" }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: u.active ? "rgba(74,222,128,.1)" : "rgba(248,113,113,.1)", color: u.active ? "#4ade80" : "#f87171" }}>
                           {u.active ? "Activo" : "Inactivo"}
                         </span>
                       </td>
-                      <td style={{ padding: "10px 14px" }}>
+
+                      {/* Robot */}
+                      <td style={{ padding: "12px 14px" }}>
                         {u.robotOn === true ? (
                           u.robotPaused
-                            ? <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(245,158,11,.1)", color: "#f59e0b", border: "1px solid rgba(245,158,11,.2)" }}>⏸ Pausado</span>
-                            : <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(34,197,94,.1)", color: "#22c55e", border: "1px solid rgba(34,197,94,.2)" }}>⚡ ON</span>
+                            ? <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(251,191,36,.1)", color: "#fbbf24" }}>⏸ Pausa</span>
+                            : <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(74,222,128,.1)", color: "#4ade80" }}>⚡ ON</span>
                         ) : (
-                          <span style={{ display: "inline-block", fontSize: 9, padding: "2px 8px", borderRadius: 99, fontWeight: 700, background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.25)", border: "1px solid rgba(255,255,255,.08)" }}>OFF</span>
+                          <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 99, background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.2)" }}>OFF</span>
                         )}
-                        {u.cookieTs && <div style={{ fontSize: 8, color: "rgba(255,255,255,.2)", marginTop: 2 }}>Cookie: {Math.round((Date.now() - u.cookieTs) / 3600000)}h atrás</div>}
+                        {u.cookieTs && <div style={{ fontSize: 9, color: "rgba(255,255,255,.15)", marginTop: 2 }}>cookie {Math.round((Date.now()-u.cookieTs)/3600000)}h</div>}
                       </td>
-                      <td style={{ padding: "10px 14px", fontSize: 12 }}>
+
+                      {/* Teléfono */}
+                      <td style={{ padding: "12px 14px" }}>
                         {u.phoneNumber ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ fontFamily: "monospace", color: "#c084fc", fontWeight: 700, fontSize: 11 }}>{u.phoneNumber}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <span style={{ fontFamily: "monospace", fontSize: 11, color: "#c084fc", fontWeight: 700, letterSpacing: ".5px" }}>{u.phoneNumber}</span>
                             <button onClick={async () => {
                               await fetch(`${FB}/proxyUsers/${k}/phoneNumber.json`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: "null" });
-                              showToast("📞 Teléfono borrado"); await load();
-                            }} title="Borrar teléfono" style={{ padding: "2px 6px", fontSize: 9, background: "rgba(239,68,68,.2)", color: "#f87171", border: "1px solid rgba(239,68,68,.3)", borderRadius: 4, cursor: "pointer" }}>✕</button>
+                              showToast("Teléfono borrado"); await load();
+                            }} style={{ width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(239,68,68,.2)", color: "#f87171", border: "none", borderRadius: 4, fontSize: 9, cursor: "pointer", flexShrink: 0 }}>✕</button>
                           </div>
                         ) : (
-                          <span style={{ color: "rgba(255,255,255,.15)", fontSize: 10 }}>Auto-detectando...</span>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,.12)" }}>—</span>
                         )}
                       </td>
-                      <td style={{ padding: "10px 14px" }}>
+
+                      {/* Acciones */}
+                      <td style={{ padding: "12px 14px" }}>
                         <div style={{ display: "flex", gap: 4 }}>
-                          {[
-                            { ico: "✏️", bg: "#3b82f6", fn: () => openEdit(k) },
-                            { ico: u.active ? "⛔" : "✅", bg: u.active ? "#ef4444" : "#22c55e", fn: () => toggle(k) },
-                            { ico: "🔗", bg: "rgba(255,255,255,.08)", fn: () => copyLink(k) },
-                            { ico: "🗑️", bg: "rgba(255,255,255,.06)", fn: () => del(k) },
-                          ].map(({ ico, bg, fn }) => (
-                            <button key={ico} onClick={fn} style={{ padding: "5px 9px", fontSize: 11, background: bg, color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}>{ico}</button>
-                          ))}
+                          <button onClick={() => openEdit(k)} title="Editar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(99,102,241,.2)", color: "#818cf8", border: "1px solid rgba(99,102,241,.3)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✎</button>
+                          <button onClick={() => toggle(k)} title={u.active ? "Desactivar" : "Activar"} style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: u.active ? "rgba(239,68,68,.15)" : "rgba(74,222,128,.15)", color: u.active ? "#f87171" : "#4ade80", border: `1px solid ${u.active ? "rgba(239,68,68,.25)" : "rgba(74,222,128,.25)"}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>{u.active ? "⊘" : "✓"}</button>
+                          <button onClick={() => copyLink(k)} title="Copiar link" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>⎘</button>
+                          <button onClick={() => del(k)} title="Eliminar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.03)", color: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✕</button>
                         </div>
                       </td>
                     </tr>
