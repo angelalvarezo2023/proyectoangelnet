@@ -527,7 +527,6 @@ ${modalHtml}
   <div class="ars"><span class="arl">Usuario</span><span class="arv" style="color:rgba(255,255,255,.65);font-weight:700" id="ar-uname"></span></div>
   <div class="ars"><span class="arl">Renta</span><span class="arv arg" id="ar-rent">...</span></div>
   <div class="ars" style="gap:7px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.3)">OFF</span></div>
-  <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">⏱ Próximo</span><span class="arv arp2" id="ar-cd">--:--</span></div>
   <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
   <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
   <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
@@ -541,6 +540,16 @@ ${modalHtml}
   <div class="notify-msg" id="notify-msg">Alguien acaba de ver tu anuncio</div>
 </div>
 <div id="ar-btns">
+  <div id="ar-cd-widget" style="display:none;align-items:center;gap:10px;background:rgba(15,5,40,.92);border:1px solid rgba(168,85,247,.35);border-radius:60px;padding:10px 18px 10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(168,85,247,.15);border:1.5px solid rgba(168,85,247,.5);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="rgba(168,85,247,.7)" stroke-width="1.5"/><path d="M7 4.5V7l1.5 1.5" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid #a855f7;opacity:.4;animation:ar-cd-pulse 2s ease-in-out infinite"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px">
+      <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)">Próximo bump</span>
+      <span id="ar-cd" style="font-size:16px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px">--:--</span>
+    </div>
+  </div>
   <button id="ar-stats-btn" class="arbtn"><span style="font-size:17px">📊</span><span>Estadísticas</span></button>
   <button id="ar-rb" class="arbtn">
     <span id="ar-pulse-ring"></span>
@@ -620,7 +629,7 @@ ${modalHtml}
   </div>
 </div>
 </div>
-<style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
+<style>@keyframes ar-spin{to{transform:rotate(360deg)}}@keyframes ar-cd-pulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.3);opacity:0}}</style>`;
 
   const script = `<script>
 (function(){
@@ -661,8 +670,8 @@ function updateUI(){
   if(dot){dot.className="";if(on&&!paused)dot.className="on";else if(on&&paused)dot.className="blink";}
   var st=G("ar-status");
   if(st){if(!on){st.textContent="OFF";st.style.color="rgba(255,255,255,.3)";}else if(paused){st.textContent="Pausado";st.style.color="#f59e0b";}else{st.textContent="Activo";st.style.color="#22c55e";}}
-  var cdSeg=G("ar-cdseg");
-  if(on&&!paused){if(cdSeg)cdSeg.style.display="";var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);}else if(cdSeg)cdSeg.style.display="none";
+  var cdWidget=G("ar-cd-widget");
+  if(on&&!paused){if(cdWidget)cdWidget.style.display="flex";var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);}else if(cdWidget)cdWidget.style.display="none";
   var cntSeg=G("ar-cntseg");
   if(on){if(cntSeg)cntSeg.style.display="";if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);}else if(cntSeg)cntSeg.style.display="none";
   var rb=G("ar-rb");
