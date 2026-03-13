@@ -730,7 +730,7 @@ function startTick(){
 function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
 var FB_USER="https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME+".json";
 function syncFromFirebase(){try{fetch(FB_USER).then(function(r){return r.json();}).then(function(d){if(!d)return;var s=gst();var fbPaused=!!d.robotPaused;if(fbPaused!==s.paused){s.paused=fbPaused;sst(s);addLog("in",fbPaused?"Pausado remotamente":"Reanudado remotamente");updateUI();}if(d.rentalEndTimestamp&&d.rentalEndTimestamp!==ENDTS){ENDTS=d.rentalEndTimestamp;updateUI();}}).catch(function(){});}catch(e){}}
-setInterval(syncFromFirebase,15000);
+setInterval(syncFromFirebase,5000);
 
 function toggleRobot(){
   var s=gst();var ring=document.getElementById("ar-pulse-ring");
