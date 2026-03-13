@@ -113,7 +113,7 @@ export default function AngelRentCliente() {
       } catch {}
     };
     refresh();
-    const iv = setInterval(refresh, 15000);
+    const iv = setInterval(refresh, 5000);
     return () => clearInterval(iv);
   }, [username]);
 
@@ -367,9 +367,10 @@ export default function AngelRentCliente() {
             <div style={{ fontSize: 30, fontWeight: 900, color: "#818cf8", lineHeight: 1 }}>{bumpCount}</div>
           </div>
           <div style={{ background: "#0f1420", border: "1px solid rgba(255,255,255,.07)", borderRadius: 14, padding: "16px 18px" }}>
-            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".8px", color: "rgba(255,255,255,.25)", marginBottom: 8 }}>Estado</div>
-            <div style={{ fontSize: 14, fontWeight: 800, color: user.active ? "#4ade80" : "#f87171", marginTop: 4 }}>
-              {user.active ? "● Activo" : "○ Inactivo"}
+            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: ".8px", color: "rgba(255,255,255,.25)", marginBottom: 8 }}>Robot</div>
+            <div style={{ fontSize: 14, fontWeight: 800, marginTop: 4,
+              color: !robotActive ? "#6b7280" : robotPaused ? "#fbbf24" : "#4ade80" }}>
+              {!robotActive ? "○ Apagado" : robotPaused ? "⏸ Pausado" : "● Activo"}
             </div>
           </div>
         </div>
