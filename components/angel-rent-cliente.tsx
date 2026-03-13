@@ -12,6 +12,8 @@ interface User {
   robotPaused?: boolean;
   defaultUrl?: string;
   notes?: string;
+  nextBumpAt?: number;   // timestamp del próximo bump, guardado por el robot
+  bumpCount?: number;    // total bumps de la sesión, guardado por el robot
 }
 
 interface Ticket {
@@ -59,19 +61,13 @@ function fmtNextBump(nextAt: number): string {
   return m > 0 ? `en ${m}m ${s}s` : `en ${s}s`;
 }
 
+// sessionStorage no se comparte entre pestañas — leemos estado del robot desde Firebase
+// bumpCount viene del sessionStorage solo si estamos en la misma pestaña (no aplica aquí)
+// nextAt tampoco está en Firebase, solo en sessionStorage del cliente activo
+// Solución: el robot guarda nextAt en Firebase también (via syncState)
 function getSessionState(username: string): { bumpCount: number; nextAt: number; on: boolean; paused: boolean } {
-  if (typeof window === "undefined") return { bumpCount: 0, nextAt: 0, on: false, paused: false };
-  try {
-    const raw = sessionStorage.getItem(`ar_${username}`);
-    if (!raw) return { bumpCount: 0, nextAt: 0, on: false, paused: false };
-    const st = JSON.parse(raw);
-    return {
-      bumpCount: st.cnt || 0,
-      nextAt: st.nextAt || 0,
-      on: !!st.on,
-      paused: !!st.paused,
-    };
-  } catch { return { bumpCount: 0, nextAt: 0, on: false, paused: false }; }
+  // Esta función ya no se usa directamente — el estado viene de Firebase via load()
+  return { bumpCount: 0, nextAt: 0, on: false, paused: false };
 }
 
 export default function AngelRentCliente() {
@@ -102,16 +98,22 @@ export default function AngelRentCliente() {
     load(u);
   }, []);
 
-  // Leer estado del robot del sessionStorage (bumps + próximo bump)
+  // Polling de Firebase cada 15s para actualizar bumps, nextBumpAt y estado del robot
   useEffect(() => {
     if (!username) return;
-    const refresh = () => {
-      const st = getSessionState(username);
-      setBumpCount(st.bumpCount);
-      setNextBumpAt(st.nextAt);
+    const refresh = async () => {
+      try {
+        const r = await fetch(`${FB}/proxyUsers/${username}.json`);
+        const data = await r.json();
+        if (data) {
+          setUser(data);
+          setBumpCount(data.bumpCount || 0);
+          setNextBumpAt(data.nextBumpAt || 0);
+        }
+      } catch {}
     };
     refresh();
-    const iv = setInterval(refresh, 5000);
+    const iv = setInterval(refresh, 15000);
     return () => clearInterval(iv);
   }, [username]);
 
