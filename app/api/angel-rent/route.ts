@@ -564,6 +564,7 @@ ${modalHtml}
     </div>
   </div>
   <button id="ar-stats-btn" class="arbtn"><span style="font-size:17px">📊</span><span>Estadísticas</span></button>
+  <button id="ar-posts-btn" class="arbtn"><span style="font-size:17px">📋</span><span id="ar-posts-label">Posts: 1</span></button>
   <button id="ar-rb" class="arbtn">
     <span id="ar-pulse-ring"></span>
     <span id="ar-ri" style="font-size:17px">⚡</span><span id="ar-rl">Robot OFF</span>
@@ -571,6 +572,27 @@ ${modalHtml}
     <span id="ar-cnt" style="display:none;font-size:12px;font-weight:800;color:rgba(255,255,255,.7)">0 bumps</span>
   </button>
   <button id="ar-sb" class="arbtn"><span style="font-size:17px">🎫</span><span>Soporte</span></button>
+</div>
+<div id="ar-posts-modal" style="display:none;position:fixed;inset:0;z-index:2147483647;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);padding-bottom:80px">
+  <div style="background:#0f0a1e;border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:22px;width:320px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:-apple-system,sans-serif">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:16px;font-weight:900;color:#fff">📋 Posts a Rotar</h3>
+      <button id="ar-posts-close" style="background:rgba(255,255,255,.1);border:none;color:#fff;width:28px;height:28px;border-radius:8px;font-size:16px;cursor:pointer">×</button>
+    </div>
+    <p style="font-size:12px;color:rgba(255,255,255,.4);margin:0 0 16px 0">El robot rotará entre los primeros N posts de tu lista. Se detectan automáticamente al abrir el listado.</p>
+    <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Cantidad de posts</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <button id="ar-posts-minus" style="width:40px;height:40px;background:rgba(168,85,247,.2);border:1px solid rgba(168,85,247,.4);border-radius:10px;color:#a855f7;font-size:22px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>
+        <div style="flex:1;text-align:center">
+          <div id="ar-posts-num" style="font-size:36px;font-weight:900;color:#fff;line-height:1">1</div>
+          <div id="ar-posts-detected" style="font-size:11px;color:rgba(255,255,255,.3);margin-top:2px">posts detectados: —</div>
+        </div>
+        <button id="ar-posts-plus" style="width:40px;height:40px;background:rgba(168,85,247,.2);border:1px solid rgba(168,85,247,.4);border-radius:10px;color:#a855f7;font-size:22px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+      </div>
+    </div>
+    <button id="ar-posts-save" style="width:100%;padding:13px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">✅ Guardar</button>
+  </div>
 </div>
 <div id="ar-stats-modal">
 <div id="ar-stats-box">
@@ -652,6 +674,10 @@ ${modalHtml}
 var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
+// ── Rotación de posts ──
+function detectarPosts(){var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length>0){var s=gst();s.postIds=ids;sst(s);addLog("in","Posts detectados: "+ids.length);}return ids;}
+function getCantPosts(){var s=gst();return s.cantPosts||1;}
+function getSiguientePost(){var s=gst();var ids=(s.postIds||[]).slice(0,getCantPosts());if(!ids.length)return null;var idx=s.postIdx||0;var pid=ids[idx%ids.length];s.postIdx=(idx+1)%ids.length;sst(s);addLog("in","Post "+(idx%ids.length+1)+"/"+ids.length+" — ID:"+pid);return pid;}
 
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
@@ -717,7 +743,7 @@ function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<
 function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\d+$/.test(s[i]))return s[i];return null;}
 function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
 
-async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
+async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M2");}updateUI();return;}}var pid=getSiguientePost();if(!pid){addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);updateUI();return;}try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+pid),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" post:"+pid);try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}updateUI();}
 
 function startTick(){
   if(TICK)return;
@@ -825,7 +851,7 @@ function handlePage(){
   }
   if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
   setTimeout(function(){checkRateLimit();},1500);
-  if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}
+  if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/list")!==-1){setTimeout(function(){detectarPosts();},1500);}if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}
   if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
   var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(body.indexOf("too many requests")!==-1||body.indexOf("allow one request per")!==-1){addLog("er","Rate limit — esperando 6s...");goList(6000);return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
 }
@@ -902,6 +928,44 @@ if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!s
 initFakeStats();
 handlePage();setInterval(updateUI,1000);updateUI();
 var initS=gst();if(initS.on&&!initS.paused)startTick();
+
+// ── Modal de Posts ──
+function updatePostsLabel(){var s=gst();var cant=s.cantPosts||1;var detected=(s.postIds||[]).length;var pl=document.getElementById("ar-posts-label");if(pl)pl.textContent="Posts: "+cant+(detected>0?" / "+detected:"");}
+updatePostsLabel();
+if(G("ar-posts-btn"))G("ar-posts-btn").addEventListener("click",function(){
+  var modal=document.getElementById("ar-posts-modal");
+  if(!modal)return;
+  var s=gst();
+  var detected=(s.postIds||[]).length;
+  var cant=s.cantPosts||1;
+  var numEl=document.getElementById("ar-posts-num");
+  var detEl=document.getElementById("ar-posts-detected");
+  if(numEl)numEl.textContent=cant;
+  if(detEl)detEl.textContent="posts detectados: "+(detected||"—");
+  modal.style.display="flex";
+});
+if(G("ar-posts-close"))G("ar-posts-close").addEventListener("click",function(){var m=document.getElementById("ar-posts-modal");if(m)m.style.display="none";});
+document.getElementById("ar-posts-modal").addEventListener("click",function(e){if(e.target===this)this.style.display="none";});
+if(G("ar-posts-minus"))G("ar-posts-minus").addEventListener("click",function(){
+  var numEl=document.getElementById("ar-posts-num");
+  var n=Math.max(1,parseInt(numEl.textContent||"1")-1);
+  numEl.textContent=n;
+});
+if(G("ar-posts-plus"))G("ar-posts-plus").addEventListener("click",function(){
+  var s=gst();
+  var maxPosts=Math.max(1,(s.postIds||[]).length||10);
+  var numEl=document.getElementById("ar-posts-num");
+  var n=Math.min(maxPosts,parseInt(numEl.textContent||"1")+1);
+  numEl.textContent=n;
+});
+if(G("ar-posts-save"))G("ar-posts-save").addEventListener("click",function(){
+  var numEl=document.getElementById("ar-posts-num");
+  var n=Math.max(1,parseInt(numEl.textContent||"1"));
+  var s=gst();s.cantPosts=n;s.postIdx=0;sst(s);
+  document.getElementById("ar-posts-modal").style.display="none";
+  updatePostsLabel();
+  addLog("ok","Rotando "+n+" post"+(n>1?"s":""));
+});
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
