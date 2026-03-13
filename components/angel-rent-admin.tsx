@@ -112,6 +112,7 @@ export default function AngelRentAdmin() {
   const [rentDays, setRentDays] = useState("30");
   const [rentHours, setRentHours] = useState("0");
   const [useLocalProxy, setUseLocalProxy] = useState(false);
+  const [rentMode, setRentMode] = useState<"set"|"add">("set"); // "set"=establecer, "add"=agregar
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("ar_admin") === "ok") {
@@ -142,6 +143,7 @@ export default function AngelRentAdmin() {
     setForm({ ...BLANK });
     setDeviceType("iphone");
     setRentDays("30"); setRentHours("0");
+    setRentMode("set");
     setUseLocalProxy(false);
     setEditing(null); setModal(true);
   };
@@ -161,6 +163,7 @@ export default function AngelRentAdmin() {
     setRentDays(String(days));
     setRentHours(String(hours));
 
+    setRentMode("add"); // default: agregar tiempo al existente
     setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
   };
@@ -187,12 +190,19 @@ export default function AngelRentAdmin() {
 
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
-    // ✅ Si días son negativos (deuda), las horas se restan también
-    const sign = days < 0 ? -1 : 1;
-    const totalMs = (days * 86400000) + (sign * (hours * 3600000));
+    const inputMs = (days * 86400000) + (hours * 3600000);
 
-    // ✅ Timestamp = ahora + tiempo restante (puede resultar en el pasado si hay deuda)
-    const rentalEndTimestamp = Date.now() + totalMs;
+    let rentalEndTimestamp: number;
+    if (rentMode === "set") {
+      // ESTABLECER: el tiempo ingresado es el tiempo total desde ahora
+      rentalEndTimestamp = Date.now() + inputMs;
+    } else {
+      // AGREGAR: sumar sobre el timestamp actual (descontando deuda si existe)
+      const currentTs = (form as any).rentalEndTimestamp || Date.now();
+      // Si el cliente está vencido, currentTs < now, la suma naturalmente descuenta la deuda
+      rentalEndTimestamp = currentTs + inputMs;
+      // Si sigue en el pasado (deuda mayor que lo agregado), dejarlo así
+    }
     const expDate = new Date(rentalEndTimestamp);
     const rentalEnd = expDate.toISOString().split("T")[0];
     const rentalStart = new Date().toISOString().split("T")[0];
@@ -279,10 +289,13 @@ export default function AngelRentAdmin() {
   // Calcular preview de expiración para el modal
   const previewDays = parseInt(rentDays) || 0;
   const previewHours = parseInt(rentHours) || 0;
-  // ✅ Respetar signo para deuda
-  const previewSign = previewDays < 0 ? -1 : 1;
-  const previewMs = (previewDays * 86400000) + (previewSign * previewHours * 3600000);
-  const previewExp = new Date(Date.now() + previewMs);
+  const previewInputMs = (previewDays * 86400000) + (previewHours * 3600000);
+  // Calcular timestamp final según modo
+  const previewFinalTs = rentMode === "set"
+    ? Date.now() + previewInputMs
+    : ((form as any).rentalEndTimestamp || Date.now()) + previewInputMs;
+  const previewMs = previewFinalTs - Date.now(); // positivo = tiempo restante, negativo = deuda
+  const previewExp = new Date(previewFinalTs);
 
   // ─── MAIN ─────────────────────────────────────────────────────────────────
   return (
@@ -492,72 +505,102 @@ export default function AngelRentAdmin() {
             )}
 
             {/* ── RENTA ── */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>
-              📅 Tiempo de Renta
-              {editing && <span style={{ marginLeft: 8, fontSize: 10, color: "rgba(99,102,241,.8)", background: "rgba(99,102,241,.1)", padding: "2px 8px", borderRadius: 99, border: "1px solid rgba(99,102,241,.2)" }}>Tiempo restante actual</span>}
-            </div>
+            {/* ═══ SECCIÓN TIEMPO DE RENTA ═══ */}
+            <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.06)" }}>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 12 }}>📅 Tiempo de Renta</div>
 
-            {/* Inputs días y horas */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={F.label}>Días</label>
-                <input type="number" min="0" style={F.input} value={rentDays} onChange={e => setRentDays(e.target.value)} placeholder="30" />
-              </div>
-              <div>
-                <label style={F.label}>Horas</label>
-                <input type="number" min="0" max="23" style={F.input} value={rentHours} onChange={e => setRentHours(e.target.value)} placeholder="0" />
-              </div>
-            </div>
-
-            {/* Botones +/- rápidos */}
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" as const }}>
-              {/* Presets rápidos (nuevo usuario) */}
-              {!editing && [["7d","7","0"],["15d","15","0"],["30d","30","0"],["1d","1","0"],["12h","0","12"]].map(([label,d,h]) => (
-                <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
-                  style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.6)", cursor: "pointer", fontSize: 11, fontWeight: 700 }}>
-                  {label}
+              {/* Selector de modo: Establecer / Agregar */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
+                <button onClick={() => setRentMode("set")}
+                  style={{
+                    padding: "12px 8px", borderRadius: 12, cursor: "pointer", fontWeight: 800, fontSize: 12,
+                    border: rentMode === "set" ? "2px solid #6366f1" : "1px solid rgba(255,255,255,.08)",
+                    background: rentMode === "set" ? "rgba(99,102,241,.18)" : "rgba(255,255,255,.03)",
+                    color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,.35)",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    transition: "all .15s",
+                  }}>
+                  <span style={{ fontSize: 20 }}>📌</span>
+                  <span>Establecer</span>
+                  <span style={{ fontSize: 9, fontWeight: 400, color: rentMode === "set" ? "rgba(165,180,252,.7)" : "rgba(255,255,255,.2)", textAlign: "center", lineHeight: 1.4 }}>
+                    Reemplaza el tiempo actual por el nuevo valor
+                  </span>
                 </button>
-              ))}
-              {/* Botones +/- para edición */}
-              {editing && <>
-                <div style={{ width: "100%", fontSize: 10, color: "rgba(255,255,255,.25)", marginBottom: 2 }}>Ajuste rápido sobre tiempo restante:</div>
-                {[
-                  { label: "−1d", delta: -1, color: "#ef4444" },
-                  { label: "−7d", delta: -7, color: "#ef4444" },
-                  { label: "+1d", delta: 1, color: "#22c55e" },
-                  { label: "+7d", delta: 7, color: "#22c55e" },
-                  { label: "+15d", delta: 15, color: "#22c55e" },
-                  { label: "+30d", delta: 30, color: "#22c55e" },
-                ].map(({ label, delta, color }) => (
-                  <button key={label} onClick={() => adjustDays(delta)}
-                    style={{ padding: "5px 12px", borderRadius: 99, border: `1px solid ${color}44`, background: `${color}11`, color: color, cursor: "pointer", fontSize: 11, fontWeight: 800 }}>
+                <button onClick={() => setRentMode("add")}
+                  style={{
+                    padding: "12px 8px", borderRadius: 12, cursor: "pointer", fontWeight: 800, fontSize: 12,
+                    border: rentMode === "add" ? "2px solid #22c55e" : "1px solid rgba(255,255,255,.08)",
+                    background: rentMode === "add" ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.03)",
+                    color: rentMode === "add" ? "#4ade80" : "rgba(255,255,255,.35)",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    transition: "all .15s",
+                  }}>
+                  <span style={{ fontSize: 20 }}>➕</span>
+                  <span>Agregar</span>
+                  <span style={{ fontSize: 9, fontWeight: 400, color: rentMode === "add" ? "rgba(74,222,128,.7)" : "rgba(255,255,255,.2)", textAlign: "center", lineHeight: 1.4 }}>
+                    Suma al tiempo restante (descuenta deuda)
+                  </span>
+                </button>
+              </div>
+
+              {/* Inputs días + horas */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+                <div>
+                  <label style={F.label}>Días</label>
+                  <input type="number" min="0" style={F.input} value={rentDays} onChange={e => setRentDays(e.target.value)} placeholder="0" />
+                </div>
+                <div>
+                  <label style={F.label}>Horas</label>
+                  <input type="number" min="0" max="23" style={F.input} value={rentHours} onChange={e => setRentHours(e.target.value)} placeholder="0" />
+                </div>
+              </div>
+
+              {/* Presets rápidos */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 10 }}>
+                {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"],["12h","0","12"]].map(([label,d,h]) => (
+                  <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
+                    style={{
+                      padding: "5px 14px", borderRadius: 99, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                      border: rentMode === "add" ? "1px solid rgba(34,197,94,.3)" : "1px solid rgba(99,102,241,.3)",
+                      background: rentMode === "add" ? "rgba(34,197,94,.08)" : "rgba(99,102,241,.08)",
+                      color: rentMode === "add" ? "#4ade80" : "#a5b4fc",
+                    }}>
                     {label}
                   </button>
                 ))}
-              </>}
+              </div>
+
+              {/* Preview resultado */}
+              {previewInputMs > 0 && previewMs > 0 && (
+                <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.07)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 10, fontSize: 11 }}>
+                  <div style={{ color: "#4ade80", fontWeight: 800, marginBottom: 4 }}>
+                    ✅ {rentMode === "set" ? "Quedará en" : "Resultado:"} {previewDays}d {previewHours}h
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,.5)", fontSize: 10 }}>
+                    Vence el <span style={{ color: "#fff", fontWeight: 700 }}>
+                      {previewExp.toLocaleDateString("es", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })} a las {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {previewInputMs > 0 && previewMs <= 0 && (
+                <div style={{ padding: "10px 14px", background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 10, fontSize: 11 }}>
+                  <div style={{ color: "#f87171", fontWeight: 800, marginBottom: 4 }}>
+                    ⚠️ Deuda restante: {Math.abs(Math.ceil(previewMs / 86400000))}d — el cliente sigue vencido
+                  </div>
+                  <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
+                    Agrega más tiempo para saldar la deuda completa
+                  </div>
+                </div>
+              )}
+              {previewInputMs === 0 && (
+                <div style={{ padding: "8px 14px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, fontSize: 11, color: "rgba(255,255,255,.25)" }}>
+                  Ingresa días u horas para ver el resultado
+                </div>
+              )}
             </div>
-
-            {/* Preview vencimiento */}
-            {(previewDays !== 0 || previewHours !== 0) && previewMs > 0 && (
-              <div style={{ marginTop: 8, padding: "10px 12px", background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 8, fontSize: 11, color: "#4ade80", fontWeight: 700 }}>
-                ✅ Renta: {previewDays}d {previewHours}h → vence el{" "}
-                <span style={{ color: "#fff" }}>
-                  {previewExp.toLocaleDateString("es", { day: "2-digit", month: "short", year: "numeric" })} a las {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
-                </span>
-              </div>
-            )}
-            {(previewDays !== 0 || previewHours !== 0) && previewMs < 0 && (
-              <div style={{ marginTop: 8, padding: "10px 12px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 8, fontSize: 11, color: "#f87171", fontWeight: 700 }}>
-                ⚠️ Deuda: {Math.abs(previewDays)}d {previewHours}h — el cliente sigue vencido hasta que se salde
-              </div>
-            )}
-            {previewDays === 0 && previewHours === 0 && (
-              <div style={{ marginTop: 8, padding: "8px 12px", background: "rgba(239,68,68,.08)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 8, fontSize: 11, color: "#f87171", fontWeight: 700 }}>
-                ⚠️ Sin tiempo de renta configurado
-              </div>
-            )}
-
-            <label style={F.label}>URL por defecto</label>
+            {/* ════════════════════════════════════ */}
+                        <label style={F.label}>URL por defecto</label>
             <input style={F.input} value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="https://megapersonals.eu" />
 
             {/* CREDENCIALES */}
