@@ -52,11 +52,6 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
-    // ✅ OPTIMIZACIÓN: redirigir imágenes y recursos estáticos directo sin proxear
-    const staticExt = /\.(jpg|jpeg|png|gif|webp|svg|ico|woff|woff2|ttf|eot|mp4|mp3|pdf)(\.?\d*)?$/i;
-    if (staticExt.test(decoded.split("?")[0])) {
-      return new Response(null, { status: 302, headers: { "Location": decoded, ...cors() } });
-    }
     if (decoded.includes("/users/posts/edit")) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
@@ -131,14 +126,8 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
     }
-    // ✅ OPTIMIZACIÓN: imágenes, fuentes, JS y otros recursos estáticos se redirigen
-    // directamente a megapersonals.eu — evita pasar tráfico pesado por Vercel
-    const isStatic = ct.includes("image/") || ct.includes("font/") || ct.includes("audio/") || ct.includes("video/") || ct.includes("javascript") || ct.includes("application/") && !ct.includes("json");
-    if (isStatic) {
-      return new Response(null, { status: 302, headers: { "Location": decoded, ...cors() } });
-    }
     rh.set("Content-Type", ct || "application/octet-stream");
-    rh.set("Cache-Control", "public, max-age=3600");
+    if (!ct.includes("text/") && !ct.includes("javascript")) rh.set("Cache-Control", "public, max-age=3600");
     return new Response(resp.body, { status: 200, headers: rh });
   } catch (err: any) {
     console.error("[AR]", err.message);
