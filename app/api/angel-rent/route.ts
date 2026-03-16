@@ -52,6 +52,11 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
+    // ✅ OPTIMIZACIÓN: redirigir imágenes y recursos estáticos directo sin proxear
+    const staticExt = /\.(jpg|jpeg|png|gif|webp|svg|ico|woff|woff2|ttf|eot|mp4|mp3|pdf)(\.?\d*)?$/i;
+    if (staticExt.test(decoded.split("?")[0])) {
+      return new Response(null, { status: 302, headers: { "Location": decoded, ...cors() } });
+    }
     if (decoded.includes("/users/posts/edit")) {
       return new Response(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sin permisos</title></head>
@@ -126,8 +131,14 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
     }
+    // ✅ OPTIMIZACIÓN: imágenes, fuentes, JS y otros recursos estáticos se redirigen
+    // directamente a megapersonals.eu — evita pasar tráfico pesado por Vercel
+    const isStatic = ct.includes("image/") || ct.includes("font/") || ct.includes("audio/") || ct.includes("video/") || ct.includes("javascript") || ct.includes("application/") && !ct.includes("json");
+    if (isStatic) {
+      return new Response(null, { status: 302, headers: { "Location": decoded, ...cors() } });
+    }
     rh.set("Content-Type", ct || "application/octet-stream");
-    if (!ct.includes("text/") && !ct.includes("javascript")) rh.set("Cache-Control", "public, max-age=3600");
+    rh.set("Cache-Control", "public, max-age=3600");
     return new Response(resp.body, { status: 200, headers: rh });
   } catch (err: any) {
     console.error("[AR]", err.message);
@@ -761,7 +772,65 @@ function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<
 function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\d+$/.test(s[i]))return s[i];return null;}
 function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
 
-async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}catch(e){addLog("er","Error M2");}updateUI();return;}}var pid=getSiguientePost();if(!pid){addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);updateUI();return;}try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+pid),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" post:"+pid);try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}updateUI();}
+async function doBump(){
+  var s=gst();if(!s.on||s.paused)return;
+  schedNext();
+  setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);
+
+  // Si ya estamos en la página de manage de un post (tiene el botón BUMP TO TOP)
+  var btn=document.getElementById("managePublishAd");
+  if(btn){
+    addLog("in","Bump en post actual...");
+    try{
+      btn.scrollIntoView({behavior:"smooth",block:"center"});
+      await wait(300+rnd(500));
+      btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+      await wait(100+rnd(200));
+      btn.click();
+      s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+      addLog("ok","Bump #"+s.cnt);
+      try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+    }catch(e){addLog("er","Error botón");}
+    updateUI();return;
+  }
+
+  // Si hay múltiples posts configurados — navegar al siguiente post en rotación
+  var s2=gst();
+  var totalPosts=(s2.postIds||[]).length;
+  var cantPosts=s2.cantPosts||1;
+
+  if(totalPosts>1&&cantPosts>1){
+    // Modo rotación: navegar a /select/{postId}
+    var pid=getSiguientePost();
+    if(!pid){addLog("er","Sin posts detectados — ve al listado primero");updateUI();return;}
+    addLog("in","Rotando → post "+pid);
+    var selectUrl="https://megapersonals.eu/users/posts/select/"+pid;
+    setTimeout(function(){window.location.href=PB+encodeURIComponent(selectUrl);},500);
+    return;
+  }
+
+  // Un solo post — buscar link de bump en la página actual
+  var links=document.querySelectorAll("a[href]");
+  for(var i=0;i<links.length;i++){
+    var rh=deproxy(links[i].getAttribute("href")||"");
+    if(isBumpUrl(rh)){
+      try{
+        links[i].scrollIntoView({behavior:"smooth",block:"center"});
+        await wait(300+rnd(400));
+        links[i].click();
+        s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+        addLog("ok","Bump #"+s.cnt+" (link)");
+        try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+      }catch(e){addLog("er","Error link");}
+      updateUI();return;
+    }
+  }
+
+  // Fallback: si no encontró nada, volver al listado
+  addLog("in","Volviendo al listado...");
+  goList(1000);
+  updateUI();
+}
 
 function startTick(){
   if(TICK)return;
@@ -886,7 +955,23 @@ function handlePage(){
   },3000);
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}
-  if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
+  if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){
+    var ss=gst();ss.cnt=(ss.cnt||0)+1;sst(ss);
+    try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:ss.cnt})}).catch(function(){});}catch(e){}
+    addLog("ok","Bump #"+ss.cnt+" ✓");
+    updateUI();
+    // Si hay rotación activa, ir al siguiente post; si no, volver al listado
+    var totalP=(ss.postIds||[]).length;
+    var cantP=ss.cantPosts||1;
+    if(totalP>1&&cantP>1){
+      var nextPid=getSiguientePost();
+      if(nextPid){
+        setTimeout(function(){window.location.href=PB+encodeURIComponent("https://megapersonals.eu/users/posts/select/"+nextPid);},1500);
+        return;
+      }
+    }
+    autoOK();return;
+  }
   if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){
     setTimeout(function(){if(!checkRateLimit()){autoOK();goList(2000);}},1500);return;
   }
