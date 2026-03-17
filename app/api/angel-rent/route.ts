@@ -15,7 +15,7 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const userCache: Record<string, { user: ProxyUser; ts: number }> = {};
-const CACHE_TTL = 60000;
+const CACHE_TTL = 10000; // 10s — cookies se leen frescas más seguido
 
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
@@ -90,10 +90,29 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     ));
 
     if (resp.setCookies.length > 0) {
-      // ✅ Guardar en Firebase con las cookies PREVIAS del usuario (no del browser)
+      // ✅ Actualizar cookies en memoria INMEDIATAMENTE (no esperar Firebase)
+      // Así la siguiente request del robot usa las cookies frescas sin race condition
+      const cookieMap: Record<string, string> = {};
+      if (cookies) {
+        cookies.split(";").forEach(c => {
+          const [k, ...v] = c.trim().split("=");
+          if (k) cookieMap[k.trim()] = v.join("=").trim();
+        });
+      }
+      resp.setCookies.forEach(c => {
+        const part = c.split(";")[0].trim();
+        const [k, ...v] = part.split("=");
+        if (k) cookieMap[k.trim()] = v.join("=").trim();
+      });
+      const freshCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+      // Actualizar cache en memoria con cookies frescas
+      const cacheKey = username.toLowerCase();
+      if (userCache[cacheKey]) {
+        userCache[cacheKey].user = { ...userCache[cacheKey].user, cookies: freshCookies };
+        userCache[cacheKey].ts = Date.now();
+      }
+      // Guardar en Firebase en background (no bloquea)
       saveCookies(username, resp.setCookies, cookies).catch(() => {});
-      // ✅ Invalidar cache para que la próxima request lea las cookies nuevas de Firebase
-      delete userCache[username.toLowerCase()];
     }
 
     // Manejar 407 y otros errores del servidor destino
@@ -766,39 +785,62 @@ async function doBump(){
   schedNext();
   setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);
 
-  // Si ya estamos en la página de manage de un post (tiene el botón BUMP TO TOP)
-  var btn=document.getElementById("managePublishAd");
-  if(btn){
-    addLog("in","Bump en post actual...");
+  var st=gst();
+  var totalPosts=(st.postIds||[]).length;
+  var cantPosts=st.cantPosts||1;
+  var modoRotacion=totalPosts>1&&cantPosts>1;
+
+  if(modoRotacion){
+    // ── MODO ROTACIÓN ──
+    // Determinar qué post toca ahora
+    var pid=getSiguientePost();
+    if(!pid){addLog("er","Sin posts — ve al listado primero");updateUI();return;}
+
+    // Extraer el ID del post en la URL actual para saber si ya estamos en ese post
+    var curPid=null;
+    var curMatch=CUR.match(/\/users\/posts\/(?:select|manage)\/(\d+)/);
+    if(curMatch)curPid=curMatch[1];
+
+    if(curPid===pid){
+      // Ya estamos en el post correcto — hacer bump directamente
+      var btn=document.getElementById("managePublishAd");
+      if(btn){
+        addLog("in","Bumpeando post "+pid+"...");
+        try{
+          btn.scrollIntoView({behavior:"smooth",block:"center"});
+          await wait(300+rnd(500));
+          btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+          await wait(100+rnd(200));
+          btn.click();
+          s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+          addLog("ok","Bump #"+s.cnt+" post:"+pid);
+          try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+        }catch(e){addLog("er","Error botón");}
+        updateUI();return;
+      }
+    }
+    // Navegar al post que toca
+    addLog("in","Rotando → post "+pid);
+    setTimeout(function(){window.location.href=PB+encodeURIComponent("https://megapersonals.eu/users/posts/select/"+pid);},500);
+    return;
+  }
+
+  // ── MODO UN SOLO POST ──
+  var btn2=document.getElementById("managePublishAd");
+  if(btn2){
+    addLog("in","Bumpeando...");
     try{
-      btn.scrollIntoView({behavior:"smooth",block:"center"});
+      btn2.scrollIntoView({behavior:"smooth",block:"center"});
       await wait(300+rnd(500));
-      btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+      btn2.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
       await wait(100+rnd(200));
-      btn.click();
+      btn2.click();
       s=gst();s.cnt=(s.cnt||0)+1;sst(s);
       addLog("ok","Bump #"+s.cnt);
       try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
     }catch(e){addLog("er","Error botón");}
     updateUI();return;
   }
-
-  // Si hay múltiples posts configurados — navegar al siguiente post en rotación
-  var s2=gst();
-  var totalPosts=(s2.postIds||[]).length;
-  var cantPosts=s2.cantPosts||1;
-
-  if(totalPosts>1&&cantPosts>1){
-    // Modo rotación: navegar a /select/{postId}
-    var pid=getSiguientePost();
-    if(!pid){addLog("er","Sin posts detectados — ve al listado primero");updateUI();return;}
-    addLog("in","Rotando → post "+pid);
-    var selectUrl="https://megapersonals.eu/users/posts/select/"+pid;
-    setTimeout(function(){window.location.href=PB+encodeURIComponent(selectUrl);},500);
-    return;
-  }
-
-  // Un solo post — buscar link de bump en la página actual
   var links=document.querySelectorAll("a[href]");
   for(var i=0;i<links.length;i++){
     var rh=deproxy(links[i].getAttribute("href")||"");
@@ -814,8 +856,6 @@ async function doBump(){
       updateUI();return;
     }
   }
-
-  // Fallback: si no encontró nada, volver al listado
   addLog("in","Volviendo al listado...");
   goList(1000);
   updateUI();
