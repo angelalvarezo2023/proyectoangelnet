@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANGEL RENT - DISEÑO PREMIUM MEJORADO (VERSIÓN CORREGIDA)
 // ✅ Bug fix: Eliminado el día extra que se sumaba al tiempo de renta
+// ✅ Bug fix: Detección automática de error "Too many requests" y vuelta al listado
+// ✅ Bug fix: Cookies aisladas por usuario (leídas de Firebase, no del browser)
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -13,13 +15,14 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const userCache: Record<string, { user: ProxyUser; ts: number }> = {};
-const CACHE_TTL = 60000;
+const CACHE_TTL = 10000; // 10s — cookies se leen frescas más seguido
 
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
   rentalEnd?: string; rentalEndTimestamp?: number; defaultUrl?: string; siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean; phoneNumber?: string;
+  cookies?: string; cookieTs?: number; // ✅ Cookie jar aislado por usuario en Firebase
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
 
@@ -45,7 +48,6 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
     
-    // ✅ Solo verificar que el usuario esté activo (sin bloquear por expiración)
     if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
     
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
@@ -72,15 +74,65 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       postBody = Buffer.from(ab);
       postCT = req.headers.get("content-type") || "application/x-www-form-urlencoded";
     }
-    const cookies = req.headers.get("cookie") || "";
+
+    // ✅ FIX PRINCIPAL: Usar SOLO las cookies guardadas en Firebase para este usuario.
+    // Ignorar completamente req.headers.get("cookie") para evitar mezcla entre usuarios
+    // que comparten el mismo browser/dispositivo.
+    const cookies = user.cookies || "";
+
     const resp = await fetchProxy(decoded, agent, method, postBody, postCT, cookies, getUA(user));
     const ct = resp.headers["content-type"] || "";
     const rh = new Headers(cors());
+
+    // ✅ Enviar Set-Cookie al browser también (para mantener compatibilidad)
     resp.setCookies.forEach(c => rh.append("Set-Cookie",
       c.replace(/Domain=[^;]+;?\s*/gi, "").replace(/Secure;?\s*/gi, "").replace(/SameSite=\w+;?\s*/gi, "SameSite=Lax; ")
     ));
+
     if (resp.setCookies.length > 0) {
+      // ✅ Actualizar cookies en memoria INMEDIATAMENTE (no esperar Firebase)
+      // Así la siguiente request del robot usa las cookies frescas sin race condition
+      const cookieMap: Record<string, string> = {};
+      if (cookies) {
+        cookies.split(";").forEach(c => {
+          const [k, ...v] = c.trim().split("=");
+          if (k) cookieMap[k.trim()] = v.join("=").trim();
+        });
+      }
+      resp.setCookies.forEach(c => {
+        const part = c.split(";")[0].trim();
+        const [k, ...v] = part.split("=");
+        if (k) cookieMap[k.trim()] = v.join("=").trim();
+      });
+      const freshCookies = Object.entries(cookieMap).map(([k, v]) => `${k}=${v}`).join("; ");
+      // Actualizar cache en memoria con cookies frescas
+      const cacheKey = username.toLowerCase();
+      if (userCache[cacheKey]) {
+        userCache[cacheKey].user = { ...userCache[cacheKey].user, cookies: freshCookies };
+        userCache[cacheKey].ts = Date.now();
+      }
+      // Guardar en Firebase en background (no bloquea)
       saveCookies(username, resp.setCookies, cookies).catch(() => {});
+    }
+
+    // Manejar 407 y otros errores del servidor destino
+    if (resp.status === 407 || resp.status === 502 || resp.status === 503) {
+      const errCode = resp.status;
+      const errMsg = errCode === 407 ? "Error de autenticación del proxy (407)" : `Error del servidor (${errCode})`;
+      const reloadHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconectando...</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:28px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:42px;margin-bottom:12px">⚠️</div>
+  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:8px">${errMsg}</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:20px">Reconectando automáticamente en <span id="cd" style="color:#c084fc;font-weight:800">5s</span>...</div>
+  <div style="height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:20px">
+    <div id="bar" style="height:100%;width:100%;background:linear-gradient(90deg,#a855f7,#ec4899);border-radius:99px;transition:width 1s linear"></div>
+  </div>
+  <button onclick="location.reload()" style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc;padding:10px 24px;border-radius:50px;font-size:13px;font-weight:800;cursor:pointer">Recargar ahora</button>
+</div>
+<script>var s=5;var bar=document.getElementById("bar");var cd=document.getElementById("cd");var iv=setInterval(function(){s--;if(cd)cd.textContent=s+"s";if(bar)setTimeout(function(){bar.style.width=(s/5*100)+"%"},50);if(s<=0){clearInterval(iv);location.reload();}},1000);</script>
+</body></html>`;
+      return new Response(reloadHtml, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } });
     }
     if (ct.includes("text/html")) {
       let html = resp.body.toString("utf-8");
@@ -98,6 +150,28 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     return new Response(resp.body, { status: 200, headers: rh });
   } catch (err: any) {
     console.error("[AR]", err.message);
+    const isConnReset = err.message?.includes("ECONNRESET") || err.message?.includes("ECONNREFUSED") || err.message?.includes("ETIMEDOUT") || err.message?.includes("Timeout") || err.message?.includes("407");
+    if (isConnReset) {
+      return new Response(
+        `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reconectando...</title></head>
+<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0f0515,#1a0a2e);font-family:-apple-system,sans-serif">
+<div style="max-width:320px;width:90%;background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:28px 24px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.7)">
+  <div style="font-size:42px;margin-bottom:12px">🔄</div>
+  <div style="font-size:16px;font-weight:900;color:#fff;margin-bottom:8px">Conexión interrumpida</div>
+  <div style="font-size:13px;color:rgba(255,255,255,.5);line-height:1.6;margin-bottom:20px">El proxy tuvo un problema de red. Reconectando en <span id="cd" style="color:#c084fc;font-weight:800">5s</span>...</div>
+  <div style="height:4px;background:rgba(255,255,255,.08);border-radius:99px;overflow:hidden;margin-bottom:20px">
+    <div id="bar" style="height:100%;width:100%;background:linear-gradient(90deg,#a855f7,#ec4899);border-radius:99px;transition:width 1s linear"></div>
+  </div>
+  <button onclick="location.reload()" style="background:rgba(168,85,247,.15);border:1px solid rgba(168,85,247,.35);color:#c084fc;padding:10px 24px;border-radius:50px;font-size:13px;font-weight:800;cursor:pointer">Recargar ahora</button>
+</div>
+<script>
+var s=5;var bar=document.getElementById("bar");var cd=document.getElementById("cd");
+var iv=setInterval(function(){s--;if(cd)cd.textContent=s+"s";if(bar)setTimeout(function(){bar.style.width=(s/5*100)+"%"},50);if(s<=0){clearInterval(iv);location.reload();}},1000);
+</script>
+</body></html>`,
+        { status: 200, headers: { "Content-Type": "text/html; charset=utf-8", ...cors() } }
+      );
+    }
     return jres(500, { error: err.message });
   }
 }
@@ -132,16 +206,20 @@ async function fbPatch(username: string, data: object): Promise<void> {
   });
 }
 
-async function saveCookies(username: string, newCookies: string[], existing: string): Promise<void> {
+// ✅ saveCookies: ahora recibe las cookies PREVIAS del usuario (de Firebase),
+// no las del browser. Así el jar de cada usuario es completamente independiente.
+async function saveCookies(username: string, newCookies: string[], existingUserCookies: string): Promise<void> {
   if (!newCookies.length) return;
   try {
     const cookieMap: Record<string, string> = {};
-    if (existing) {
-      existing.split(";").forEach(c => {
+    // Partir de las cookies previas de ESTE usuario (de Firebase)
+    if (existingUserCookies) {
+      existingUserCookies.split(";").forEach(c => {
         const [k, ...v] = c.trim().split("=");
         if (k) cookieMap[k.trim()] = v.join("=").trim();
       });
     }
+    // Mezclar con las nuevas cookies recibidas del sitio
     newCookies.forEach(c => {
       const part = c.split(";")[0].trim();
       const [k, ...v] = part.split("=");
@@ -162,10 +240,18 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   
-  // ✅ FIX: Usar timestamp exacto si existe, si no calcular con 23:59:59
   let endTimestamp = 0;
   if (user.rentalEnd) {
-    endTimestamp = user.rentalEndTimestamp || new Date(user.rentalEnd + "T23:59:59").getTime();
+    if (user.rentalEndTimestamp) {
+      endTimestamp = user.rentalEndTimestamp;
+    } else {
+      // Parsear siempre como UTC para que sea igual en todos los dispositivos.
+      // "2026-03-16" -> fin del dia en UTC: 2026-03-16T23:59:59Z
+      const [y, m, d] = user.rentalEnd.split("-").map(Number);
+      endTimestamp = Date.UTC(y, m - 1, d, 23, 59, 59);
+      // Guardar el timestamp en Firebase para no volver a calcularlo
+      fbPatch(username, { rentalEndTimestamp: endTimestamp }).catch(() => {});
+    }
   }
   
   const V = {
@@ -182,128 +268,80 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   let daysLeft = 999;
   if (user.rentalEnd) {
-    // ✅ FIX: Calcular días restantes correctamente
     daysLeft = Math.floor((endTimestamp - Date.now()) / 86400000);
   }
   const showWarn = daysLeft >= 0 && daysLeft <= 3;
   const warnDays = daysLeft;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // CSS MEJORADO CON DISEÑO MODERNO
-  // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
-/* ─── Barra superior con glassmorphism ───────────────────────────────── */
-#ar-bar{
-  position:fixed;top:0;left:0;right:0;z-index:2147483647;
-  background:rgba(10,3,24,.85);
-  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
-  border-bottom:1px solid rgba(168,85,247,.2);
-  box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;
-  height:48px;display:flex;align-items:center;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;-ms-overflow-style:none;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-}
-#ar-bar::-webkit-scrollbar{display:none}
-
-.ars{
-  display:flex;align-items:center;gap:5px;
-  padding:0 14px;height:100%;flex-shrink:0;
-  border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;
-  transition:background .2s;
-}
-.ars:hover{background:rgba(255,255,255,.03)}
-.ars:first-child{padding-left:10px}
-
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  #ar-bar{height:44px}
-  .ars{padding:0 10px;gap:4px}
-  .ars:first-child{padding-left:8px}
-  .arl{font-size:8px;letter-spacing:.7px}
-  .arv{font-size:11px}
-  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
-  
-  /* Ocultar segmentos menos críticos en móviles muy pequeños */
-  @media (max-width: 480px) {
-    .ars-hide-mobile{display:none!important}
-  }
-}
-
-.arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
-.arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
-#ar-dot{
-  width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;
-  transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0);
-}
-#ar-dot.on{
-  background:#22c55e;
-  box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);
-  animation:ar-pulse-dot 2s ease infinite;
-}
-#ar-dot.blink{
-  background:#f59e0b;
-  animation:ar-blink 1.2s ease-in-out infinite;
-}
-@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2)}50%{box-shadow:0 0 20px rgba(34,197,94,1), 0 0 0 8px rgba(34,197,94,.1)}}
-@keyframes ar-blink{0%,100%{opacity:1;transform:scale(1.1)}50%{opacity:.2;transform:scale(.7)}}
+/* ─── Barra superior — Opción A ──────────────────────────────────────── */
+#ar-bar{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgba(10,3,24,.95);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-bottom:1px solid rgba(168,85,247,.15);height:52px;display:flex;align-items:center;padding:0 14px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+#ar-bar-left{display:flex;align-items:center;gap:10px;padding-right:16px;border-right:1px solid rgba(255,255,255,.08);flex-shrink:0}
+#ar-logo-icon{width:30px;height:30px;background:linear-gradient(135deg,#a855f7,#ec4899);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;box-shadow:0 4px 12px rgba(168,85,247,.4)}
+#ar-bar-name .bn{font-size:13px;font-weight:900;color:#fff;line-height:1.2;display:block}
+#ar-bar-name .bs{font-size:9px;color:rgba(168,85,247,.7);font-weight:700;letter-spacing:.5px;display:block}
+#ar-bar-right{flex:1;display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.ar-pill{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);border-radius:99px;padding:5px 12px;white-space:nowrap}
+.ar-pill-label{font-size:10px;color:rgba(255,255,255,.4);font-weight:700}
+.ar-pill-val{font-size:12px;font-weight:800;color:#fff}
+#ar-robot-pill{background:rgba(34,197,94,.1);border-color:rgba(34,197,94,.25)}
+#ar-robot-pill .ar-pill-val{color:#4ade80}
+#ar-robot-pill.off{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.08)}
+#ar-robot-pill.off .ar-pill-val{color:rgba(255,255,255,.3)}
+#ar-robot-pill.paused{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.25)}
+#ar-robot-pill.paused .ar-pill-val{color:#fbbf24}
+#ar-bar-line{position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,#a855f7 30%,#22c55e 70%,transparent 100%);opacity:0;transition:opacity .6s;pointer-events:none}
+#ar-bar-line.on{opacity:.7}
+#ar-dot{width:6px;height:6px;border-radius:50%;background:#374151;flex-shrink:0;transition:all .3s}
+#ar-dot.on{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,1);animation:ar-pulse-dot 2s ease infinite}
+#ar-dot.blink{background:#f59e0b;animation:ar-blink 1.2s ease-in-out infinite}
+@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 8px rgba(34,197,94,1)}50%{box-shadow:0 0 16px rgba(34,197,94,1),0 0 24px rgba(34,197,94,.4)}}
+@keyframes ar-blink{0%,100%{opacity:1}50%{opacity:.2}}
 .arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#c084fc!important}
-#ar-logo-icon{
-  width:28px;height:28px;
-  background:linear-gradient(135deg,#a855f7,#ec4899);
-  border-radius:9px;display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;
-  box-shadow:0 4px 12px rgba(168,85,247,.4);
-}
-
-/* ─── Botones flotantes modernos ─────────────────────────────────────── */
+@media(max-width:480px){#ar-bar{padding:0 10px}.ar-pill{padding:4px 9px}.ar-pill-label{display:none}.ar-pill-val{font-size:11px}#ar-bar-name .bs{display:none}}
+/* ─── Toast rate limit ───────────────────────────────────────────────── */
+#ar-rl-toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:2147483648;display:none;align-items:center;gap:12px;background:rgba(10,3,24,.97);border:1px solid rgba(239,68,68,.4);border-radius:16px;padding:14px 18px;min-width:260px;max-width:320px;box-shadow:0 8px 32px rgba(0,0,0,.6);font-family:-apple-system,sans-serif}
+@keyframes ar-toast-in{from{opacity:0;transform:translateX(-50%) translateY(16px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+#ar-rl-toast.show{display:flex;animation:ar-toast-in .3s cubic-bezier(.34,1.56,.64,1)}
+#ar-rl-toast .ticon{width:36px;height:36px;border-radius:50%;background:rgba(239,68,68,.15);border:1.5px solid rgba(239,68,68,.4);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#ar-rl-toast .ttitle{font-size:13px;font-weight:900;color:#fff;margin-bottom:3px}
+#ar-rl-toast .tsub{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:7px}
+#ar-rl-toast .tbar-wrap{height:3px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden}
+#ar-rl-toast .tbar-fill{height:100%;background:linear-gradient(90deg,#ef4444,#f97316);border-radius:99px;width:100%;transition:width 1s linear}
 #ar-btns{
   position:fixed;bottom:24px;right:16px;z-index:2147483647;
   display:flex;flex-direction:column;gap:12px;align-items:flex-end;
 }
-
-/* Mobile optimizations for floating buttons */
 @media (max-width: 768px) {
   #ar-btns{bottom:16px;right:12px;gap:10px}
-  .arbtn{
-    padding:12px 20px;font-size:13px;
-    border-radius:50px;gap:8px;
-  }
+  .arbtn{padding:12px 20px;font-size:13px;border-radius:50px;gap:8px;}
   .arbtn span[style*="font-size:17px"]{font-size:15px!important}
 }
-
 @media (max-width: 480px) {
   #ar-btns{bottom:12px;right:8px;gap:8px}
-  .arbtn{
-    padding:10px 16px;font-size:12px;
-    border-radius:40px;gap:6px;
-  }
+  .arbtn{padding:10px 16px;font-size:12px;border-radius:40px;gap:6px;}
   .arbtn span[style*="font-size:17px"]{font-size:14px!important}
 }
-
 .arbtn{
   display:flex;align-items:center;gap:9px;border:none;cursor:pointer;
   border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;
   font-family:-apple-system,sans-serif;letter-spacing:.2px;
   box-shadow:0 8px 24px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.3);
   transition:all .2s cubic-bezier(.34,1.56,.64,1);
-  white-space:nowrap;
-  -webkit-tap-highlight-color:transparent;
+  white-space:nowrap;-webkit-tap-highlight-color:transparent;
   position:relative;overflow:hidden;
 }
 .arbtn::before{
   content:"";position:absolute;inset:0;
   background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);
-  transform:translateX(-100%);
-  transition:transform .6s;
+  transform:translateX(-100%);transition:transform .6s;
 }
 .arbtn:hover::before{transform:translateX(100%)}
 .arbtn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.5), 0 6px 12px rgba(0,0,0,.4)}
 .arbtn:active{transform:scale(.95)!important}
 #ar-rb{
   background:linear-gradient(135deg,#27272a,#18181b);
-  color:rgba(255,255,255,.5);
-  border:1px solid rgba(255,255,255,.1);
+  color:rgba(255,255,255,.5);border:1px solid rgba(255,255,255,.1);
 }
 #ar-rb.on{
   background:linear-gradient(135deg,#16a34a,#15803d);
@@ -322,17 +360,12 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   color:#fff;border:1px solid rgba(255,255,255,.08);
   box-shadow:0 8px 24px rgba(124,58,237,.4), 0 4px 8px rgba(124,58,237,.3);
 }
-
-/* ─── Efecto de anillo pulsante ────────────────────────────────────────── */
 #ar-pulse-ring{
-  position:absolute;inset:-6px;
-  border:3px solid #22c55e;border-radius:60px;
+  position:absolute;inset:-6px;border:3px solid #22c55e;border-radius:60px;
   animation:ar-pulse-ring 2s cubic-bezier(0,0,.2,1) infinite;
   display:none;pointer-events:none;
 }
 @keyframes ar-pulse-ring{0%{transform:scale(.9);opacity:0}50%{opacity:.4}100%{transform:scale(1.3);opacity:0}}
-
-/* ─── Notificaciones modernas ────────────────────────────────────────── */
 #ar-client-notify{
   position:fixed;bottom:220px;right:16px;z-index:2147483647;
   background:linear-gradient(135deg,#10b981,#059669);
@@ -340,15 +373,12 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   padding:16px 20px;max-width:300px;
   box-shadow:0 12px 40px rgba(0,0,0,.5), 0 4px 12px rgba(16,185,129,.3);
   animation:ar-slide-up .5s cubic-bezier(.34,1.56,.64,1);
-  display:none;
-  backdrop-filter:blur(10px);
+  display:none;backdrop-filter:blur(10px);
 }
 @keyframes ar-slide-up{from{opacity:0;transform:translateY(24px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
 #ar-client-notify .notify-icon{font-size:28px;margin-bottom:8px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
 #ar-client-notify .notify-title{font-size:14px;font-weight:900;color:#fff;margin-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.3)}
 #ar-client-notify .notify-msg{font-size:12px;color:rgba(255,255,255,.9);line-height:1.5}
-
-/* ─── Modales mejorados ────────────────────────────────────────────────── */
 #ar-support-modal,#ar-stats-modal{
   position:fixed;inset:0;z-index:2147483648;
   background:rgba(0,0,0,.88);
@@ -369,11 +399,8 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 @keyframes ar-modal-slide{from{opacity:0;transform:translateY(80px)}to{opacity:1;transform:translateY(0)}}
 #ar-sbox h3,#ar-stats-box h3{font-size:20px;font-weight:900;text-align:center;margin:0 0 6px;color:#fff}
 #ar-sbox .ar-ssub{font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:24px}
-
-/* ─── Tarjetas de estadísticas ─────────────────────────────────────────── */
 .ar-stat-card{
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);
   border-radius:16px;padding:20px;margin-bottom:14px;
   transition:all .2s;position:relative;overflow:hidden;
 }
@@ -381,11 +408,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   content:"";position:absolute;top:0;left:0;right:0;height:2px;
   background:linear-gradient(90deg,#3b82f6,#8b5cf6);opacity:.5;
 }
-.ar-stat-card:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 24px rgba(0,0,0,.4);
-  border-color:rgba(255,255,255,.15);
-}
+.ar-stat-card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4);border-color:rgba(255,255,255,.15);}
 .ar-stat-title{font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:800}
 .ar-stat-value{font-size:32px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:-.5px}
 .ar-stat-sub{font-size:13px;color:rgba(255,255,255,.5)}
@@ -394,28 +417,22 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   padding:6px 12px;border-radius:24px;font-size:12px;font-weight:800;margin-top:10px;
 }
 .ar-stat-trend.up{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
-
-/* ─── Botones de tipo de soporte ──────────────────────────────────────── */
 .ar-stype{
   display:flex;align-items:center;gap:14px;padding:16px;
   border:1px solid rgba(255,255,255,.1);border-radius:16px;
   background:rgba(255,255,255,.04);cursor:pointer;width:100%;
-  margin-bottom:12px;
-  transition:all .2s cubic-bezier(.34,1.56,.64,1);
+  margin-bottom:12px;transition:all .2s cubic-bezier(.34,1.56,.64,1);
   font-family:-apple-system,sans-serif;
 }
 .ar-stype:hover{
-  background:rgba(59,130,246,.12);
-  border-color:rgba(59,130,246,.4);
-  transform:translateX(4px);
-  box-shadow:0 4px 16px rgba(59,130,246,.2);
+  background:rgba(59,130,246,.12);border-color:rgba(59,130,246,.4);
+  transform:translateX(4px);box-shadow:0 4px 16px rgba(59,130,246,.2);
 }
 .ar-stype:active{transform:scale(.98) translateX(4px)}
 .ar-stype .ar-si{
   font-size:28px;width:48px;height:48px;border-radius:14px;
   background:rgba(59,130,246,.12);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:transform .2s;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .2s;
 }
 .ar-stype:hover .ar-si{transform:scale(1.1) rotate(5deg)}
 .ar-stype .ar-stxt{text-align:left;flex:1}
@@ -428,68 +445,44 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   animation:ar-urgent-pulse 2s ease infinite;
 }
 @keyframes ar-urgent-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-
-/* ─── Inputs y controles ───────────────────────────────────────────────── */
 #ar-sdesc{
-  width:100%;padding:14px;
-  border:1px solid rgba(255,255,255,.12);border-radius:14px;
+  width:100%;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:14px;
   background:rgba(255,255,255,.06);color:#fff;font-size:14px;
   font-family:-apple-system,sans-serif;resize:none;outline:none;
-  margin-bottom:16px;box-sizing:border-box;
-  transition:all .2s;
+  margin-bottom:16px;box-sizing:border-box;transition:all .2s;
 }
 #ar-sdesc:focus{
-  border-color:rgba(59,130,246,.6);
-  background:rgba(255,255,255,.08);
+  border-color:rgba(59,130,246,.6);background:rgba(255,255,255,.08);
   box-shadow:0 0 0 4px rgba(59,130,246,.1);
 }
 #ar-sdesc::placeholder{color:rgba(255,255,255,.3)}
 .ar-sbtn-send{
-  width:100%;padding:16px;
-  background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+  width:100%;padding:16px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);
   color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:900;
   cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:12px;
-  box-shadow:0 6px 20px rgba(59,130,246,.4);
-  transition:all .2s;
+  box-shadow:0 6px 20px rgba(59,130,246,.4);transition:all .2s;
 }
-.ar-sbtn-send:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 28px rgba(59,130,246,.5);
-}
+.ar-sbtn-send:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(59,130,246,.5);}
 .ar-sbtn-send:active{transform:scale(.98)}
 .ar-sbtn-send:disabled{opacity:.4;cursor:not-allowed}
 .ar-sbtn-cancel{
-  width:100%;padding:12px;background:transparent;
-  color:rgba(255,255,255,.4);
+  width:100%;padding:12px;background:transparent;color:rgba(255,255,255,.4);
   border:1px solid rgba(255,255,255,.1);border-radius:14px;
-  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
-  transition:all .2s;
+  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;transition:all .2s;
 }
-.ar-sbtn-cancel:hover{
-  background:rgba(255,255,255,.05);
-  border-color:rgba(255,255,255,.15);
-  color:rgba(255,255,255,.6);
-}
+.ar-sbtn-cancel:hover{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.15);color:rgba(255,255,255,.6);}
 #ar-sback{
   background:none;border:none;color:rgba(255,255,255,.5);
   font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
-  margin-bottom:18px;padding:0;display:flex;align-items:center;gap:6px;
-  transition:color .2s;
+  margin-bottom:18px;padding:0;display:flex;align-items:center;gap:6px;transition:color .2s;
 }
 #ar-sback:hover{color:rgba(255,255,255,.8)}
-
-/* ─── Animación de éxito ────────────────────────────────────────────────── */
-#ar-sdone{
-  display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 0;
-}
+#ar-sdone{display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 0;}
 #ar-sdone .ar-sdone-icon{font-size:64px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
 #ar-sdone h3{font-size:22px;font-weight:900;color:#4ade80;margin:0}
 #ar-sdone p{font-size:14px;color:rgba(255,255,255,.5);margin:0;text-align:center}
-
-/* ─── Modal de advertencia ──────────────────────────────────────────────── */
 #ar-modal{
-  position:fixed;inset:0;z-index:2147483648;
-  background:rgba(0,0,0,.9);
+  position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.9);
   -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
   display:none;align-items:center;justify-content:center;padding:20px;
 }
@@ -514,67 +507,45 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-mbox .mm{font-size:14px;color:rgba(255,255,255,.55);line-height:1.7;margin-bottom:22px}
 #ar-mbox .mm strong{color:rgba(255,255,255,.8);font-weight:800}
 #ar-mbox .mc{
-  width:100%;padding:15px;
-  background:linear-gradient(135deg,#f59e0b,#d97706);
+  width:100%;padding:15px;background:linear-gradient(135deg,#f59e0b,#d97706);
   color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;
-  cursor:pointer;font-family:inherit;
-  box-shadow:0 6px 20px rgba(245,158,11,.45);
-  transition:all .2s;
+  cursor:pointer;font-family:inherit;box-shadow:0 6px 20px rgba(245,158,11,.45);transition:all .2s;
 }
-#ar-mbox .mc:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 28px rgba(245,158,11,.6);
-}
+#ar-mbox .mc:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,158,11,.6);}
 #ar-mbox .mc:active{transform:scale(.98)}
 #ar-mbox .ms{
-  display:block;margin-top:14px;font-size:12px;
-  color:rgba(255,255,255,.25);cursor:pointer;background:none;
-  border:none;font-family:inherit;text-decoration:underline;
+  display:block;margin-top:14px;font-size:12px;color:rgba(255,255,255,.25);
+  cursor:pointer;background:none;border:none;font-family:inherit;text-decoration:underline;
 }
-
-/* ─── Promo bar ──────────────────────────────────────────────────────────── */
 #ar-promo{
-  position:fixed;top:48px;left:0;right:0;z-index:2147483646;
+  position:fixed;top:52px;left:0;right:0;z-index:2147483646;
   background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
   padding:5px 14px;text-align:center;
   font-family:-apple-system,BlinkMacSystemFont,sans-serif;
   font-size:11px;font-weight:800;color:#fff;letter-spacing:.2px;
-  box-shadow:0 2px 12px rgba(0,0,0,.5);
-  animation:ar-promo-in .4s ease;display:none;
+  box-shadow:0 2px 12px rgba(0,0,0,.5);animation:ar-promo-in .4s ease;display:none;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 @keyframes ar-promo-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes ar-promo-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
-
-/* ─── Login header ───────────────────────────────────────────────────────── */
 #ar-lhdr{
-  display:block;
-  background:linear-gradient(165deg,#0d0720,#1a0a35);
+  display:block;background:linear-gradient(165deg,#0d0720,#1a0a35);
   border-bottom:1px solid rgba(168,85,247,.15);
   padding:20px;text-align:center;font-family:-apple-system,sans-serif;
 }
 #ar-lhdr .lw{
   display:inline-flex;align-items:center;gap:12px;
-  background:rgba(168,85,247,.08);
-  border:1px solid rgba(168,85,247,.2);
+  background:rgba(168,85,247,.08);border:1px solid rgba(168,85,247,.2);
   border-radius:60px;padding:8px 22px 8px 10px;
 }
 #ar-lhdr .li{
-  width:38px;height:38px;
-  background:linear-gradient(135deg,#a855f7,#ec4899);
+  width:38px;height:38px;background:linear-gradient(135deg,#a855f7,#ec4899);
   border-radius:12px;display:flex;align-items:center;justify-content:center;
-  font-size:21px;flex-shrink:0;
-  box-shadow:0 4px 14px rgba(168,85,247,.5);
+  font-size:21px;flex-shrink:0;box-shadow:0 4px 14px rgba(168,85,247,.5);
 }
 #ar-lhdr .lt{text-align:left}
-#ar-lhdr .ln{
-  display:block;font-size:17px;font-weight:900;
-  color:#fff;letter-spacing:-.4px;line-height:1.2;
-}
-#ar-lhdr .ls{
-  display:block;font-size:9px;color:rgba(168,85,247,.65);
-  text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-top:3px;
-}
+#ar-lhdr .ln{display:block;font-size:17px;font-weight:900;color:#fff;letter-spacing:-.4px;line-height:1.2;}
+#ar-lhdr .ls{display:block;font-size:9px;color:rgba(168,85,247,.65);text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-top:3px;}
 </style>`;
 
   const modalHtml = showWarn ? `
@@ -595,19 +566,23 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const uiHtml = `
 ${modalHtml}
 <div id="ar-bar">
-  <div class="ars">
+  <div id="ar-bar-left" style="cursor:pointer" title="Configurar posts a rotar" id="ar-bar-left">
     <div id="ar-logo-icon">👼</div>
-    <span style="font-size:12px;font-weight:900;color:#fff;letter-spacing:-.3px">Angel Rent</span>
+    <div id="ar-bar-name">
+      <span class="bn" id="ar-uname"></span>
+      <span class="bs">Angel Rent · <span id="ar-posts-label" style="color:rgba(168,85,247,.9)">1 post</span></span>
+    </div>
   </div>
-  <div class="ars"><span class="arl">Usuario</span><span class="arv" style="color:rgba(255,255,255,.65);font-weight:700" id="ar-uname"></span></div>
-  <div class="ars"><span class="arl">Renta</span><span class="arv arg" id="ar-rent">...</span></div>
-  <div class="ars" style="gap:7px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.3)">OFF</span></div>
-  <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">⏱ Próximo</span><span class="arv arp2" id="ar-cd">--:--</span></div>
-  <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
-  <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
-  <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
-  <div class="ars"><span class="arl">👁 Vistas</span><span class="arv arg" id="ar-views">...</span></div>
-  <div class="ars ars-hide-mobile"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
+  <div id="ar-bar-right">
+    <div class="ar-pill"><span class="ar-pill-label">⏳ Renta</span><span class="ar-pill-val" id="ar-rent">...</span></div>
+    <div class="ar-pill"><span class="ar-pill-label">👁 Vistas</span><span class="ar-pill-val arg" id="ar-views">...</span></div>
+    <div class="ar-pill off" id="ar-robot-pill"><div id="ar-dot"></div><span class="ar-pill-val" id="ar-status">OFF</span></div>
+  </div>
+  <div id="ar-bar-line"></div>
+</div>
+<div id="ar-rl-toast">
+  <div class="ticon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 5v4M8 11v.5" stroke="#ef4444" stroke-width="2" stroke-linecap="round"/><circle cx="8" cy="8" r="6.5" stroke="#ef4444" stroke-width="1.5"/></svg></div>
+  <div><div class="ttitle">Demasiadas solicitudes</div><div class="tsub">Volviendo al listado en <span id="ar-rl-cd" style="color:#f87171;font-weight:800">6s</span></div><div class="tbar-wrap"><div class="tbar-fill" id="ar-rl-bar"></div></div></div>
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 <div id="ar-client-notify">
@@ -616,46 +591,74 @@ ${modalHtml}
   <div class="notify-msg" id="notify-msg">Alguien acaba de ver tu anuncio</div>
 </div>
 <div id="ar-btns">
+  <div id="ar-cd-widget" style="display:none;align-items:center;gap:10px;background:rgba(15,5,40,.92);border:1px solid rgba(168,85,247,.35);border-radius:60px;padding:10px 18px 10px 14px;box-shadow:0 8px 24px rgba(0,0,0,.4)">
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(168,85,247,.15);border:1.5px solid rgba(168,85,247,.5);display:flex;align-items:center;justify-content:center;flex-shrink:0;position:relative">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke="rgba(168,85,247,.7)" stroke-width="1.5"/><path d="M7 4.5V7l1.5 1.5" stroke="#a855f7" stroke-width="1.5" stroke-linecap="round"/></svg>
+      <div style="position:absolute;inset:-4px;border-radius:50%;border:2px solid #a855f7;opacity:.4;animation:ar-cd-pulse 2s ease-in-out infinite"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:1px">
+      <span style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)">Próximo bump</span>
+      <span id="ar-cd" style="font-size:16px;font-weight:900;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px">--:--</span>
+    </div>
+  </div>
   <button id="ar-stats-btn" class="arbtn"><span style="font-size:17px">📊</span><span>Estadísticas</span></button>
   <button id="ar-rb" class="arbtn">
     <span id="ar-pulse-ring"></span>
     <span id="ar-ri" style="font-size:17px">⚡</span><span id="ar-rl">Robot OFF</span>
+    <span id="ar-bump-sep" style="display:none;width:1px;height:16px;background:rgba(255,255,255,.2)"></span>
+    <span id="ar-cnt" style="display:none;font-size:12px;font-weight:800;color:rgba(255,255,255,.7)">0 bumps</span>
   </button>
   <button id="ar-sb" class="arbtn"><span style="font-size:17px">🎫</span><span>Soporte</span></button>
+</div>
+<div id="ar-posts-modal" style="display:none;position:fixed;inset:0;z-index:2147483647;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.6);padding-bottom:80px">
+  <div style="background:#0f0a1e;border:1px solid rgba(168,85,247,.3);border-radius:20px;padding:22px;width:320px;max-width:92vw;box-shadow:0 20px 60px rgba(0,0,0,.6);font-family:-apple-system,sans-serif">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="margin:0;font-size:16px;font-weight:900;color:#fff">📋 Posts a Rotar</h3>
+      <button id="ar-posts-close" style="background:rgba(255,255,255,.1);border:none;color:#fff;width:28px;height:28px;border-radius:8px;font-size:16px;cursor:pointer">×</button>
+    </div>
+    <p style="font-size:12px;color:rgba(255,255,255,.4);margin:0 0 16px 0">El robot rotará entre los primeros N posts de tu lista. Se detectan automáticamente al abrir el listado.</p>
+    <div style="background:rgba(255,255,255,.05);border-radius:12px;padding:14px;margin-bottom:14px">
+      <div style="font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">Cantidad de posts</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <button id="ar-posts-minus" style="width:40px;height:40px;background:rgba(168,85,247,.2);border:1px solid rgba(168,85,247,.4);border-radius:10px;color:#a855f7;font-size:22px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">−</button>
+        <div style="flex:1;text-align:center">
+          <div id="ar-posts-num" style="font-size:36px;font-weight:900;color:#fff;line-height:1">1</div>
+          <div id="ar-posts-detected" style="font-size:11px;color:rgba(255,255,255,.3);margin-top:2px">posts detectados: —</div>
+        </div>
+        <button id="ar-posts-plus" style="width:40px;height:40px;background:rgba(168,85,247,.2);border:1px solid rgba(168,85,247,.4);border-radius:10px;color:#a855f7;font-size:22px;font-weight:bold;cursor:pointer;display:flex;align-items:center;justify-content:center">+</button>
+      </div>
+    </div>
+    <button id="ar-posts-save" style="width:100%;padding:13px;background:linear-gradient(135deg,#6366f1,#a855f7);border:none;border-radius:12px;color:#fff;font-size:15px;font-weight:800;cursor:pointer">✅ Guardar</button>
+  </div>
 </div>
 <div id="ar-stats-modal">
 <div id="ar-stats-box">
   <h3>📊 Estadísticas del Anuncio</h3>
   <div class="ar-ssub" style="margin-bottom:24px">Rendimiento en tiempo real</div>
-  
   <div class="ar-stat-card">
     <div class="ar-stat-title">Vistas Totales</div>
     <div class="ar-stat-value" id="stat-total-views">0</div>
     <div class="ar-stat-sub">en las últimas 24 horas</div>
     <span class="ar-stat-trend up">↗ +127% vs ayer</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Clientes Interesados</div>
     <div class="ar-stat-value" id="stat-interested">0</div>
     <div class="ar-stat-sub">han guardado o contactado</div>
     <span class="ar-stat-trend up">↗ +89% esta semana</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Posición en Búsqueda</div>
     <div class="ar-stat-value" style="color:#fbbf24">#<span id="stat-ranking">3</span></div>
     <div class="ar-stat-sub">en tu ciudad</div>
     <span class="ar-stat-trend up">↗ Subiste 12 posiciones</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Efectividad del Boost</div>
     <div class="ar-stat-value" style="color:#f59e0b">x<span id="stat-boost">2.5</span></div>
     <div class="ar-stat-sub">multiplicador activo</div>
     <span class="ar-stat-trend up">↗ Máxima visibilidad</span>
   </div>
-
   <button class="ar-sbtn-cancel" id="ar-stats-close">Cerrar</button>
 </div>
 </div>
@@ -700,15 +703,20 @@ ${modalHtml}
   </div>
 </div>
 </div>
-<style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
+<style>@keyframes ar-spin{to{transform:rotate(360deg)}}@keyframes ar-cd-pulse{0%,100%{transform:scale(1);opacity:.4}50%{transform:scale(1.3);opacity:0}}</style>`;
 
-  // [El JavaScript permanece igual, solo cambia la lógica de cálculo que ya está corregida arriba]
   const script = `<script>
 (function(){
 "use strict";
 var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
+var FB_USER="https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME+".json";
+var FB_USER="https://megapersonals-control-default-rtdb.firebaseio.com/proxyUsers/"+UNAME+".json";
+// ── Rotación de posts ──
+function detectarPosts(){var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length>0){var s=gst();s.postIds=ids;sst(s);addLog("in","Posts detectados: "+ids.length);}return ids;}
+function getCantPosts(){var s=gst();return s.cantPosts||1;}
+function getSiguientePost(){var s=gst();var ids=(s.postIds||[]).slice(0,getCantPosts());if(!ids.length)return null;var idx=s.postIdx||0;var pid=ids[idx%ids.length];s.postIdx=(idx+1)%ids.length;sst(s);addLog("in","Post "+(idx%ids.length+1)+"/"+ids.length+" — ID:"+pid);return pid;}
 
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
@@ -722,7 +730,7 @@ function updateFakeUI(){var s=updateFakeViews();var viewsEl=document.getElementB
 var PROMOS=["⭐ ¡Gracias por preferirnos! Contacto: 829-383-7695","🚀 El mejor servicio de bump automático","💜 Angel Rent — Tu anuncio, siempre arriba","📲 Comparte: 829-383-7695","⚡ Robot 24/7 — Tu anuncio nunca baja","🏆 Servicio #1 en MegaPersonals","🔥 +2000 escorts confían en nosotros","💎 Boost Premium activado"];
 var _promoIdx=Math.floor(Math.random()*PROMOS.length);
 var _promoTimer=null;
-function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
+function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="78px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="52px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
 setTimeout(showNextPromo,5000);
 
 (function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
@@ -737,86 +745,146 @@ function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
   if(G("ar-uname"))G("ar-uname").textContent=DNAME;
   var rl=rentLeft(),re=G("ar-rent");
-  if(re){
-    re.textContent=fmtR(rl);
-    re.className="arv";
-    re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");
-  }
+  if(re){re.textContent=fmtR(rl);re.className="ar-pill-val";re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");}
   var dot=G("ar-dot");
-  if(dot){
-    dot.className="";
-    if(on&&!paused)dot.className="on";
-    else if(on&&paused)dot.className="blink";
-  }
+  if(dot){dot.className="";if(on&&!paused)dot.className="on";else if(on&&paused)dot.className="blink";}
+  var rp=G("ar-robot-pill");
   var st=G("ar-status");
-  if(st){
-    if(!on){
-      st.textContent="OFF";
-      st.style.color="rgba(255,255,255,.3)";
-    }else if(paused){
-      st.textContent="Pausado";
-      st.style.color="#f59e0b";
-    }else{
-      st.textContent="Activo";
-      st.style.color="#22c55e";
-    }
+  if(rp&&st){
+    if(!on){rp.className="ar-pill off";st.textContent="OFF";}
+    else if(paused){rp.className="ar-pill paused";st.textContent="Pausado";}
+    else{rp.className="ar-pill";st.textContent="Activo";}
   }
-  var cdSeg=G("ar-cdseg");
-  if(on&&!paused){
-    if(cdSeg)cdSeg.style.display="";
-    var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
-    if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);
-  }else if(cdSeg)cdSeg.style.display="none";
-  var cntSeg=G("ar-cntseg");
+  var barLine=G("ar-bar-line");
+  if(barLine){barLine.className=on&&!paused?"on":"";}
+  var cdWidget=G("ar-cd-widget");
+  if(on&&!paused){if(cdWidget)cdWidget.style.display="flex";var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);}else if(cdWidget)cdWidget.style.display="none";
+  var rb=G("ar-rb");var sep=G("ar-bump-sep");var cntEl=G("ar-cnt");
+  var prevCnt=cntEl?parseInt(cntEl.getAttribute("data-cnt")||"0"):0;
+  if(rb){rb.className=on?"arbtn on":"arbtn";if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";}
   if(on){
-    if(cntSeg)cntSeg.style.display="";
-    if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
-  }else if(cntSeg)cntSeg.style.display="none";
-  var rb=G("ar-rb");
-  if(rb){
-    rb.className=on?"arbtn on":"arbtn";
-    if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
-  }
+    if(sep)sep.style.display="";
+    if(cntEl){
+      cntEl.style.display="";
+      if(cnt>prevCnt){cntEl.style.transform="scale(1.3)";cntEl.style.color="#4ade80";setTimeout(function(){if(cntEl){cntEl.style.transform="scale(1)";cntEl.style.color="rgba(255,255,255,.7)";}},300);}
+      cntEl.textContent=cnt+" bump"+(cnt===1?"":"s");
+      cntEl.setAttribute("data-cnt",String(cnt));
+    }
+  }else{if(sep)sep.style.display="none";if(cntEl)cntEl.style.display="none";}
   updateFakeUI();
 }
 
-function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
+function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({nextBumpAt:s.nextAt})}).catch(function(){});}catch(e){}}
 function goList(ms){setTimeout(function(){window.location.href=PLIST;},ms||1500);}
 function rnd(n){return Math.floor(Math.random()*n);}
 function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<k.length;i++)if(u.indexOf("/"+k[i]+"/")!==-1)return true;return false;}
 function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\d+$/.test(s[i]))return s[i];return null;}
 function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
+async function doBump(){
+  var s=gst();if(!s.on||s.paused)return;
+  schedNext();
+  setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);
 
-async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
+  var st=gst();
+  var totalPosts=(st.postIds||[]).length;
+  var cantPosts=st.cantPosts||1;
+  var modoRotacion=totalPosts>1&&cantPosts>1;
+
+  if(modoRotacion){
+    // ── MODO ROTACIÓN ──
+    // Determinar qué post toca ahora
+    var pid=getSiguientePost();
+    if(!pid){addLog("er","Sin posts — ve al listado primero");updateUI();return;}
+
+    // Extraer el ID del post en la URL actual para saber si ya estamos en ese post
+    var curPid=null;
+    var curMatch=CUR.match(/\/users\/posts\/(?:select|manage)\/(\d+)/);
+    if(curMatch)curPid=curMatch[1];
+
+    if(curPid===pid){
+      // Ya estamos en el post correcto — hacer bump directamente
+      var btn=document.getElementById("managePublishAd");
+      if(btn){
+        addLog("in","Bumpeando post "+pid+"...");
+        try{
+          btn.scrollIntoView({behavior:"smooth",block:"center"});
+          await wait(300+rnd(500));
+          btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+          await wait(100+rnd(200));
+          btn.click();
+          s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+          addLog("ok","Bump #"+s.cnt+" post:"+pid);
+          try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+        }catch(e){addLog("er","Error botón");}
+        updateUI();return;
+      }
+    }
+    // Navegar al post que toca
+    addLog("in","Rotando → post "+pid);
+    setTimeout(function(){window.location.href=PB+encodeURIComponent("https://megapersonals.eu/users/posts/select/"+pid);},500);
+    return;
+  }
+
+  // ── MODO UN SOLO POST ──
+  var btn2=document.getElementById("managePublishAd");
+  if(btn2){
+    addLog("in","Bumpeando...");
+    try{
+      btn2.scrollIntoView({behavior:"smooth",block:"center"});
+      await wait(300+rnd(500));
+      btn2.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+      await wait(100+rnd(200));
+      btn2.click();
+      s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+      addLog("ok","Bump #"+s.cnt);
+      try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+    }catch(e){addLog("er","Error botón");}
+    updateUI();return;
+  }
+  var links=document.querySelectorAll("a[href]");
+  for(var i=0;i<links.length;i++){
+    var rh=deproxy(links[i].getAttribute("href")||"");
+    if(isBumpUrl(rh)){
+      try{
+        links[i].scrollIntoView({behavior:"smooth",block:"center"});
+        await wait(300+rnd(400));
+        links[i].click();
+        s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+        addLog("ok","Bump #"+s.cnt+" (link)");
+        try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:s.cnt})}).catch(function(){});}catch(e){}
+      }catch(e){addLog("er","Error link");}
+      updateUI();return;
+    }
+  }
+  addLog("in","Volviendo al listado...");
+  goList(1000);
+  updateUI();
+}
 
 function startTick(){
   if(TICK)return;
   TICK=setInterval(function(){
     var s=gst();
-    if(s.on && !s.paused && s.nextAt>0 && Date.now()>=s.nextAt){
-      doBump();
-    }
+    if(s.on && !s.paused && s.nextAt>0 && Date.now()>=s.nextAt){doBump();}
   },1000);
 }
 
 function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
+function syncFromFirebase(){try{fetch(FB_USER).then(function(r){return r.json();}).then(function(d){if(!d)return;var s=gst();var fbPaused=!!d.robotPaused;if(fbPaused!==s.paused){s.paused=fbPaused;sst(s);addLog("in",fbPaused?"Pausado remotamente":"Reanudado remotamente");updateUI();}if(d.rentalEndTimestamp&&d.rentalEndTimestamp!==ENDTS){ENDTS=d.rentalEndTimestamp;updateUI();}if(typeof d.bumpCount==="number"&&d.bumpCount>0){var s2=gst();if(d.bumpCount>s2.cnt){s2.cnt=d.bumpCount;sst(s2);}}}).catch(function(){});}catch(e){}}
+setInterval(syncFromFirebase,5000);
+function syncFromFirebase(){try{fetch(FB_USER).then(function(r){return r.json();}).then(function(d){if(!d)return;var s=gst();var fbPaused=!!d.robotPaused;if(fbPaused!==s.paused){s.paused=fbPaused;sst(s);addLog("in",fbPaused?"Pausado remotamente":"Reanudado remotamente");updateUI();}if(d.rentalEndTimestamp&&d.rentalEndTimestamp!==ENDTS){ENDTS=d.rentalEndTimestamp;updateUI();}}).catch(function(){});}catch(e){}}
+setInterval(syncFromFirebase,5000);
 
 function toggleRobot(){
-  var s=gst();
-  var ring=document.getElementById("ar-pulse-ring");
+  var s=gst();var ring=document.getElementById("ar-pulse-ring");
   if(s.on){
-    s.on=false;s.nextAt=0;sst(s);
-    if(TICK){clearInterval(TICK);TICK=null;}
-    addLog("in","Robot OFF");
-    saveRobotState(false,false);
-    if(ring)ring.style.display="none";
+    s.on=false;s.nextAt=0;sst(s);if(TICK){clearInterval(TICK);TICK=null;}
+    addLog("in","Robot OFF");saveRobotState(false,false);if(ring)ring.style.display="none";
   }else{
     s.on=true;s.paused=false;s.cnt=0;sst(s);
-    addLog("ok","Robot ON - bumps 16-20 min");
-    saveRobotState(true,false);
-    schedNext();startTick();doBump();
-    if(ring)ring.style.display="block";
+    addLog("ok","Robot ON - bumps 16-20 min");saveRobotState(true,false);
+    schedNext();startTick();doBump();if(ring)ring.style.display="block";
   }
   updateUI();
 }
@@ -825,85 +893,81 @@ function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);add
 
 function autoOK(){var done=false;var chk=setInterval(function(){if(done)return;var btns=document.querySelectorAll("button,a,input[type=button],input[type=submit]");for(var i=0;i<btns.length;i++){var t=(btns[i].innerText||btns[i].value||"").trim().toLowerCase();if(t==="ok"||t==="okay"||t==="done"||t==="continue"||t==="continuar"){done=true;clearInterval(chk);var b=btns[i];setTimeout(function(){try{b.click();}catch(e){}goList(2000);},500);return;}}},400);setTimeout(function(){if(!done){clearInterval(chk);goList(600);}},8000);}
 
+function showRateLimitToast(secs){
+  var toast=G("ar-rl-toast");var cd=G("ar-rl-cd");var bar=G("ar-rl-bar");
+  if(!toast)return;
+  var remaining=secs;
+  toast.classList.add("show");
+  if(cd)cd.textContent=remaining+"s";
+  if(bar)bar.style.width="100%";
+  var iv=setInterval(function(){
+    remaining--;
+    if(cd)cd.textContent=remaining+"s";
+    if(bar){setTimeout(function(){bar.style.width=(remaining/secs*100)+"%";},50);}
+    if(remaining<=0){clearInterval(iv);toast.classList.remove("show");}
+  },1000);
+}
+function checkPageErrors(){
+  var body=document.body?document.body.innerText:"";
+  var title=document.title||"";
+  // 407 Proxy Authentication Required
+  if(body.indexOf("407 Proxy")!==-1||body.indexOf("Proxy Authentication Required")!==-1||title.indexOf("407")!==-1){
+    addLog("er","Error 407 — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  // 504 Gateway Timeout / Vercel timeout
+  if(body.indexOf("504")!==-1||body.indexOf("GATEWAY_TIMEOUT")!==-1||body.indexOf("FUNCTION_INVOCATION_TIMEOUT")!==-1||title.indexOf("504")!==-1||title.indexOf("timed out")!==-1){
+    addLog("er","Timeout — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  // 502 Bad Gateway
+  if(body.indexOf("502")!==-1||body.indexOf("BAD_GATEWAY")!==-1||title.indexOf("502")!==-1){
+    addLog("er","Error 502 — recargando...");
+    setTimeout(function(){location.reload();},3000);
+    return true;
+  }
+  return false;
+}
+function checkRateLimit(){
+  var body=document.body?document.body.innerText:"";
+  if(body.indexOf("Too many requests")!==-1||body.indexOf("Allow one request per")!==-1){
+    addLog("er","Rate limit — esperando 6s...");
+    showRateLimitToast(6);
+    goList(6000);return true;
+  }
+  return false;
+}
+
 function handlePage(){
-  var u=CUR;
-  var RK="ar_ret_"+UNAME;
-  var now=Date.now();
-  
+  var u=CUR;var RK="ar_ret_"+UNAME;var now=Date.now();
   setTimeout(function(){
     function blockButton(selector,label){
       var btn=document.querySelector(selector);
       if(btn){
-        btn.style.opacity="0.5";
-        btn.style.cursor="not-allowed";
-        btn.style.pointerEvents="none";
-        btn.setAttribute("disabled","true");
-        var overlay=document.createElement("div");
-        overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";
-        overlay.addEventListener("click",function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
-        });
-        var parent=btn.parentElement;
-        if(parent&&window.getComputedStyle(parent).position==="static"){
-          parent.style.position="relative";
-        }
-        if(parent)parent.appendChild(overlay);
-        addLog("in","Bloqueado: "+label);
+        btn.style.opacity="0.5";btn.style.cursor="not-allowed";btn.style.pointerEvents="none";btn.setAttribute("disabled","true");
+        var overlay=document.createElement("div");overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";
+        overlay.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";});
+        var parent=btn.parentElement;if(parent&&window.getComputedStyle(parent).position==="static"){parent.style.position="relative";}
+        if(parent)parent.appendChild(overlay);addLog("in","Bloqueado: "+label);
       }
     }
-    blockButton("a[href*='/users/posts/edit']","Edit Post");
-    blockButton("button:contains('EDIT POST')","Edit Post");
-    blockButton("#edit-post-btn","Edit Post");
-    blockButton("a[href*='/users/posts/create']","Write New");
-    blockButton("button:contains('WRITE NEW')","Write New");
-    blockButton("#write-new-btn","Write New");
-    blockButton("a[href*='create']","Write New");
-    blockButton("#delete-post-id","Remove Post");
-    blockButton("a[href*='/users/posts/delete']","Remove Post");
-    blockButton("button:contains('REMOVE POST')","Remove Post");
-    blockButton("button:contains('Remove Post')","Remove Post");
-    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");
-    blockButton("a[href*='delete']","Delete Account");
-    blockButton(".delete-account a","Delete Account");
-    blockButton("a:contains('Delete Account')","Delete Account");
+    blockButton("a[href*='/users/posts/edit']","Edit Post");blockButton("button:contains('EDIT POST')","Edit Post");blockButton("#edit-post-btn","Edit Post");
+    blockButton("a[href*='/users/posts/create']","Write New");blockButton("button:contains('WRITE NEW')","Write New");blockButton("#write-new-btn","Write New");blockButton("a[href*='create']","Write New");
+    blockButton("#delete-post-id","Remove Post");blockButton("a[href*='/users/posts/delete']","Remove Post");blockButton("button:contains('REMOVE POST')","Remove Post");blockButton("button:contains('Remove Post')","Remove Post");
+    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");blockButton("a[href*='delete']","Delete Account");blockButton(".delete-account a","Delete Account");blockButton("a:contains('Delete Account')","Delete Account");
     var allLinks=document.querySelectorAll("a,button");
     for(var i=0;i<allLinks.length;i++){
-      var el=allLinks[i];
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      if(text.indexOf("EDIT POST")!==-1||
-         text.indexOf("WRITE NEW")!==-1||
-         text.indexOf("REMOVE POST")!==-1||
-         text.indexOf("DELETE POST")!==-1||
-         text.indexOf("DELETE ACCOUNT")!==-1||
-         text.indexOf("REMOVE ACCOUNT")!==-1){
-        el.style.opacity="0.5";
-        el.style.cursor="not-allowed";
-        el.style.filter="grayscale(1)";
-        el.addEventListener("click",function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
-        },true);
+      var el=allLinks[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
+      if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1){
+        el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
+        el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);
       }
-      if(href.indexOf("/edit")!==-1||
-         href.indexOf("/create")!==-1||
-         href.indexOf("/delete")!==-1||
-         href.indexOf("/remove")!==-1){
+      if(href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1){
         if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
-          el.style.opacity="0.5";
-          el.style.cursor="not-allowed";
-          el.style.filter="grayscale(1)";
-          el.addEventListener("click",function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
-          },true);
+          el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
+          el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);
         }
       }
     }
@@ -911,35 +975,43 @@ function handlePage(){
   setInterval(function(){
     var dangerousButtons=document.querySelectorAll("a,button");
     for(var i=0;i<dangerousButtons.length;i++){
-      var el=dangerousButtons[i];
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      if((text.indexOf("EDIT POST")!==-1||
-          text.indexOf("WRITE NEW")!==-1||
-          text.indexOf("REMOVE POST")!==-1||
-          text.indexOf("DELETE")!==-1||
-          href.indexOf("/edit")!==-1||
-          href.indexOf("/create")!==-1||
-          href.indexOf("/delete")!==-1)&&
-          href.indexOf("/bump")===-1&&
-          href.indexOf("/repost")===-1){
+      var el=dangerousButtons[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
+      if((text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE")!==-1||href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1)&&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
         if(el.style.opacity!=="0.5"){
-          el.style.opacity="0.5";
-          el.style.cursor="not-allowed";
-          el.style.filter="grayscale(1)";
-          el.addEventListener("click",function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
-          },true);
+          el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
+          el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);
         }
       }
     }
   },3000);
-  
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
-  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
+  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}
+  if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){
+    var ss=gst();ss.cnt=(ss.cnt||0)+1;sst(ss);
+    try{fetch(FB_USER,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({bumpCount:ss.cnt})}).catch(function(){});}catch(e){}
+    addLog("ok","Bump #"+ss.cnt+" ✓");
+    updateUI();
+    // Si hay rotación activa, ir al siguiente post; si no, volver al listado
+    var totalP=(ss.postIds||[]).length;
+    var cantP=ss.cantPosts||1;
+    if(totalP>1&&cantP>1){
+      var nextPid=getSiguientePost();
+      if(nextPid){
+        setTimeout(function(){window.location.href=PB+encodeURIComponent("https://megapersonals.eu/users/posts/select/"+nextPid);},1500);
+        return;
+      }
+    }
+    autoOK();return;
+  }
+  if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){
+    setTimeout(function(){if(!checkRateLimit()){autoOK();goList(2000);}},1500);return;
+  }
+  if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}
+  setTimeout(function(){if(checkPageErrors())return;checkRateLimit();},1000);
+  if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/list")!==-1){setTimeout(function(){detectarPosts();},1500);}if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}
+  if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}
+  var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(body.indexOf("too many requests")!==-1||body.indexOf("allow one request per")!==-1){addLog("er","Rate limit — esperando 6s...");goList(6000);return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
+}
 
 function injectLoginLogo(){if(document.getElementById("ar-lhdr"))return;var hdr=document.createElement("div");hdr.id="ar-lhdr";hdr.innerHTML='<div class="lw"><div class="li">👼</div><div class="lt"><span class="ln">Angel Rent</span><span class="ls">Tu anuncio, siempre arriba</span></div></div>';var form=document.querySelector("form");if(form&&form.parentNode)form.parentNode.insertBefore(hdr,form);else if(document.body)document.body.insertBefore(hdr,document.body.firstChild);}
 
@@ -951,106 +1023,51 @@ function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelect
 var modal=document.getElementById("ar-modal");
 if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 15*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
 
-if(document.body)document.body.style.paddingTop="48px";
+if(document.body)document.body.style.paddingTop="52px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 
-var arStatsModal=G("ar-stats-modal");
-var statsBtn=G("ar-stats-btn");
+var arStatsModal=G("ar-stats-modal");var statsBtn=G("ar-stats-btn");
 if(statsBtn)statsBtn.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();if(arStatsModal){arStatsModal.classList.add("show");updateFakeUI();}});
 if(G("ar-stats-close"))G("ar-stats-close").addEventListener("click",function(){if(arStatsModal)arStatsModal.classList.remove("show");});
 if(arStatsModal)arStatsModal.addEventListener("click",function(e){if(e.target===arStatsModal)arStatsModal.classList.remove("show");});
 
 var FB_TICKETS="https://megapersonals-control-default-rtdb.firebaseio.com/tickets.json";
-var arSM=G("ar-support-modal");
-var arSSelect=G("ar-s-select");
-var arSDetails=G("ar-s-details");
-var arSSending=G("ar-s-sending");
-var arSDone=G("ar-sdone");
-var selectedType=null,selectedLabel=null,selectedPriority="normal";
-var currentTicketId=null;
-var queueChecker=null;
+var arSM=G("ar-support-modal");var arSSelect=G("ar-s-select");var arSDetails=G("ar-s-details");var arSSending=G("ar-s-sending");var arSDone=G("ar-sdone");
+var selectedType=null,selectedLabel=null,selectedPriority="normal";var currentTicketId=null;var queueChecker=null;
 
 function showSupportStep(step){[arSSelect,arSDetails,arSSending,arSDone].forEach(function(el){if(el)el.style.display="none";});if(step==="select"&&arSSelect)arSSelect.style.display="";if(step==="details"&&arSDetails)arSDetails.style.display="";if(step==="sending"&&arSSending)arSSending.style.display="";if(step==="done"&&arSDone)arSDone.style.display="flex";if(step==="queue"){var queueEl=G("ar-s-queue");if(queueEl)queueEl.style.display="flex";}}
 
 async function checkQueuePosition(){
   if(!currentTicketId)return;
   try{
-    var resp=await fetch(FB_TICKETS.replace(".json",""));
-    if(!resp.ok){clearInterval(queueChecker);return;}
-    var allTickets=await resp.json();
-    if(!allTickets)return;
-    var ticketsArray=Object.entries(allTickets).map(function(entry){
-      return {id:entry[0],data:entry[1]};
-    });
-    var myTicket=ticketsArray.find(function(t){return t.id===currentTicketId;});
-    if(!myTicket){clearInterval(queueChecker);return;}
-    if(myTicket.data.status==="in_progress"){
-      clearInterval(queueChecker);
-      showBeingAttended();
-      return;
-    }
-    if(myTicket.data.status==="completed"){
-      clearInterval(queueChecker);
-      showSupportStep("done");
-      setTimeout(function(){closeSupport();},4000);
-      return;
-    }
-    var pendingTickets=ticketsArray
-      .filter(function(t){return t.data.status==="pending";})
-      .sort(function(a,b){return a.data.createdAt-b.data.createdAt;});
+    var resp=await fetch(FB_TICKETS.replace(".json",""));if(!resp.ok){clearInterval(queueChecker);return;}
+    var allTickets=await resp.json();if(!allTickets)return;
+    var ticketsArray=Object.entries(allTickets).map(function(entry){return {id:entry[0],data:entry[1]};});
+    var myTicket=ticketsArray.find(function(t){return t.id===currentTicketId;});if(!myTicket){clearInterval(queueChecker);return;}
+    if(myTicket.data.status==="in_progress"){clearInterval(queueChecker);showBeingAttended();return;}
+    if(myTicket.data.status==="completed"){clearInterval(queueChecker);showSupportStep("done");setTimeout(function(){closeSupport();},4000);return;}
+    var pendingTickets=ticketsArray.filter(function(t){return t.data.status==="pending";}).sort(function(a,b){return a.data.createdAt-b.data.createdAt;});
     var position=pendingTickets.findIndex(function(t){return t.id===currentTicketId;})+1;
-    if(position>0){
-      updateQueueUI(position,pendingTickets.length);
-    }
-  }catch(e){
-    console.error("Error checking queue:",e);
-  }
+    if(position>0){updateQueueUI(position,pendingTickets.length);}
+  }catch(e){console.error("Error checking queue:",e);}
 }
 
 function updateQueueUI(position,total){
-  var posEl=G("ar-queue-position");
-  var totalEl=G("ar-queue-total");
-  var msgEl=G("ar-queue-msg");
-  var progressBar=G("ar-queue-progress-fill");
-  if(posEl)posEl.textContent=position;
-  if(totalEl)totalEl.textContent=total;
-  if(msgEl){
-    if(position===1){
-      msgEl.textContent="¡Eres el siguiente! Un agente te atenderá pronto";
-      msgEl.style.color="#4ade80";
-    }else if(position<=3){
-      msgEl.textContent="Quedan "+(position-1)+" persona"+(position>2?"s":"")+" antes que tú";
-      msgEl.style.color="#fbbf24";
-    }else{
-      msgEl.textContent="Espera estimada: "+Math.ceil(position*2)+" minutos";
-      msgEl.style.color="rgba(255,255,255,.6)";
-    }
-  }
-  if(progressBar){
-    var progress=Math.max(10,100-((position-1)/Math.max(total,1)*100));
-    progressBar.style.width=progress+"%";
-  }
+  var posEl=G("ar-queue-position");var totalEl=G("ar-queue-total");var msgEl=G("ar-queue-msg");var progressBar=G("ar-queue-progress-fill");
+  if(posEl)posEl.textContent=position;if(totalEl)totalEl.textContent=total;
+  if(msgEl){if(position===1){msgEl.textContent="¡Eres el siguiente! Un agente te atenderá pronto";msgEl.style.color="#4ade80";}else if(position<=3){msgEl.textContent="Quedan "+(position-1)+" persona"+(position>2?"s":"")+" antes que tú";msgEl.style.color="#fbbf24";}else{msgEl.textContent="Espera estimada: "+Math.ceil(position*2)+" minutos";msgEl.style.color="rgba(255,255,255,.6)";}}
+  if(progressBar){var progress=Math.max(10,100-((position-1)/Math.max(total,1)*100));progressBar.style.width=progress+"%";}
 }
 
 function showBeingAttended(){
-  var queueEl=G("ar-s-queue");
-  if(!queueEl)return;
+  var queueEl=G("ar-s-queue");if(!queueEl)return;
   var content=queueEl.querySelector(".ar-queue-content");
-  if(content){
-    content.innerHTML='<div style="text-align:center;padding:20px 0"><div style="width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(59,130,246,.4);animation:ar-pulse-scale 2s ease infinite"><span style="font-size:40px">👨‍💻</span></div><h3 style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:8px">¡Te están atendiendo!</h3><p style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px">Un agente está trabajando en tu solicitud.<br>Pronto resolveremos tu caso.</p></div>';
-  }
-  setTimeout(function(){
-    if(queueEl)queueEl.style.display="none";
-  },8000);
+  if(content){content.innerHTML='<div style="text-align:center;padding:20px 0"><div style="width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(59,130,246,.4);animation:ar-pulse-scale 2s ease infinite"><span style="font-size:40px">👨‍💻</span></div><h3 style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:8px">¡Te están atendiendo!</h3><p style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px">Un agente está trabajando en tu solicitud.<br>Pronto resolveremos tu caso.</p></div>';}
+  setTimeout(function(){if(queueEl)queueEl.style.display="none";},8000);
 }
 
-function startQueueMonitoring(){
-  if(queueChecker)clearInterval(queueChecker);
-  checkQueuePosition();
-  queueChecker=setInterval(checkQueuePosition,5000);
-}
-
+function startQueueMonitoring(){if(queueChecker)clearInterval(queueChecker);checkQueuePosition();queueChecker=setInterval(checkQueuePosition,5000);}
 function openSupport(){if(arSM)arSM.classList.add("show");showSupportStep("select");currentTicketId=null;if(queueChecker){clearInterval(queueChecker);queueChecker=null;}}
 function closeSupport(){if(arSM)arSM.classList.remove("show");selectedType=null;currentTicketId=null;if(queueChecker){clearInterval(queueChecker);queueChecker=null;}}
 
@@ -1063,7 +1080,6 @@ if(arSM)arSM.addEventListener("click",function(e){if(e.target===arSM)closeSuppor
 document.querySelectorAll(".ar-stype").forEach(function(btn){btn.addEventListener("click",function(){selectedType=btn.getAttribute("data-type");selectedLabel=btn.getAttribute("data-label");selectedPriority=btn.getAttribute("data-priority")||"normal";var icon=btn.querySelector(".ar-si")?btn.querySelector(".ar-si").textContent:"";if(G("ar-s-dtitle"))G("ar-s-dtitle").textContent=icon+" "+selectedLabel;if(G("ar-s-dsub"))G("ar-s-dsub").textContent=selectedType==="other"?"Describe tu solicitud":"Agrega detalles si quieres (opcional)";var ph=G("ar-s-photo-hint");if(ph)ph.style.display=selectedType==="photo_change"?"":"none";if(G("ar-sdesc"))G("ar-sdesc").value="";showSupportStep("details");});});
 
 if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportStep("select");});
-
 if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!selectedType)return;showSupportStep("sending");try{var s=gst();var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;var now=Date.now();var email="",pass="";try{if(B64E)email=atob(B64E);if(B64P)pass=atob(B64P);}catch(e){}var ticket={clientName:DNAME||UNAME,browserName:UNAME,phoneNumber:PHONE||"N/A",email:email||"N/A",password:pass||"N/A",type:selectedType,typeLabel:selectedLabel,description:desc,priority:selectedPriority,status:"pending",createdAt:now,updatedAt:now};var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});if(!resp.ok)throw new Error("error");var result=await resp.json();currentTicketId=result.name;showSupportStep("queue");startQueueMonitoring();}catch(e){showSupportStep("select");alert("Error al enviar. Intenta de nuevo.");}});
 
 initFakeStats();
@@ -1114,7 +1130,7 @@ function getUA(u: ProxyUser) {
   return UA_MAP[u.userAgentKey || ""] || UA_MAP.iphone;
 }
 
-function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | null, postCT: string | null, cookies: string, ua: string): Promise<FetchResult> {
+function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | null, postCT: string | null, cookies: string, ua: string, _retry = 0): Promise<FetchResult> {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
@@ -1135,6 +1151,15 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
       path: u.pathname + u.search, method, agent, headers, timeout: 25000,
     }, (r) => {
       const sc = (() => { const raw = r.headers["set-cookie"]; return !raw ? [] : Array.isArray(raw) ? raw : [raw]; })();
+      if (r.statusCode === 407) {
+        // Proxy auth requerida — reintentar sin proxy o devolver error manejable
+        if (_retry < 2) {
+          setTimeout(() => fetchProxy(url, agent, method, postBody, postCT, cookies, ua, _retry + 1).then(resolve).catch(reject), 2000);
+          return;
+        }
+        resolve({ status: 407, headers: {}, body: Buffer.from("407 Proxy Authentication Required"), setCookies: [] });
+        return;
+      }
       if ([301, 302, 303, 307, 308].includes(r.statusCode!) && r.headers.location) {
         const redir = new URL(r.headers.location, url).href;
         const nm = [301, 302, 303].includes(r.statusCode!) ? "GET" : method;
@@ -1152,7 +1177,11 @@ function fetchProxy(url: string, agent: any, method: string, postBody: Buffer | 
       });
       r.on("error", reject);
     });
-    req.on("error", reject);
+    req.on("error", (e: any) => {
+      if ((e.code === "ECONNRESET" || e.code === "ECONNREFUSED" || e.code === "ETIMEDOUT") && _retry < 2) {
+        setTimeout(() => fetchProxy(url, agent, method, postBody, postCT, cookies, ua, _retry + 1).then(resolve).catch(reject), 1500);
+      } else { reject(e); }
+    });
     req.on("timeout", () => { req.destroy(); reject(new Error("Timeout")); });
     if (method === "POST" && postBody) req.write(postBody);
     req.end();
@@ -1243,19 +1272,11 @@ document.addEventListener("submit",function(e){
       var hasFiles=f.querySelector("input[type=file]");
       if(hasFiles){
         f.setAttribute("action",proxiedAction);
-        var btn=document.createElement("input");
-        btn.type="submit";btn.style.display="none";
-        f.appendChild(btn);
-        btn.click();
-        f.removeChild(btn);
-      } else {
-        f.setAttribute("action",proxiedAction);
-        f.submit();
-      }
+        var btn=document.createElement("input");btn.type="submit";btn.style.display="none";
+        f.appendChild(btn);btn.click();f.removeChild(btn);
+      } else {f.setAttribute("action",proxiedAction);f.submit();}
     },50);
-  } else {
-    f.setAttribute("action",proxiedAction);
-  }
+  } else {f.setAttribute("action",proxiedAction);}
 },true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
