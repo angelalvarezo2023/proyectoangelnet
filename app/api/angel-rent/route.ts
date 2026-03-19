@@ -26,7 +26,32 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 // ─── MEJORA 3: Dominios permitidos (anti-SSRF) ──────────────────────────────
-const ALLOWED_DOMAINS = ["megapersonals.eu", "www.megapersonals.eu"];
+const ALLOWED_DOMAINS = [
+  "megapersonals.eu",
+  "www.megapersonals.eu",
+  // CDN de imágenes de MegaPersonals
+  "img1.drome6.com",
+  "img2.drome6.com",
+  "drome6.com",
+  // Captcha externo que usa MegaPersonals
+  "captcha.drome6.com",
+  // CDN de videos
+  "video1.lodef.net",
+  "video2.lodef.net",
+  "video3.lodef.net",
+  "video4.lodef.net",
+  "video5.lodef.net",
+  "lodef.net",
+  // Procesador de imágenes
+  "image-processor.apnot.com",
+  "apnot.com",
+  // Google Analytics (necesario para que el JS del sitio no rompa)
+  "www.googletagmanager.com",
+  "googletagmanager.com",
+  // CDN de recursos estáticos
+  "escortbabylon.net",
+  "listcrawler.eu",
+];
 
 function isAllowedUrl(url: string): boolean {
   try {
@@ -1843,6 +1868,8 @@ document.addEventListener("click",function(e){var el=e.target;while(el&&el.tagNa
 var _fe=window.fetch;if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
 var _xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)arguments[1]=f;}return _xo.apply(this,arguments);};
 var _wo=window.open;window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
+try{var _imgSrc=Object.getOwnPropertyDescriptor(HTMLImageElement.prototype,"src");if(_imgSrc&&_imgSrc.set){Object.defineProperty(HTMLImageElement.prototype,"src",{get:function(){return _imgSrc.get.call(this);},set:function(u){var f=px(u);_imgSrc.set.call(this,f||u);},configurable:true});}}catch(x){}
+try{var _elSet=HTMLElement.prototype.setAttribute;HTMLElement.prototype.setAttribute=function(n,v){if((n==="src"||n==="data-src")&&typeof v==="string"&&v.indexOf("/api/angel-rent")===-1){var f=px(v);if(f){_elSet.call(this,n,f);return;}}return _elSet.call(this,n,v);}}catch(x){}
 document.addEventListener("submit",function(e){var f=e.target,a=f.getAttribute("action")||"";if(a.indexOf("/api/angel-rent")!==-1)return;e.stopImmediatePropagation();var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}var proxiedAction=P+encodeURIComponent(target);if(isEditForm){e.preventDefault();setTimeout(function(){var hasFiles=f.querySelector("input[type=file]");if(hasFiles){f.setAttribute("action",proxiedAction);var btn=document.createElement("input");btn.type="submit";btn.style.display="none";f.appendChild(btn);btn.click();f.removeChild(btn);}else{f.setAttribute("action",proxiedAction);f.submit();}},50);}else{f.setAttribute("action",proxiedAction);}},true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
