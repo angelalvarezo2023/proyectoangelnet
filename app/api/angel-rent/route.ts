@@ -17,6 +17,7 @@
 import { type NextRequest } from "next/server";
 import https from "https";
 import http from "http";
+import zlib from "zlib";
 import { createHmac } from "crypto";
 import { HttpsProxyAgent } from "https-proxy-agent";
 
@@ -1604,6 +1605,26 @@ function detectCloudflareChallenge(
   return "ok";
 }
 
+// ─── DECOMPRESSION — necesario porque ahora mandamos Accept-Encoding real ────
+function decompressBody(buf: Buffer, encoding: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    if (!encoding || encoding === "identity" || buf.length === 0) {
+      return resolve(buf);
+    }
+    if (encoding.includes("br")) {
+      zlib.brotliDecompress(buf, (e, r) => e ? reject(e) : resolve(r));
+    } else if (encoding.includes("gzip")) {
+      zlib.gunzip(buf, (e, r) => e ? reject(e) : resolve(r));
+    } else if (encoding.includes("deflate")) {
+      zlib.inflate(buf, (e, r) => e
+        ? zlib.inflateRaw(buf, (e2, r2) => e2 ? reject(e2) : resolve(r2))
+        : resolve(r));
+    } else {
+      resolve(buf);
+    }
+  });
+}
+
 function fetchProxy(
   url: string, agent: any, method: string,
   postBody: Buffer | null, postCT: string | null,
@@ -1660,7 +1681,13 @@ function fetchProxy(
           for (const [k, v] of Object.entries(r.headers)) {
             if (v && k !== "set-cookie") h[k] = Array.isArray(v) ? v.join(", ") : (v as string);
           }
-          resolve({ status: r.statusCode || 200, headers: h, body: Buffer.concat(chunks), setCookies: sc });
+          const raw = Buffer.concat(chunks);
+          const enc = (r.headers["content-encoding"] || "").toLowerCase();
+          decompressBody(raw, enc).then((body) => {
+            resolve({ status: r.statusCode || 200, headers: h, body, setCookies: sc });
+          }).catch(() => {
+            resolve({ status: r.statusCode || 200, headers: h, body: raw, setCookies: sc });
+          });
         });
         r.on("error", reject);
       }
