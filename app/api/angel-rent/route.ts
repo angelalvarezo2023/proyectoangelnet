@@ -227,15 +227,20 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
     }
-    if (ct.includes("javascript") || ct.includes("text/")) {
-      // Texto plano y JS: ya descomprimidos por decompressBody en fetchProxy
+    if (ct.includes("javascript") || (ct.includes("text/") && !ct.includes("image/"))) {
       rh.set("Content-Type", ct);
       return new Response(resp.body, { status: 200, headers: rh });
     }
-    // Recursos binarios: imágenes, fonts, etc — ya descomprimidos
+    // Imágenes (incluyendo captcha PHP que devuelve image/png), fonts, binarios
+    // NO cachear captcha — cambia con cada sesión
+    const isCaptchaResp = decoded.includes("captcha") || decoded.includes("securimage") || decoded.includes(".php");
     rh.set("Content-Type", ct || "application/octet-stream");
-    rh.set("Cache-Control", "public, max-age=86400");
-    // Pasar Content-Length correcto tras descompresión
+    if (!isCaptchaResp) {
+      rh.set("Cache-Control", "public, max-age=86400");
+    } else {
+      rh.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      rh.set("Pragma", "no-cache");
+    }
     rh.set("Content-Length", String(resp.body.length));
     return new Response(resp.body, { status: 200, headers: rh });
 
@@ -1641,13 +1646,22 @@ function fetchProxy(
   return new Promise((resolve, reject) => {
     const u   = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
-    // Detectar tipo de recurso por extensión para mandar Accept correcto
+    // Detectar tipo de recurso por URL para mandar Accept y headers correctos
     const pathLow = u.pathname.toLowerCase();
-    const isImage = /\.(jpg|jpeg|png|gif|webp|svg|ico|avif|bmp)$/i.test(pathLow);
-    const isScript = /\.js$/i.test(pathLow);
-    const isStyle  = /\.css$/i.test(pathLow);
-    const isFont   = /\.(woff2?|ttf|eot|otf)$/i.test(pathLow);
-    const isCaptcha = pathLow.includes("captcha") || pathLow.includes("securimage");
+    const fullUrlLow = url.toLowerCase();
+    const isImage   = /\.(jpg|jpeg|png|gif|webp|svg|ico|avif|bmp)($|\?)/i.test(pathLow);
+    const isScript  = /\.js($|\?)/i.test(pathLow);
+    const isStyle   = /\.css($|\?)/i.test(pathLow);
+    const isFont    = /\.(woff2?|ttf|eot|otf)($|\?)/i.test(pathLow);
+    // Captcha: URL contiene "captcha", "securimage", o es PHP que devuelve imagen
+    const isCaptcha = fullUrlLow.includes("captcha") ||
+                      fullUrlLow.includes("securimage") ||
+                      fullUrlLow.includes("captcha_show") ||
+                      (pathLow.endsWith(".php") && (
+                        fullUrlLow.includes("show") ||
+                        fullUrlLow.includes("image") ||
+                        fullUrlLow.includes("verify")
+                      ));
 
     const headers: Record<string, string> = {
       "User-Agent": profile.ua,
@@ -1661,7 +1675,7 @@ function fetchProxy(
       headers["Sec-Fetch-Dest"]  = "image";
       headers["Sec-Fetch-Mode"]  = "no-cors";
       headers["Sec-Fetch-Site"]  = "same-origin";
-      headers["Referer"]         = u.protocol + "//" + u.hostname + "/";
+      headers["Referer"]         = u.protocol + "//" + u.hostname + "/users/login";
     } else if (isScript) {
       headers["Accept"]          = "*/*";
       headers["Sec-Fetch-Dest"]  = "script";
@@ -1679,6 +1693,7 @@ function fetchProxy(
       headers["Sec-Fetch-Site"]  = "same-origin";
     }
 
+    // Cookies siempre — crítico para captcha (sesión de imagen)
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
       headers["Content-Type"]   = postCT;
@@ -1763,9 +1778,15 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   });
 
   // src= (imágenes, scripts, iframes, captcha)
-  html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
-    /^(data:|blob:|javascript:)/.test(u.trim()) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b
-  );
+  html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) => {
+    const trimmed = u.trim();
+    if (/^(data:|blob:|javascript:)/.test(trimmed)) return _;
+    const resolved = resolveUrl(trimmed, base, cur);
+    // Añadir timestamp anti-caché para captcha para que el browser no lo cachee
+    const isCaptchaUrl = /captcha|securimage/i.test(resolved);
+    const final = isCaptchaUrl ? resolved + (resolved.includes("?") ? "&" : "?") + "_t=" + Date.now() : resolved;
+    return a + pb + encodeURIComponent(final) + b;
+  });
 
   // srcset= (imágenes responsive)
   html = html.replace(/(srcset\s*=\s*["'])([^"']+)(["'])/gi, (_, a, val, b) => {
