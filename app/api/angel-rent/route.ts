@@ -1241,39 +1241,88 @@ function autoOK(){
 function handlePage(){
   var u=CUR,RK="ar_ret_"+UNAME,now=Date.now();
 
-  // Bloqueo de botones peligrosos
-  setTimeout(function(){
-    function blockEl(el){
-      el.style.opacity="0.45";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
-      el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();showNoEditModal();},true);
-    }
-    var all=document.querySelectorAll("a,button");
-    for(var i=0;i<all.length;i++){
-      var el=all[i];
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||
-         text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||
-         text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1)blockEl(el);
-      if((href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
-         &&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1)blockEl(el);
-    }
-  },900);
-  setInterval(function(){
-    var all=document.querySelectorAll("a,button");
-    for(var i=0;i<all.length;i++){
-      var el=all[i];if(el.style.opacity==="0.45")continue;
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||
-         text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE")!==-1||
-         ((href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1)
-          &&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1)){
-        el.style.opacity="0.45";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
-        el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();showNoEditModal();},true);
+  // ── Bloquear window.confirm para que el modal de "delete" nunca aparezca ──
+  window.confirm=function(){return false;};
+  // Bloquear el modal nativo de Bootstrap/jQuery de MegaPersonals
+  try{
+    // Si jQuery está disponible, bloquear .modal('show') de Bootstrap
+    if(window.$||window.jQuery){
+      var _jq=window.$||window.jQuery;
+      var _origModal=_jq.fn.modal;
+      if(_origModal){
+        _jq.fn.modal=function(opt){
+          var el=this[0];
+          if(el&&(el.id==="deletePostModal"||el.id==="delete-post-modal"||
+             (el.className&&el.className.indexOf("delete")!==-1))){
+            return this; // no mostrar
+          }
+          return _origModal.apply(this,arguments);
+        };
       }
     }
-  },3000);
+  }catch(ex){}
+
+  // ── Ocultar cualquier modal de delete/confirm que ya esté en el DOM ──────
+  function hideDeleteModals(){
+    var modals=document.querySelectorAll("[id*='delete'],[id*='Delete'],[id*='remove'],[id*='confirm']");
+    for(var i=0;i<modals.length;i++){
+      var m=modals[i];
+      if(m.tagName!=="INPUT"&&m.tagName!=="BUTTON"&&m.tagName!=="A"){
+        m.style.display="none";
+        m.style.visibility="hidden";
+      }
+    }
+    // Ocultar overlays de Bootstrap
+    var backdrops=document.querySelectorAll(".modal-backdrop,.modal.in,.modal.show");
+    for(var j=0;j<backdrops.length;j++){
+      backdrops[j].style.display="none";
+      backdrops[j].classList.remove("in","show");
+    }
+    document.body.classList.remove("modal-open");
+    document.body.style.overflow="";
+  }
+  setInterval(hideDeleteModals,500);
+  hideDeleteModals();
+
+  // ── Bloqueo de botones peligrosos (inmediato, sin espera) ────────────────
+  function blockEl(el){
+    if(el._arBlocked)return;
+    el._arBlocked=true;
+    el.style.opacity="0.45";
+    el.style.cursor="not-allowed";
+    el.style.filter="grayscale(1)";
+    el.style.pointerEvents="none";
+    // Overlay invisible encima que captura todos los clicks
+    var wrap=el.parentElement;
+    if(wrap&&window.getComputedStyle(wrap).position==="static")wrap.style.position="relative";
+    var ov=document.createElement("div");
+    ov.style.cssText="position:absolute;inset:0;z-index:9999;cursor:not-allowed";
+    ov.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();showNoEditModal();},true);
+    if(wrap)wrap.appendChild(ov);
+  }
+
+  function isDangerous(el){
+    var text=(el.innerText||el.textContent||"").trim().toUpperCase();
+    var href=(el.getAttribute("href")||"").toLowerCase();
+    if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||
+       text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||
+       text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1)return true;
+    if((href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||
+        href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
+       &&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1)return true;
+    return false;
+  }
+
+  function blockAll(){
+    var all=document.querySelectorAll("a,button");
+    for(var i=0;i<all.length;i++){if(isDangerous(all[i]))blockEl(all[i]);}
+  }
+
+  // Bloquear inmediatamente y repetir
+  blockAll();
+  setTimeout(blockAll,300);
+  setTimeout(blockAll,800);
+  setInterval(blockAll,3000);
 
   if(u.indexOf("/users/posts/edit/")!==-1){showNoEditModal();return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}
