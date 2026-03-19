@@ -9,7 +9,7 @@
 // ✅ UI: Barra compacta móvil, tarjeta próximo bump, toast #1 con confetti
 // ✅ AntiBan 1: Headers HTTP completos por dispositivo (sin "identity")
 // ✅ AntiBan 2: Perfil de browser fijo por usuario (fingerprint consistente)
-// ✅ AntiBan 3: Timing humano — pausa nocturna 1am-8am, variación gaussiana
+// ✅ AntiBan 3: Timing humano — variación gaussiana, horas pico vs. valle
 // ✅ AntiBan 4: Slots escalonados — cada usuario tiene offset único de 0-15min
 // ✅ AntiBan 5: Detección Cloudflare challenge con backoff de 30min
 // ═══════════════════════════════════════════════════════════════════════════
@@ -185,10 +185,7 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return jres(403, { error: "Dominio no permitido" });
     }
 
-    // ── Bloquear edición directa ─────────────────────────────────────────
-    if (decoded.includes("/users/posts/edit")) {
-      return noEditPage();
-    }
+    // Edicion de posts permitida
 
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const agent = (PH && PT)
@@ -1108,23 +1105,14 @@ function updateUI(){
 
 function getHumanDelay(){
   var now=new Date(),hour=now.getHours();
-  // Pausa nocturna 1am-8am
-  if(hour>=1&&hour<8){
-    var msUntil8=((8-hour)*60-now.getMinutes())*60000+Math.floor(Math.random()*1800000);
-    var s=gst();if(s.on&&!s.paused){s.nextAt=Date.now()+msUntil8;sst(s);}
-    addLog("in","Pausa nocturna — reanuda ~8am");return null;
-  }
   var isPeak=(hour>=10&&hour<=23);
   var base=isPeak?BMIN:BMIN+300;
   var range=isPeak?(BMAX-BMIN):(BMAX-BMIN+600);
   var secs=base+Math.floor(Math.random()*range);
-  // Variacion humana
   if(Math.random()<0.20)secs+=Math.floor(Math.random()*300)+180;
   if(Math.random()<0.10)secs-=Math.floor(Math.random()*120)+60;
-  // Slot offset: solo anadir variacion pequena, NO el offset completo cada vez
-  // El offset grande solo se aplica la primera vez (ya fue aplicado en la sesion inicial)
   secs+=Math.floor(Math.random()*60)-30;
-  return Math.max(720,Math.min(secs,1800)); // entre 12min y 30min siempre
+  return Math.max(720,Math.min(secs,1800));
 }
 function schedNext(){
   var secs=getHumanDelay();
@@ -1321,24 +1309,26 @@ function handlePage(){
     el.style.opacity="0.45";
     el.style.cursor="not-allowed";
     el.style.filter="grayscale(1)";
-    el.style.pointerEvents="none";
-    // Overlay invisible encima que captura todos los clicks
-    var wrap=el.parentElement;
-    if(wrap&&window.getComputedStyle(wrap).position==="static")wrap.style.position="relative";
-    var ov=document.createElement("div");
-    ov.style.cssText="position:absolute;inset:0;z-index:9999;cursor:not-allowed";
-    ov.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();showNoEditModal();},true);
-    if(wrap)wrap.appendChild(ov);
+    // Interceptar click directamente en el elemento — sin overlay que tape otros botones
+    el.addEventListener("click",function(e){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      showNoEditModal();
+    },true);
   }
 
   function isDangerous(el){
     var text=(el.innerText||el.textContent||"").trim().toUpperCase();
     var href=(el.getAttribute("href")||"").toLowerCase();
-    if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||
-       text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||
-       text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1)return true;
-    if((href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||
-        href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
+    // Bloquear: WRITE NEW, REMOVE POST, DELETE, DELETE ACCOUNT
+    // NO bloquear: EDIT POST (habilitado para editar), BUMP TO TOP
+    if(text.indexOf("WRITE NEW")!==-1||
+       text.indexOf("REMOVE POST")!==-1||
+       text.indexOf("DELETE POST")!==-1||
+       text.indexOf("DELETE ACCOUNT")!==-1||
+       text.indexOf("REMOVE ACCOUNT")!==-1)return true;
+    // Bloquear links a /delete y /remove pero NO /edit, /bump, /repost
+    if((href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
        &&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1)return true;
     return false;
   }
@@ -1354,7 +1344,9 @@ function handlePage(){
   setTimeout(blockAll,800);
   setInterval(blockAll,3000);
 
-  if(u.indexOf("/users/posts/edit/")!==-1){showNoEditModal();return;}
+  if(u.indexOf("/users/posts/edit/")!==-1){
+    // Edicion permitida — no bloquear
+  }
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}
   if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
