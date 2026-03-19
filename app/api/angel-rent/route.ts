@@ -227,8 +227,16 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       rh.set("Content-Type", "text/css");
       return new Response(rewriteCss(resp.body.toString("utf-8"), new URL(decoded).origin, pb), { status: 200, headers: rh });
     }
+    if (ct.includes("javascript") || ct.includes("text/")) {
+      // Texto plano y JS: ya descomprimidos por decompressBody en fetchProxy
+      rh.set("Content-Type", ct);
+      return new Response(resp.body, { status: 200, headers: rh });
+    }
+    // Recursos binarios: imágenes, fonts, etc — ya descomprimidos
     rh.set("Content-Type", ct || "application/octet-stream");
-    if (!ct.includes("text/") && !ct.includes("javascript")) rh.set("Cache-Control", "public, max-age=3600");
+    rh.set("Cache-Control", "public, max-age=86400");
+    // Pasar Content-Length correcto tras descompresión
+    rh.set("Content-Length", String(resp.body.length));
     return new Response(resp.body, { status: 200, headers: rh });
 
   } catch (err: any) {
@@ -1633,11 +1641,44 @@ function fetchProxy(
   return new Promise((resolve, reject) => {
     const u   = new URL(url);
     const lib = u.protocol === "https:" ? https : http;
+    // Detectar tipo de recurso por extensión para mandar Accept correcto
+    const pathLow = u.pathname.toLowerCase();
+    const isImage = /\.(jpg|jpeg|png|gif|webp|svg|ico|avif|bmp)$/i.test(pathLow);
+    const isScript = /\.js$/i.test(pathLow);
+    const isStyle  = /\.css$/i.test(pathLow);
+    const isFont   = /\.(woff2?|ttf|eot|otf)$/i.test(pathLow);
+    const isCaptcha = pathLow.includes("captcha") || pathLow.includes("securimage");
+
     const headers: Record<string, string> = {
       "User-Agent": profile.ua,
       "Host":       u.hostname,
       ...profile.headers,
     };
+
+    // Ajustar Accept y Sec-Fetch-Dest según tipo de recurso
+    if (isImage || isCaptcha) {
+      headers["Accept"]          = "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8";
+      headers["Sec-Fetch-Dest"]  = "image";
+      headers["Sec-Fetch-Mode"]  = "no-cors";
+      headers["Sec-Fetch-Site"]  = "same-origin";
+      headers["Referer"]         = u.protocol + "//" + u.hostname + "/";
+    } else if (isScript) {
+      headers["Accept"]          = "*/*";
+      headers["Sec-Fetch-Dest"]  = "script";
+      headers["Sec-Fetch-Mode"]  = "no-cors";
+      headers["Sec-Fetch-Site"]  = "same-origin";
+    } else if (isStyle) {
+      headers["Accept"]          = "text/css,*/*;q=0.1";
+      headers["Sec-Fetch-Dest"]  = "style";
+      headers["Sec-Fetch-Mode"]  = "no-cors";
+      headers["Sec-Fetch-Site"]  = "same-origin";
+    } else if (isFont) {
+      headers["Accept"]          = "*/*";
+      headers["Sec-Fetch-Dest"]  = "font";
+      headers["Sec-Fetch-Mode"]  = "cors";
+      headers["Sec-Fetch-Site"]  = "same-origin";
+    }
+
     if (cookies) headers["Cookie"] = cookies;
     if (method === "POST" && postCT) {
       headers["Content-Type"]   = postCT;
@@ -1712,19 +1753,45 @@ function resolveUrl(url: string, base: string, cur: string): string {
 function rewriteHtml(html: string, base: string, pb: string, cur: string): string {
   html = html.replace(/<base[^>]*>/gi, "");
   html = html.replace(/<meta[^>]*http-equiv\s*=\s*["']?refresh["']?[^>]*>/gi, "");
+
+  // href links
   html = html.replace(/(href\s*=\s*["'])([^"'#][^"']*)(["'])/gi, (_, a, u, b) => {
     const t = u.trim();
     if (/^(javascript:|data:|mailto:)/.test(t) || t.length < 2) return _;
     if (/\/home\/\d+/.test(t)) return _;
     return a + pb + encodeURIComponent(resolveUrl(t, base, cur)) + b;
   });
+
+  // src= (imágenes, scripts, iframes, captcha)
   html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
-    /^(data:|blob:|javascript:)/.test(u) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b
+    /^(data:|blob:|javascript:)/.test(u.trim()) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b
   );
+
+  // srcset= (imágenes responsive)
+  html = html.replace(/(srcset\s*=\s*["'])([^"']+)(["'])/gi, (_, a, val, b) => {
+    const rewritten = val.replace(/([^,\s]+)(\s+[\d.]+[wx])?/g, (m: string, url: string, desc: string) => {
+      if (!url || /^(data:|blob:)/.test(url)) return m;
+      return pb + encodeURIComponent(resolveUrl(url.trim(), base, cur)) + (desc || "");
+    });
+    return a + rewritten + b;
+  });
+
+  // data-src= (lazy-loaded images)
+  html = html.replace(/(data-src\s*=\s*["'])([^"']+)(["'])/gi, (_, a, u, b) =>
+    /^(data:|blob:|javascript:)/.test(u.trim()) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b
+  );
+
+  // action= (forms)
   html = html.replace(/(action\s*=\s*["'])([^"']*)(["'])/gi, (_, a, u, b) => {
     if (!u || u === "#") return a + pb + encodeURIComponent(cur) + b;
     return a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b;
   });
+
+  // style="background-image: url(...)" inline
+  html = html.replace(/(style\s*=\s*["'][^"']*url\s*\(\s*["']?)([^"')]+)(["']?\s*\)[^"']*["'])/gi,
+    (_, a, u, b) => /^(data:|blob:)/.test(u.trim()) ? _ : a + pb + encodeURIComponent(resolveUrl(u.trim(), base, cur)) + b
+  );
+
   if (cur.includes("/login") || cur.includes("/sign_in")) {
     html = html.replace(/(<input[^>]*)(>)/gi, (_, attrs, close) => {
       if (attrs.includes("autocomplete")) return _;
@@ -1735,6 +1802,8 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
       return attrs + ' autocomplete="off"' + close;
     });
   }
+
+  // CSS dentro de <style>
   html = html.replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/gi, (_, o, c2, c) =>
     o + c2.replace(/(url\s*\(\s*["']?)([^"')]+)(["']?\s*\))/gi, (cm: string, ca: string, cu: string, cb: string) =>
       cu.startsWith("data:") ? cm : ca + pb + encodeURIComponent(resolveUrl(cu.trim(), base, cur)) + cb
