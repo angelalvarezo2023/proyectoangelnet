@@ -29,40 +29,42 @@ export const maxDuration = 30;
 const ALLOWED_DOMAINS = [
   "megapersonals.eu",
   "www.megapersonals.eu",
-  // CDN de imágenes de MegaPersonals
-  "img1.drome6.com",
-  "img2.drome6.com",
   "drome6.com",
-  // Captcha externo que usa MegaPersonals
-  "captcha.drome6.com",
-  // CDN de videos
-  "video1.lodef.net",
-  "video2.lodef.net",
-  "video3.lodef.net",
-  "video4.lodef.net",
-  "video5.lodef.net",
   "lodef.net",
-  // Procesador de imágenes
-  "image-processor.apnot.com",
   "apnot.com",
-  // Google Analytics (necesario para que el JS del sitio no rompa)
-  "www.googletagmanager.com",
-  "googletagmanager.com",
-  // CDN de recursos estáticos
   "escortbabylon.net",
   "listcrawler.eu",
+  "googletagmanager.com",
+  "google-analytics.com",
+  "analytics.google.com",
+  "metrika.yandex.com",
+  "metrika.yandex.ru",
+  "mc.yandex.ru",
+  "ajax.googleapis.com",
+  "fonts.googleapis.com",
+  "fonts.gstatic.com",
+  "cdnjs.cloudflare.com",
+  "code.jquery.com",
+  "maxcdn.bootstrapcdn.com",
+  "stackpath.bootstrapcdn.com",
+  "cdn.jsdelivr.net",
+  "use.fontawesome.com",
 ];
 
+// Verificar si URL es permitida — ahora con wildcard de subdominio
 function isAllowedUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
+    const host = parsed.hostname;
     return ALLOWED_DOMAINS.some(
-      (d) => parsed.hostname === d || parsed.hostname.endsWith("." + d)
+      (d) => host === d || host.endsWith("." + d)
     );
   } catch {
     return false;
   }
 }
+
+
 
 // ─── MEJORA 1: HMAC token auth ──────────────────────────────────────────────
 // SECRET_KEY debe estar en tus variables de entorno de Vercel
@@ -1083,6 +1085,11 @@ function updateUI(){
     if(cdSeg){cdSeg.style.display="";if(cdDiv)cdDiv.style.display="";}
     if(bumpCard)bumpCard.style.display="flex";
     var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
+    // Si el tiempo restante es irreal (>30min), resetear el nextAt
+    if(left>1800){
+      var s2b=gst();s2b.nextAt=Date.now()+BMIN*1000;sst(s2b);
+      left=BMIN;
+    }
     var cdTxt=p2(Math.floor(left/60))+":"+p2(left%60);
     if(G("ar-cd"))G("ar-cd").textContent=cdTxt;
     if(G("nbc-cd"))G("nbc-cd").textContent=cdTxt;
@@ -1101,29 +1108,34 @@ function updateUI(){
 
 function getHumanDelay(){
   var now=new Date(),hour=now.getHours();
-  // Pausa nocturna 1am-8am — ningún humano bumps a las 3am
+  // Pausa nocturna 1am-8am
   if(hour>=1&&hour<8){
     var msUntil8=((8-hour)*60-now.getMinutes())*60000+Math.floor(Math.random()*1800000);
     var s=gst();if(s.on&&!s.paused){s.nextAt=Date.now()+msUntil8;sst(s);}
     addLog("in","Pausa nocturna — reanuda ~8am");return null;
   }
-  // Horas pico 10am-11pm: más frecuente; fuera: +5min extra
   var isPeak=(hour>=10&&hour<=23);
   var base=isPeak?BMIN:BMIN+300;
   var range=isPeak?(BMAX-BMIN):(BMAX-BMIN+600);
   var secs=base+Math.floor(Math.random()*range);
-  // Variación humana: 20% tardío (+3-8min), 10% adelantado (-1-2min)
+  // Variacion humana
   if(Math.random()<0.20)secs+=Math.floor(Math.random()*300)+180;
   if(Math.random()<0.10)secs-=Math.floor(Math.random()*120)+60;
-  // Aplicar slot único del usuario (escalonamiento entre cuentas)
-  secs+=_SLOT_OFFSET+Math.floor(Math.random()*60)-30;
-  return Math.max(720,secs); // mínimo 12min siempre
+  // Slot offset: solo anadir variacion pequena, NO el offset completo cada vez
+  // El offset grande solo se aplica la primera vez (ya fue aplicado en la sesion inicial)
+  secs+=Math.floor(Math.random()*60)-30;
+  return Math.max(720,Math.min(secs,1800)); // entre 12min y 30min siempre
 }
 function schedNext(){
   var secs=getHumanDelay();
   if(secs===null)return;
-  var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);
-  addLog("in","Próximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");
+  var s=gst();
+  // Aplicar slot offset solo la primera vez en esta sesion
+  if(!s.slotApplied){secs+=_SLOT_OFFSET;s.slotApplied=true;}
+  secs=Math.max(720,Math.min(secs,1800));
+  s.nextAt=Date.now()+secs*1000;
+  sst(s);
+  addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");
 }
 function goList(ms){setTimeout(function(){window.location.href=PLIST;},ms||1500);}
 function rnd(n){return Math.floor(Math.random()*n);}
@@ -1241,48 +1253,66 @@ function autoOK(){
 function handlePage(){
   var u=CUR,RK="ar_ret_"+UNAME,now=Date.now();
 
-  // ── Bloquear window.confirm para que el modal de "delete" nunca aparezca ──
+  // Block window.confirm so delete dialogs never appear
   window.confirm=function(){return false;};
-  // Bloquear el modal nativo de Bootstrap/jQuery de MegaPersonals
-  try{
-    // Si jQuery está disponible, bloquear .modal('show') de Bootstrap
-    if(window.$||window.jQuery){
-      var _jq=window.$||window.jQuery;
-      var _origModal=_jq.fn.modal;
-      if(_origModal){
-        _jq.fn.modal=function(opt){
-          var el=this[0];
-          if(el&&(el.id==="deletePostModal"||el.id==="delete-post-modal"||
-             (el.className&&el.className.indexOf("delete")!==-1))){
-            return this; // no mostrar
-          }
-          return _origModal.apply(this,arguments);
-        };
-      }
-    }
-  }catch(ex){}
 
-  // ── Ocultar cualquier modal de delete/confirm que ya esté en el DOM ──────
-  function hideDeleteModals(){
-    var modals=document.querySelectorAll("[id*='delete'],[id*='Delete'],[id*='remove'],[id*='confirm']");
-    for(var i=0;i<modals.length;i++){
-      var m=modals[i];
-      if(m.tagName!=="INPUT"&&m.tagName!=="BUTTON"&&m.tagName!=="A"){
-        m.style.display="none";
-        m.style.visibility="hidden";
+  // Block Bootstrap modals for delete/payment that open unexpectedly
+  function patchJQueryModal(){
+    try{
+      var jq=window.$||window.jQuery;
+      if(!jq||!jq.fn||!jq.fn.modal)return false;
+      var _orig=jq.fn.modal;
+      jq.fn.modal=function(opt){
+        var el=this[0];
+        if(el){
+          var id=(el.id||"").toLowerCase();
+          var cls=(el.className||"").toLowerCase();
+          var BLOCK=["delete","remove","confirm","exceed","payment","limit","token","not_enough","buy_more"];
+          for(var b=0;b<BLOCK.length;b++){
+            if(id.indexOf(BLOCK[b])!==-1||cls.indexOf(BLOCK[b])!==-1)return this;
+          }
+        }
+        return _orig.apply(this,arguments);
+      };
+      return true;
+    }catch(ex){return false;}
+  }
+  // Try patching immediately, then wait for jQuery to load
+  if(!patchJQueryModal()){
+    var _pjqAttempts=0;
+    var _pjqInt=setInterval(function(){
+      if(patchJQueryModal()||_pjqAttempts++>20)clearInterval(_pjqInt);
+    },250);
+  }
+
+  // Hide any stray modals / backdrops every 400ms
+  function hideStrayModals(){
+    var BLOCK_IDS=["delete","remove","confirm","exceed","payment","limit","token","buy_more","not_enough","migration"];
+    var allModals=document.querySelectorAll(".modal,.modal-backdrop");
+    for(var i=0;i<allModals.length;i++){
+      var m=allModals[i];
+      var mid=(m.id||"").toLowerCase();
+      var mcls=(m.className||"").toLowerCase();
+      var shouldHide=false;
+      for(var b=0;b<BLOCK_IDS.length;b++){
+        if(mid.indexOf(BLOCK_IDS[b])!==-1){shouldHide=true;break;}
+      }
+      if(mcls.indexOf("modal-backdrop")!==-1)shouldHide=true;
+      if(shouldHide){
+        m.style.cssText="display:none!important;visibility:hidden!important;opacity:0!important";
+        m.classList.remove("in","show","fade");
       }
     }
-    // Ocultar overlays de Bootstrap
-    var backdrops=document.querySelectorAll(".modal-backdrop,.modal.in,.modal.show");
-    for(var j=0;j<backdrops.length;j++){
-      backdrops[j].style.display="none";
-      backdrops[j].classList.remove("in","show");
+    // Always clean body overflow when no legitimate modal is open
+    var hasLegitModal=document.querySelector(".modal.in:not([id*='delete']):not([id*='remove']):not([id*='confirm']):not([id*='exceed']):not([id*='payment'])");
+    if(!hasLegitModal){
+      document.body.classList.remove("modal-open");
+      document.body.style.overflow="";
+      document.body.style.paddingRight="";
     }
-    document.body.classList.remove("modal-open");
-    document.body.style.overflow="";
   }
-  setInterval(hideDeleteModals,500);
-  hideDeleteModals();
+  setInterval(hideStrayModals,400);
+  hideStrayModals();
 
   // ── Bloqueo de botones peligrosos (inmediato, sin espera) ────────────────
   function blockEl(el){
