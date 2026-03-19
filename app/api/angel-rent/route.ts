@@ -185,7 +185,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       return jres(403, { error: "Dominio no permitido" });
     }
 
-    // Edicion de posts permitida
+    // ── Bloquear edición directa ─────────────────────────────────────────
+    if (decoded.includes("/users/posts/edit")) {
+      return noEditPage();
+    }
 
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const agent = (PH && PT)
@@ -1320,15 +1323,13 @@ function handlePage(){
   function isDangerous(el){
     var text=(el.innerText||el.textContent||"").trim().toUpperCase();
     var href=(el.getAttribute("href")||"").toLowerCase();
-    // Bloquear: WRITE NEW, REMOVE POST, DELETE, DELETE ACCOUNT
-    // NO bloquear: EDIT POST (habilitado para editar), BUMP TO TOP
-    if(text.indexOf("WRITE NEW")!==-1||
-       text.indexOf("REMOVE POST")!==-1||
-       text.indexOf("DELETE POST")!==-1||
+    // Bloquear: EDIT POST, WRITE NEW, REMOVE POST, DELETE, DELETE ACCOUNT
+    if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||
+       text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||
        text.indexOf("DELETE ACCOUNT")!==-1||
        text.indexOf("REMOVE ACCOUNT")!==-1)return true;
-    // Bloquear links a /delete y /remove pero NO /edit, /bump, /repost
-    if((href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
+    // Bloquear links a /edit, /delete y /remove pero NO /bump, /repost
+    if((href.indexOf("/edit")!==-1||href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1)
        &&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1)return true;
     return false;
   }
@@ -1344,9 +1345,7 @@ function handlePage(){
   setTimeout(blockAll,800);
   setInterval(blockAll,3000);
 
-  if(u.indexOf("/users/posts/edit/")!==-1){
-    // Edicion permitida — no bloquear
-  }
+  if(u.indexOf("/users/posts/edit/")!==-1){showNoEditModal();return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}
   if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}
   if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}
