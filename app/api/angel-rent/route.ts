@@ -1963,31 +1963,39 @@ function showNoEditModal(){
 function goList(d){setTimeout(function(){location.href=PLIST;},d||0);}
 function enc(s){return encodeURIComponent(s);}
 
-// AntiBan: timing gaussiano (variación natural en vez de uniforme)
-function gaussianRandom(mean,stdDev){
-  var u1=Math.random(),u2=Math.random();
-  var z=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2);
-  return mean+z*stdDev;
+function getHumanDelay(){
+  var now=new Date(),hour=now.getHours();
+  var isPeak=(hour>=10&&hour<=23);
+  var base=isPeak?BMIN:BMIN+300;
+  var range=isPeak?(BMAX-BMIN):(BMAX-BMIN+600);
+  var secs=base+Math.floor(Math.random()*range);
+  if(Math.random()<0.20)secs+=Math.floor(Math.random()*300)+180;
+  if(Math.random()<0.10)secs-=Math.floor(Math.random()*120)+60;
+  secs+=Math.floor(Math.random()*60)-30;
+  return Math.max(720,Math.min(secs,1800));
 }
 
 function schedNext(){
+  var secs=getHumanDelay();
+  if(secs===null)return;
   var s=gst();
-  // AntiBan: timing variado con distribución gaussiana
-  var baseDelay=Math.floor(gaussianRandom((BMIN+BMAX)/2,(BMAX-BMIN)/4));
-  baseDelay=Math.max(BMIN,Math.min(BMAX,baseDelay));
-  // AntiBan: aplicar slot offset único del usuario
-  if(s.cnt===0)baseDelay+=_SLOT_OFFSET;
-  // AntiBan: variación adicional según hora del día (menos frecuente de noche)
-  var hour=new Date().getHours();
-  if(hour>=2&&hour<=6)baseDelay+=Math.floor(Math.random()*180)+60; // +1-4min extra de noche
-  s.nextAt=Date.now()+baseDelay*1000;
+  // Aplicar slot offset solo la primera vez en esta sesion
+  if(!s.slotApplied){secs+=_SLOT_OFFSET;s.slotApplied=true;}
+  secs=Math.max(720,Math.min(secs,1800));
+  s.nextAt=Date.now()+secs*1000;
   sst(s);
-  addLog("in","Próximo bump en "+Math.round(baseDelay/60)+"min");
+  addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");
   // Sincronizar inmediatamente con Firebase
   saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
 }
 
-function doBump(){
+function rnd(n){return Math.floor(Math.random()*n);}
+function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
+function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<k.length;i++)if(u.indexOf("/"+k[i]+"/")!==-1)return true;return false;}
+function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\\d+$/.test(s[i]))return s[i];return null;}
+function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
+
+async function doBump(){
   var s=gst();
   if(!s.on||s.paused)return;
   // AntiBan: verificar backoff de Cloudflare
@@ -1996,15 +2004,68 @@ function doBump(){
     addLog("er","CF backoff — "+_cfMins+"min restantes");
     schedNext();return;
   }
-  var btn=document.querySelector("a[href*='/users/posts/bump/'],a[href*='/users/posts/repost/'],a[href*='/users/posts/renew/']");
-  if(!btn){addLog("er","Sin botón bump");schedNext();return;}
-  s.cnt=(s.cnt||0)+1;sst(s);
-  addLog("ok","Bump #"+s.cnt);
-  showNotification("Ejecutando bump #"+s.cnt+"...","info",2000);
-  // AntiBan: usar click humanizado con simulación de mouse
-  humanClick(btn,function(){
-    setTimeout(function(){showBumpToast();schedNext();},1500);
-  });
+  addLog("in","Republicando...");
+  schedNext();
+  
+  // Mostrar toast de éxito
+  showBumpToast();
+  
+  // Actualizar stats fake
+  setTimeout(function(){
+    var st=gst();
+    var views=Math.floor(Math.random()*10)+5;
+    st.fakeViews=(st.fakeViews||250)+views;
+    st.fakeInterested=(st.fakeInterested||12)+Math.floor(views/3);
+    sst(st);updateFakeUI();
+  },1500);
+  
+  var btn=document.getElementById("managePublishAd");
+  if(btn){
+    try{
+      btn.scrollIntoView({behavior:"smooth",block:"center"});
+      await wait(300+rnd(500));
+      btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));
+      await wait(100+rnd(200));
+      btn.click();
+      s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+      addLog("ok","Bump #"+s.cnt+" (boton)");
+      saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
+    }catch(e){addLog("er","Error M1");}
+    updateUI();return;
+  }
+  var links=document.querySelectorAll("a[href]");
+  for(var i=0;i<links.length;i++){
+    var rh=deproxy(links[i].getAttribute("href")||"");
+    if(isBumpUrl(rh)){
+      try{
+        links[i].scrollIntoView({behavior:"smooth",block:"center"});
+        await wait(300+rnd(400));links[i].click();
+        s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+        addLog("ok","Bump #"+s.cnt+" (link)");
+        saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
+      }catch(e){addLog("er","Error M2");}
+      updateUI();return;
+    }
+  }
+  var ids=[];
+  var al=document.querySelectorAll("a[href]");
+  for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}
+  var dels=document.querySelectorAll("[data-id],[data-post-id]");
+  for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}
+  if(ids.length){
+    for(var n=0;n<ids.length;n++){
+      try{
+        var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});
+        if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);saveRobotState(s.on,s.paused,s.nextAt,s.cnt);}}
+        else addLog("er","HTTP "+r.status);
+      }catch(e2){addLog("er","Fetch err");}
+      if(n<ids.length-1)await wait(1500+rnd(2000));
+    }
+  }else{
+    addLog("er","No posts");
+    var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);
+  }
+  updateUI();
 }
 
 function startTick(){
@@ -2362,7 +2423,7 @@ var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500)
 setTimeout(function(){clearInterval(lri);},30000);
 if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDone)tryLogin();});if(document.body)obs.observe(document.body,{childList:true,subtree:true});setTimeout(function(){obs.disconnect();},30000);}
 
-/* ══════════════════════════════════════════════════════════════════
+/* ═══════════════════════════��══════════════════════════════════════
    SISTEMA DE RECUPERACION AUTOMATICA — WATCHDOG + HEARTBEAT
    ══════════════════════════════════════════════════════════════════ */
 (function(){
