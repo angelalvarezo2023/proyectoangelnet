@@ -193,204 +193,600 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const warnDays = daysLeft;
 
   // ═══════════════════════════════════════════════════════════════════
-  // CSS MODERNO - DISEÑO MINIMALISTA Y ELEGANTE
+  // CSS PREMIUM - DISEÑO ELABORADO CON PANEL FLOTANTE PROMINENTE
   // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
-/* ─── Variables de diseño ─────────────────────────────────────────────── */
+/* ─── Variables de diseño premium ─────────────────────────────────────── */
 :root {
-  --ar-bg: #09090b;
-  --ar-card: #18181b;
-  --ar-border: #27272a;
-  --ar-border-hover: #3f3f46;
-  --ar-text: #fafafa;
-  --ar-text-muted: #71717a;
-  --ar-text-dim: #52525b;
-  --ar-primary: #3b82f6;
-  --ar-primary-hover: #2563eb;
-  --ar-success: #22c55e;
+  --ar-bg: #0a0a0f;
+  --ar-bg-elevated: #12121a;
+  --ar-card: #16161f;
+  --ar-card-hover: #1c1c28;
+  --ar-border: #2a2a3a;
+  --ar-border-hover: #3d3d52;
+  --ar-text: #f8f8fc;
+  --ar-text-muted: #8888a0;
+  --ar-text-dim: #5c5c70;
+  --ar-primary: #6366f1;
+  --ar-primary-hover: #4f46e5;
+  --ar-primary-glow: rgba(99, 102, 241, 0.4);
+  --ar-success: #10b981;
+  --ar-success-glow: rgba(16, 185, 129, 0.3);
   --ar-warning: #f59e0b;
+  --ar-warning-glow: rgba(245, 158, 11, 0.3);
   --ar-danger: #ef4444;
-  --ar-accent: #8b5cf6;
+  --ar-accent: #a855f7;
+  --ar-accent-glow: rgba(168, 85, 247, 0.3);
+  --ar-cyan: #06b6d4;
+  --ar-gradient-1: linear-gradient(135deg, #6366f1, #a855f7);
+  --ar-gradient-2: linear-gradient(135deg, #10b981, #06b6d4);
+  --ar-gradient-3: linear-gradient(135deg, #f59e0b, #ef4444);
 }
 
-/* ─── Barra superior moderna ──────────────────────────────────────────── */
+/* ─── Reset y base ────────────────────────────────────────────────────── */
+#ar-bar *, #ar-float-panel *, #ar-btns *, .ar-modal * {
+  box-sizing: border-box;
+}
+
+/* ─── Barra superior premium con glassmorphism ────────────────────────── */
 #ar-bar {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 2147483647;
-  background: rgba(9, 9, 11, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid var(--ar-border);
-  height: 56px;
+  background: linear-gradient(180deg, rgba(10, 10, 15, 0.95) 0%, rgba(10, 10, 15, 0.88) 100%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  height: 64px;
   display: flex;
   align-items: center;
-  padding: 0 12px;
-  gap: 8px;
+  padding: 0 20px;
+  gap: 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
 }
 #ar-bar::-webkit-scrollbar { display: none; }
 
-/* ─── Logo y marca ────────────────────────────────────────────────────── */
+/* ─── Logo y marca premium ────────────────────────────────────────────── */
 .ar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding-right: 16px;
+  gap: 14px;
+  padding-right: 20px;
   border-right: 1px solid var(--ar-border);
-  margin-right: 8px;
+  margin-right: 12px;
   flex-shrink: 0;
 }
 .ar-logo {
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  background: var(--ar-gradient-1);
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  font-size: 20px;
+  box-shadow: 0 4px 20px var(--ar-primary-glow), 0 0 0 1px rgba(255,255,255,0.1) inset;
+  animation: ar-logo-glow 3s ease-in-out infinite;
+}
+@keyframes ar-logo-glow {
+  0%, 100% { box-shadow: 0 4px 20px var(--ar-primary-glow), 0 0 0 1px rgba(255,255,255,0.1) inset; }
+  50% { box-shadow: 0 6px 30px var(--ar-primary-glow), 0 0 0 1px rgba(255,255,255,0.15) inset; }
 }
 .ar-brand-text {
-  font-size: 15px;
-  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ar-brand-name {
+  font-size: 16px;
+  font-weight: 800;
   color: var(--ar-text);
-  letter-spacing: -0.3px;
+  letter-spacing: -0.5px;
+  background: var(--ar-gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ar-brand-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ar-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
-/* ─── Chips de estado ─────────────────────────────────────────────────── */
+/* ─── Chips de estado mejorados ───────────────────────────────────────── */
 .ar-chip {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 8px;
+  padding: 8px 14px;
   background: var(--ar-card);
   border: 1px solid var(--ar-border);
-  border-radius: 20px;
+  border-radius: 24px;
   flex-shrink: 0;
-  transition: all 0.2s ease;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.ar-chip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+  pointer-events: none;
 }
 .ar-chip:hover {
   border-color: var(--ar-border-hover);
-  background: #1f1f23;
+  background: var(--ar-card-hover);
+  transform: translateY(-1px);
+}
+.ar-chip-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+.ar-chip-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
 .ar-chip-label {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 9px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--ar-text-muted);
+  letter-spacing: 0.8px;
+  color: var(--ar-text-dim);
 }
 .ar-chip-value {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--ar-text);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.3px;
 }
-.ar-chip-value.success { color: var(--ar-success); }
-.ar-chip-value.warning { color: var(--ar-warning); }
+.ar-chip-value.success { color: var(--ar-success); text-shadow: 0 0 20px var(--ar-success-glow); }
+.ar-chip-value.warning { color: var(--ar-warning); text-shadow: 0 0 20px var(--ar-warning-glow); }
 .ar-chip-value.danger { color: var(--ar-danger); }
-.ar-chip-value.accent { color: var(--ar-accent); }
+.ar-chip-value.accent { color: var(--ar-accent); text-shadow: 0 0 20px var(--ar-accent-glow); }
+.ar-chip-value.primary { color: var(--ar-primary); }
 
-/* ─── Indicador de estado del robot ───────────────────────────────────── */
+/* Chip especial para el robot */
+.ar-chip.robot-chip {
+  background: var(--ar-card);
+  border-color: var(--ar-border);
+}
+.ar-chip.robot-chip.active {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(6, 182, 212, 0.1));
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 20px var(--ar-success-glow);
+}
+
+/* ─── Indicador de estado del robot mejorado ──────────────────────────── */
 .ar-status-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--ar-text-dim);
   transition: all 0.3s ease;
+  position: relative;
 }
 .ar-status-dot.active {
   background: var(--ar-success);
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2), 0 0 12px rgba(34, 197, 94, 0.5);
-  animation: ar-pulse 2s ease-in-out infinite;
+  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2), 0 0 20px var(--ar-success-glow);
+  animation: ar-pulse-pro 2s ease-in-out infinite;
+}
+.ar-status-dot.active::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border: 2px solid var(--ar-success);
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: ar-ring 2s ease-in-out infinite;
 }
 .ar-status-dot.paused {
   background: var(--ar-warning);
   animation: ar-blink 1.5s ease-in-out infinite;
 }
-@keyframes ar-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2), 0 0 12px rgba(34, 197, 94, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0.1), 0 0 20px rgba(34, 197, 94, 0.3); }
+@keyframes ar-pulse-pro {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+@keyframes ar-ring {
+  0%, 100% { transform: scale(1); opacity: 0.3; }
+  50% { transform: scale(1.5); opacity: 0; }
 }
 @keyframes ar-blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  50% { opacity: 0.3; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PANEL FLOTANTE PROMINENTE - EL ELEMENTO PRINCIPAL
+   ═══════════════════════════════════════════════════════════════════════ */
+#ar-float-panel {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  z-index: 2147483646;
+  width: 320px;
+  background: linear-gradient(145deg, var(--ar-bg-elevated) 0%, var(--ar-bg) 100%);
+  border: 1px solid var(--ar-border);
+  border-radius: 24px;
+  padding: 0;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.05) inset;
+  overflow: hidden;
+  display: none;
+  animation: ar-panel-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#ar-float-panel.show { display: block; }
+@keyframes ar-panel-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Header del panel con gradiente */
+.ar-panel-header {
+  background: var(--ar-gradient-1);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.ar-panel-header::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -50%;
+  width: 100%;
+  height: 200%;
+  background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+.ar-panel-header-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.ar-panel-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: white;
+  letter-spacing: -0.5px;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+.ar-panel-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.15);
+  backdrop-filter: blur(10px);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+}
+.ar-panel-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: white;
+  animation: ar-status-blink 1s ease-in-out infinite;
+}
+@keyframes ar-status-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Contador principal del próximo bump */
+.ar-countdown-section {
+  padding: 24px 20px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.05) 0%, transparent 100%);
+  border-bottom: 1px solid var(--ar-border);
+}
+.ar-countdown-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--ar-text-muted);
+  margin-bottom: 12px;
+}
+.ar-countdown-timer {
+  font-size: 56px;
+  font-weight: 900;
+  color: var(--ar-text);
+  letter-spacing: -3px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  margin-bottom: 8px;
+  text-shadow: 0 4px 30px var(--ar-primary-glow);
+  background: var(--ar-gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.ar-countdown-sub {
+  font-size: 13px;
+  color: var(--ar-text-dim);
+  font-weight: 500;
+}
+.ar-countdown-progress {
+  margin-top: 16px;
+  height: 6px;
+  background: var(--ar-card);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ar-countdown-progress-fill {
+  height: 100%;
+  background: var(--ar-gradient-1);
+  border-radius: 3px;
+  transition: width 1s linear;
+  box-shadow: 0 0 15px var(--ar-primary-glow);
+}
+
+/* Grid de estadísticas mini */
+.ar-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--ar-border);
+}
+.ar-stat-mini {
+  background: var(--ar-bg);
+  padding: 16px 12px;
+  text-align: center;
+  transition: background 0.2s;
+}
+.ar-stat-mini:hover {
+  background: var(--ar-card);
+}
+.ar-stat-mini-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ar-text);
+  letter-spacing: -1px;
+  margin-bottom: 4px;
+}
+.ar-stat-mini-value.success { color: var(--ar-success); }
+.ar-stat-mini-value.accent { color: var(--ar-accent); }
+.ar-stat-mini-value.warning { color: var(--ar-warning); }
+.ar-stat-mini-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--ar-text-dim);
+}
+
+/* Información adicional del panel */
+.ar-panel-info {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--ar-bg);
+  border-top: 1px solid var(--ar-border);
+}
+.ar-panel-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ar-panel-info-icon {
+  width: 32px;
+  height: 32px;
+  background: var(--ar-card);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+.ar-panel-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ar-panel-info-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ar-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.ar-panel-info-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ar-text);
+}
+
+/* Botón de toggle del panel */
+#ar-panel-toggle {
+  position: fixed;
+  bottom: 24px;
+  right: 20px;
+  z-index: 2147483647;
+  width: 60px;
+  height: 60px;
+  background: var(--ar-gradient-1);
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: white;
+  box-shadow: 0 8px 30px var(--ar-primary-glow), 0 0 0 1px rgba(255,255,255,0.1) inset;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: system-ui;
+}
+#ar-panel-toggle:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 12px 40px var(--ar-primary-glow), 0 0 0 1px rgba(255,255,255,0.15) inset;
+}
+#ar-panel-toggle:active {
+  transform: scale(0.95);
+}
+#ar-panel-toggle.active {
+  background: var(--ar-gradient-2);
+  box-shadow: 0 8px 30px var(--ar-success-glow), 0 0 0 1px rgba(255,255,255,0.1) inset;
+}
+
+/* Badge de notificación en el toggle */
+.ar-toggle-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  height: 22px;
+  background: var(--ar-danger);
+  border-radius: 11px;
+  font-size: 11px;
+  font-weight: 800;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+  animation: ar-badge-pulse 2s ease-in-out infinite;
+}
+@keyframes ar-badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
 }
 
 /* ─── Responsive para móviles ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   #ar-bar {
-    height: 52px;
-    padding: 0 8px;
-    gap: 6px;
+    height: 56px;
+    padding: 0 12px;
+    gap: 8px;
   }
   .ar-brand {
-    padding-right: 12px;
-    margin-right: 4px;
+    padding-right: 14px;
+    margin-right: 8px;
+    gap: 10px;
   }
   .ar-logo {
-    width: 28px;
-    height: 28px;
-    font-size: 14px;
-    border-radius: 8px;
+    width: 34px;
+    height: 34px;
+    font-size: 17px;
+    border-radius: 10px;
   }
   .ar-brand-text { display: none; }
   .ar-chip {
-    padding: 5px 10px;
-    gap: 4px;
+    padding: 6px 10px;
+    gap: 6px;
   }
-  .ar-chip-label { font-size: 9px; }
+  .ar-chip-icon { display: none; }
+  .ar-chip-label { font-size: 8px; }
   .ar-chip-value { font-size: 12px; }
   .ar-hide-mobile { display: none !important; }
+  
+  #ar-float-panel {
+    width: calc(100% - 24px);
+    right: 12px;
+    bottom: 90px;
+    border-radius: 20px;
+  }
+  .ar-countdown-timer {
+    font-size: 44px;
+    letter-spacing: -2px;
+  }
+  .ar-stat-mini-value { font-size: 18px; }
+  
+  #ar-panel-toggle {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    right: 12px;
+    bottom: 20px;
+    font-size: 22px;
+  }
 }
 
 @media (max-width: 480px) {
-  #ar-bar { height: 48px; }
+  #ar-bar { 
+    height: 52px;
+    padding: 0 10px;
+  }
+  .ar-logo {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
   .ar-chip {
-    padding: 4px 8px;
+    padding: 5px 8px;
     border-radius: 16px;
   }
-  .ar-chip-label { font-size: 8px; letter-spacing: 0.3px; }
+  .ar-chip-content { gap: 0; }
+  .ar-chip-label { font-size: 7px; letter-spacing: 0.5px; }
   .ar-chip-value { font-size: 11px; }
+  
+  .ar-countdown-section { padding: 20px 16px; }
+  .ar-countdown-timer {
+    font-size: 38px;
+    letter-spacing: -1.5px;
+  }
+  .ar-stat-mini { padding: 12px 8px; }
+  .ar-stat-mini-value { font-size: 16px; }
+  .ar-stat-mini-label { font-size: 8px; }
 }
 
-/* ─── Botones flotantes modernos ──────────────────────────────────────── */
+/* ─── Botones flotantes secundarios ───────────────────────────────────── */
 #ar-btns {
   position: fixed;
-  bottom: 24px;
-  right: 16px;
-  z-index: 2147483647;
+  bottom: 100px;
+  left: 20px;
+  z-index: 2147483645;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .ar-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: none;
   cursor: pointer;
-  border-radius: 14px;
-  font-weight: 600;
+  border-radius: 16px;
+  font-weight: 700;
   font-size: 14px;
   padding: 14px 20px;
-  font-family: system-ui, -apple-system, sans-serif;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   -webkit-tap-highlight-color: transparent;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  position: relative;
+  overflow: hidden;
+}
+.ar-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 50%);
+  pointer-events: none;
 }
 .ar-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  transform: translateY(-2px) translateX(2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
 }
 .ar-btn:active {
   transform: scale(0.97);
@@ -407,66 +803,55 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   border: 1px solid var(--ar-border);
 }
 #ar-rb.active {
-  background: linear-gradient(135deg, #16a34a, #15803d);
+  background: linear-gradient(135deg, #10b981, #059669);
   color: white;
   border-color: transparent;
-  box-shadow: 0 4px 20px rgba(34, 197, 94, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  box-shadow: 0 4px 25px var(--ar-success-glow), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 #ar-rb.active:hover {
-  box-shadow: 0 8px 28px rgba(34, 197, 94, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  box-shadow: 0 8px 35px var(--ar-success-glow), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 /* Botón de soporte */
 #ar-sb {
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  background: var(--ar-gradient-1);
   color: white;
   border: none;
 }
 #ar-sb:hover {
-  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
-}
-
-/* Botón de estadísticas */
-#ar-stats-btn {
-  background: var(--ar-card);
-  color: var(--ar-text);
-  border: 1px solid var(--ar-border);
-}
-#ar-stats-btn:hover {
-  border-color: var(--ar-border-hover);
-  background: #1f1f23;
+  box-shadow: 0 8px 30px var(--ar-primary-glow), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
 }
 
 /* ─── Responsive para botones ─────────────────────────────────────────── */
 @media (max-width: 768px) {
   #ar-btns {
-    bottom: 20px;
-    right: 12px;
+    bottom: 90px;
+    left: 12px;
     gap: 10px;
   }
   .ar-btn {
     padding: 12px 16px;
     font-size: 13px;
-    border-radius: 12px;
-    gap: 6px;
+    border-radius: 14px;
+    gap: 8px;
   }
   .ar-btn-icon { font-size: 16px; }
 }
 
 @media (max-width: 480px) {
   #ar-btns {
-    bottom: 16px;
-    right: 10px;
+    bottom: 84px;
+    left: 10px;
     gap: 8px;
   }
   .ar-btn {
-    padding: 10px 14px;
+    padding: 10px 12px;
     font-size: 12px;
-    border-radius: 10px;
+    border-radius: 12px;
   }
   .ar-btn-icon { font-size: 15px; }
   .ar-btn-text { display: none; }
-  .ar-btn { padding: 12px; border-radius: 12px; }
+  .ar-btn { padding: 12px; border-radius: 14px; }
 }
 
 /* ─── Notificaciones flotantes ────────────────────────────────────────── */
@@ -925,25 +1310,32 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   transition: width 0.5s ease;
 }
 
-/* ─── Promo bar minimalista ───────────────────────────────────────────── */
+/* ─── Promo bar premium ───────────────────────────────────────────────── */
 #ar-promo {
   position: fixed;
-  top: 56px;
+  top: 64px;
   left: 0;
   right: 0;
   z-index: 2147483646;
-  background: var(--ar-card);
-  border-bottom: 1px solid var(--ar-border);
-  padding: 8px 16px;
+  background: linear-gradient(90deg, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 10px 16px;
   text-align: center;
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--ar-text-muted);
   display: none;
   animation: ar-promo-in 0.3s ease;
+  backdrop-filter: blur(10px);
 }
-#ar-promo strong { color: var(--ar-text); }
+#ar-promo strong { 
+  color: var(--ar-text); 
+  background: var(--ar-gradient-1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
 @keyframes ar-promo-in {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
@@ -955,9 +1347,16 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
 @media (max-width: 768px) {
   #ar-promo {
-    top: 52px;
+    top: 56px;
     font-size: 11px;
-    padding: 6px 12px;
+    padding: 8px 12px;
+  }
+}
+@media (max-width: 480px) {
+  #ar-promo {
+    top: 52px;
+    font-size: 10px;
+    padding: 6px 10px;
   }
 }
 </style>`;
@@ -979,44 +1378,126 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   const uiHtml = `
 ${modalHtml}
+<!-- ═══════════════════════════════════════════════════════════════════════
+     BARRA SUPERIOR PREMIUM
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div id="ar-bar">
   <div class="ar-brand">
     <div class="ar-logo">👼</div>
-    <span class="ar-brand-text">Angel Rent</span>
+    <div class="ar-brand-text">
+      <span class="ar-brand-name">Angel Rent</span>
+      <span class="ar-brand-tag">Premium Service</span>
+    </div>
   </div>
+  
   <div class="ar-chip">
-    <span class="ar-chip-label">Usuario</span>
-    <span class="ar-chip-value" id="ar-uname" style="color:var(--ar-text-muted)"></span>
+    <span class="ar-chip-icon">👤</span>
+    <div class="ar-chip-content">
+      <span class="ar-chip-label">Usuario</span>
+      <span class="ar-chip-value" id="ar-uname" style="color:var(--ar-text-muted)"></span>
+    </div>
   </div>
+  
   <div class="ar-chip">
-    <span class="ar-chip-label">Renta</span>
-    <span class="ar-chip-value success" id="ar-rent">...</span>
+    <span class="ar-chip-icon">📅</span>
+    <div class="ar-chip-content">
+      <span class="ar-chip-label">Renta</span>
+      <span class="ar-chip-value success" id="ar-rent">...</span>
+    </div>
   </div>
-  <div class="ar-chip">
+  
+  <div class="ar-chip robot-chip" id="ar-robot-chip">
     <div class="ar-status-dot" id="ar-dot"></div>
-    <span class="ar-chip-label">Robot</span>
-    <span class="ar-chip-value" id="ar-status" style="color:var(--ar-text-dim)">OFF</span>
+    <div class="ar-chip-content">
+      <span class="ar-chip-label">Robot</span>
+      <span class="ar-chip-value" id="ar-status" style="color:var(--ar-text-dim)">OFF</span>
+    </div>
   </div>
-  <div class="ar-chip" id="ar-cd-chip" style="display:none">
-    <span class="ar-chip-label">Próximo</span>
-    <span class="ar-chip-value accent" id="ar-cd">--:--</span>
-  </div>
-  <div class="ar-chip" id="ar-cnt-chip" style="display:none">
-    <span class="ar-chip-label">Bumps</span>
-    <span class="ar-chip-value accent" id="ar-cnt">0</span>
-  </div>
+  
   <div class="ar-chip ar-hide-mobile">
-    <span class="ar-chip-label">Vistas</span>
-    <span class="ar-chip-value success" id="ar-views">...</span>
+    <span class="ar-chip-icon">👁</span>
+    <div class="ar-chip-content">
+      <span class="ar-chip-label">Vistas 24h</span>
+      <span class="ar-chip-value success" id="ar-views">...</span>
+    </div>
   </div>
+  
   <div class="ar-chip ar-hide-mobile">
-    <span class="ar-chip-label">Boost</span>
-    <span class="ar-chip-value warning">x2.5</span>
+    <span class="ar-chip-icon">🚀</span>
+    <div class="ar-chip-content">
+      <span class="ar-chip-label">Boost</span>
+      <span class="ar-chip-value warning">x2.5</span>
+    </div>
   </div>
 </div>
 
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     PANEL FLOTANTE PROMINENTE - ELEMENTO PRINCIPAL
+     ═══════════════════════════════════════════════════════════════════════ -->
+<div id="ar-float-panel">
+  <div class="ar-panel-header">
+    <div class="ar-panel-header-content">
+      <span class="ar-panel-title">Control de Bumps</span>
+      <div class="ar-panel-status" id="ar-panel-status">
+        <div class="ar-panel-status-dot"></div>
+        <span id="ar-panel-status-text">Inactivo</span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="ar-countdown-section">
+    <div class="ar-countdown-label">Próximo Bump en</div>
+    <div class="ar-countdown-timer" id="ar-panel-timer">--:--</div>
+    <div class="ar-countdown-sub" id="ar-panel-sub">Activa el robot para comenzar</div>
+    <div class="ar-countdown-progress">
+      <div class="ar-countdown-progress-fill" id="ar-panel-progress" style="width:0%"></div>
+    </div>
+  </div>
+  
+  <div class="ar-stats-grid">
+    <div class="ar-stat-mini">
+      <div class="ar-stat-mini-value accent" id="ar-panel-bumps">0</div>
+      <div class="ar-stat-mini-label">Bumps Hoy</div>
+    </div>
+    <div class="ar-stat-mini">
+      <div class="ar-stat-mini-value success" id="ar-panel-views">0</div>
+      <div class="ar-stat-mini-label">Vistas</div>
+    </div>
+    <div class="ar-stat-mini">
+      <div class="ar-stat-mini-value warning" id="ar-panel-ranking">#3</div>
+      <div class="ar-stat-mini-label">Ranking</div>
+    </div>
+  </div>
+  
+  <div class="ar-panel-info">
+    <div class="ar-panel-info-item">
+      <div class="ar-panel-info-icon">⏱</div>
+      <div class="ar-panel-info-text">
+        <span class="ar-panel-info-label">Intervalo</span>
+        <span class="ar-panel-info-value">16-20 min</span>
+      </div>
+    </div>
+    <div class="ar-panel-info-item">
+      <div class="ar-panel-info-icon">🔋</div>
+      <div class="ar-panel-info-text">
+        <span class="ar-panel-info-label">Modo</span>
+        <span class="ar-panel-info-value" id="ar-panel-mode">Auto</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Botón toggle del panel flotante -->
+<button id="ar-panel-toggle">
+  <span id="ar-toggle-icon">📊</span>
+  <span class="ar-toggle-badge" id="ar-toggle-badge" style="display:none">0</span>
+</button>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     NOTIFICACIONES
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div id="ar-notify">
   <div class="ar-notify-header">
     <div class="ar-notify-icon">👤</div>
@@ -1025,11 +1506,10 @@ ${modalHtml}
   <div class="ar-notify-msg" id="notify-msg">Alguien vio tu anuncio</div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     BOTONES FLOTANTES LATERALES
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div id="ar-btns">
-  <button id="ar-stats-btn" class="ar-btn">
-    <span class="ar-btn-icon">📊</span>
-    <span class="ar-btn-text">Estadísticas</span>
-  </button>
   <button id="ar-rb" class="ar-btn">
     <span class="ar-btn-icon" id="ar-ri">⚡</span>
     <span class="ar-btn-text" id="ar-rl">Robot OFF</span>
@@ -1040,43 +1520,46 @@ ${modalHtml}
   </button>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════════════
+     MODAL DE ESTADÍSTICAS DETALLADAS
+     ═══════════════════════════════════════════════════════════════════════ -->
 <div id="ar-stats-modal" class="ar-modal">
   <div class="ar-modal-content">
     <div class="ar-modal-header">
-      <div class="ar-modal-icon">📊</div>
-      <div class="ar-modal-title">Estadísticas</div>
-      <div class="ar-modal-subtitle">Rendimiento en tiempo real</div>
+      <div class="ar-modal-icon" style="background:var(--ar-gradient-1)">📊</div>
+      <div class="ar-modal-title">Estadísticas Detalladas</div>
+      <div class="ar-modal-subtitle">Rendimiento en tiempo real de tu anuncio</div>
     </div>
     
     <div class="ar-stat-card">
       <div class="ar-stat-label">Vistas Totales</div>
       <div class="ar-stat-value" id="stat-total-views">0</div>
-      <div class="ar-stat-desc">en las últimas 24 horas</div>
+      <div class="ar-stat-desc">acumuladas en las últimas 24 horas</div>
       <span class="ar-stat-badge">↗ +127% vs ayer</span>
     </div>
 
     <div class="ar-stat-card">
       <div class="ar-stat-label">Clientes Interesados</div>
       <div class="ar-stat-value" id="stat-interested">0</div>
-      <div class="ar-stat-desc">han guardado o contactado</div>
+      <div class="ar-stat-desc">han guardado o contactado tu anuncio</div>
       <span class="ar-stat-badge">↗ +89% esta semana</span>
     </div>
 
     <div class="ar-stat-card">
       <div class="ar-stat-label">Posición en Búsqueda</div>
       <div class="ar-stat-value" style="color:var(--ar-warning)">#<span id="stat-ranking">3</span></div>
-      <div class="ar-stat-desc">en tu ciudad</div>
+      <div class="ar-stat-desc">en los resultados de tu ciudad</div>
       <span class="ar-stat-badge">↗ Subiste 12 posiciones</span>
     </div>
 
     <div class="ar-stat-card">
-      <div class="ar-stat-label">Boost Activo</div>
+      <div class="ar-stat-label">Multiplicador Boost</div>
       <div class="ar-stat-value" style="color:var(--ar-warning)">x<span id="stat-boost">2.5</span></div>
-      <div class="ar-stat-desc">multiplicador de visibilidad</div>
+      <div class="ar-stat-desc">visibilidad aumentada activa</div>
       <span class="ar-stat-badge">Máxima potencia</span>
     </div>
 
-    <button class="ar-btn-secondary" id="ar-stats-close" style="margin-top:8px">Cerrar</button>
+    <button class="ar-btn-secondary" id="ar-stats-close" style="margin-top:12px">Cerrar</button>
   </div>
 </div>
 
@@ -1236,12 +1719,12 @@ function showNextPromo(){
   _promoIdx++;
   el.style.animation="ar-promo-in .3s ease";
   el.style.display="block";
-  document.body.style.paddingTop="88px";
+  document.body.style.paddingTop="100px";
   _promoTimer=setTimeout(function(){
     el.style.animation="ar-promo-out .3s ease forwards";
     setTimeout(function(){
       el.style.display="none";
-      document.body.style.paddingTop="56px";
+      document.body.style.paddingTop="64px";
       _promoTimer=setTimeout(showNextPromo,25000);
     },300);
   },8000);
@@ -1285,6 +1768,13 @@ function updateUI(){
     else if(on&&paused)dot.classList.add("paused");
   }
   
+  // Robot chip styling
+  var robotChip=G("ar-robot-chip");
+  if(robotChip){
+    robotChip.classList.remove("active");
+    if(on&&!paused)robotChip.classList.add("active");
+  }
+  
   var st=G("ar-status");
   if(st){
     if(!on){
@@ -1299,18 +1789,90 @@ function updateUI(){
     }
   }
   
-  var cdChip=G("ar-cd-chip");
-  if(on&&!paused){
-    if(cdChip)cdChip.style.display="";
-    var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
-    if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);
-  }else if(cdChip)cdChip.style.display="none";
+  // Panel flotante - Actualización del countdown
+  var left=0;
+  if(on&&!paused&&nextAt>0){
+    left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
+  }
+  var mins=Math.floor(left/60);
+  var secs=left%60;
+  var timerStr=p2(mins)+":"+p2(secs);
   
-  var cntChip=G("ar-cnt-chip");
-  if(on){
-    if(cntChip)cntChip.style.display="";
-    if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
-  }else if(cntChip)cntChip.style.display="none";
+  // Timer principal del panel
+  var panelTimer=G("ar-panel-timer");
+  if(panelTimer){
+    panelTimer.textContent=on&&!paused?timerStr:"--:--";
+  }
+  
+  // Subtexto del panel
+  var panelSub=G("ar-panel-sub");
+  if(panelSub){
+    if(!on){
+      panelSub.textContent="Activa el robot para comenzar";
+    }else if(paused){
+      panelSub.textContent="Robot en pausa";
+    }else{
+      panelSub.textContent="Republicando automáticamente";
+    }
+  }
+  
+  // Barra de progreso del countdown (asumiendo 18 min = 1080s promedio)
+  var panelProgress=G("ar-panel-progress");
+  if(panelProgress){
+    if(on&&!paused&&nextAt>0){
+      var totalSecs=1080; // 18 min promedio
+      var elapsed=totalSecs-left;
+      var pct=Math.min(100,Math.max(0,(elapsed/totalSecs)*100));
+      panelProgress.style.width=pct+"%";
+    }else{
+      panelProgress.style.width="0%";
+    }
+  }
+  
+  // Status del panel
+  var panelStatus=G("ar-panel-status");
+  var panelStatusText=G("ar-panel-status-text");
+  var panelStatusDot=panelStatus?panelStatus.querySelector(".ar-panel-status-dot"):null;
+  if(panelStatusText){
+    if(!on){
+      panelStatusText.textContent="Inactivo";
+      if(panelStatusDot)panelStatusDot.style.background="#5c5c70";
+    }else if(paused){
+      panelStatusText.textContent="Pausado";
+      if(panelStatusDot)panelStatusDot.style.background="#f59e0b";
+    }else{
+      panelStatusText.textContent="Activo";
+      if(panelStatusDot)panelStatusDot.style.background="#10b981";
+    }
+  }
+  
+  // Bumps en panel
+  var panelBumps=G("ar-panel-bumps");
+  if(panelBumps)panelBumps.textContent=String(cnt);
+  
+  // Toggle button styling
+  var toggleBtn=G("ar-panel-toggle");
+  if(toggleBtn){
+    toggleBtn.classList.remove("active");
+    if(on&&!paused)toggleBtn.classList.add("active");
+  }
+  
+  // Badge de bumps en toggle
+  var toggleBadge=G("ar-toggle-badge");
+  if(toggleBadge){
+    if(cnt>0){
+      toggleBadge.textContent=String(cnt);
+      toggleBadge.style.display="flex";
+    }else{
+      toggleBadge.style.display="none";
+    }
+  }
+  
+  // Panel mode
+  var panelMode=G("ar-panel-mode");
+  if(panelMode){
+    panelMode.textContent=on?"Auto":"Manual";
+  }
   
   var rb=G("ar-rb");
   if(rb){
@@ -1319,6 +1881,15 @@ function updateUI(){
   }
   
   updateFakeUI();
+  updatePanelStats();
+}
+
+function updatePanelStats(){
+  var s=gst();
+  var panelViews=G("ar-panel-views");
+  var panelRanking=G("ar-panel-ranking");
+  if(panelViews)panelViews.textContent=String(s.fakeViews||0);
+  if(panelRanking)panelRanking.textContent="#"+String(s.fakeRanking||3);
 }
 
 function schedNext(){var secs=BMIN+Math.floor(Math.random()*(BMAX-BMIN));var s=gst();s.nextAt=Date.now()+secs*1000;sst(s);addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");}
@@ -1710,13 +2281,42 @@ if(warnModal){
   });
 }
 
-if(document.body)document.body.style.paddingTop="56px";
+if(document.body)document.body.style.paddingTop="64px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 
+// Panel flotante toggle
+var panelToggle=G("ar-panel-toggle");
+var floatPanel=G("ar-float-panel");
+var panelVisible=true;
+if(panelToggle&&floatPanel){
+  floatPanel.classList.add("show");
+  panelToggle.addEventListener("click",function(e){
+    e.preventDefault();
+    e.stopPropagation();
+    panelVisible=!panelVisible;
+    if(panelVisible){
+      floatPanel.classList.add("show");
+      G("ar-toggle-icon").textContent="📊";
+    }else{
+      floatPanel.classList.remove("show");
+      G("ar-toggle-icon").textContent="📈";
+    }
+  });
+}
+
+// Actualizar UI del panel cada segundo
+setInterval(function(){
+  updateUI();
+},1000);
+
 var arStatsModal=G("ar-stats-modal");
-var statsBtn=G("ar-stats-btn");
-if(statsBtn)statsBtn.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();if(arStatsModal){arStatsModal.classList.add("show");updateFakeUI();}});
+// Click en el panel para abrir estadísticas detalladas
+if(floatPanel)floatPanel.addEventListener("click",function(e){
+  if(e.target===floatPanel||e.target.closest(".ar-stats-grid")||e.target.closest(".ar-countdown-section")){
+    if(arStatsModal){arStatsModal.classList.add("show");updateFakeUI();}
+  }
+});
 if(G("ar-stats-close"))G("ar-stats-close").addEventListener("click",function(){if(arStatsModal)arStatsModal.classList.remove("show");});
 if(arStatsModal)arStatsModal.addEventListener("click",function(e){if(e.target===arStatsModal)arStatsModal.classList.remove("show");});
 
