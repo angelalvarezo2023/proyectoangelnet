@@ -1,6 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// ANGEL RENT - DISEÑO PREMIUM MEJORADO 
+// ANGEL RENT - DISEÑO PREMIUM MEJORADO v2
 // Versión moderna con glassmorphism, animaciones suaves y mejor UX
+// Actualizado: 24 Mar 2026
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -613,7 +614,7 @@ ${modalHtml}
   <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
   <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
   <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
-  <div class="ars"><span class="arl">👁 Vistas</span><span class="arv arg" id="ar-views">...</span></div>
+  <div class="ars"><span class="arl">�� Vistas</span><span class="arv arg" id="ar-views">...</span></div>
   <div class="ars ars-hide-mobile"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
