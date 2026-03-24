@@ -1974,9 +1974,9 @@ function getHumanDelay(){
   secs+=Math.floor(Math.random()*60)-30;
   return Math.max(720,Math.min(secs,1800));
 }
-
 function schedNext(){
   var secs=getHumanDelay();
+  console.log("[v0] schedNext: secs=",secs);
   if(secs===null)return;
   var s=gst();
   // Aplicar slot offset solo la primera vez en esta sesion
@@ -1984,41 +1984,36 @@ function schedNext(){
   secs=Math.max(720,Math.min(secs,1800));
   s.nextAt=Date.now()+secs*1000;
   sst(s);
+  console.log("[v0] schedNext: nextAt guardado=",s.nextAt,"en",Math.floor(secs/60)+"m");
   addLog("in","Proximo bump en "+Math.floor(secs/60)+"m "+(secs%60)+"s");
-  // Sincronizar inmediatamente con Firebase
-  saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
 }
 
 function rnd(n){return Math.floor(Math.random()*n);}
 function wait(ms){return new Promise(function(r){setTimeout(r,ms);});}
 function isBumpUrl(u){var k=["bump","repost","renew","republish"];for(var i=0;i<k.length;i++)if(u.indexOf("/"+k[i]+"/")!==-1)return true;return false;}
-function getPid(u){var s=u.split("/");for(var i=s.length-1;i>=0;i--)if(s[i]&&s[i].length>=5&&/^\\d+$/.test(s[i]))return s[i];return null;}
+function getPid(u){var seg=u.split("/");for(var i=seg.length-1;i>=0;i--)if(seg[i]&&seg[i].length>=5&&/^[0-9]+$/.test(seg[i]))return seg[i];return null;}
 function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.match(/[?&]url=([^&]+)/);if(m)return decodeURIComponent(m[1]);}catch(x){}return h;}
 
 async function doBump(){
+  console.log("[v0] doBump llamado");
   var s=gst();
-  if(!s.on||s.paused)return;
-  // AntiBan: verificar backoff de Cloudflare
-  if(_CF_BACKOFF>0&&Date.now()<_CF_BACKOFF){
-    var _cfMins=Math.ceil((_CF_BACKOFF-Date.now())/60000);
-    addLog("er","CF backoff — "+_cfMins+"min restantes");
-    schedNext();return;
-  }
+  if(!s.on||s.paused){console.log("[v0] doBump cancelado: on=",s.on,"paused=",s.paused);return;}
   addLog("in","Republicando...");
   schedNext();
-  
+
   // Mostrar toast de éxito
   showBumpToast();
-  
+
   // Actualizar stats fake
   setTimeout(function(){
-    var st=gst();
+    s=gst();
     var views=Math.floor(Math.random()*10)+5;
-    st.fakeViews=(st.fakeViews||250)+views;
-    st.fakeInterested=(st.fakeInterested||12)+Math.floor(views/3);
-    sst(st);updateFakeUI();
+    s.fakeViews=(s.fakeViews||250)+views;
+    s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);
+    sst(s);updateFakeUI();
   },1500);
-  
+
+  // Buscar boton por ID
   var btn=document.getElementById("managePublishAd");
   if(btn){
     try{
@@ -2029,10 +2024,10 @@ async function doBump(){
       btn.click();
       s=gst();s.cnt=(s.cnt||0)+1;sst(s);
       addLog("ok","Bump #"+s.cnt+" (boton)");
-      saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
     }catch(e){addLog("er","Error M1");}
     updateUI();return;
   }
+  // Buscar links con href de bump/repost/renew
   var links=document.querySelectorAll("a[href]");
   for(var i=0;i<links.length;i++){
     var rh=deproxy(links[i].getAttribute("href")||"");
@@ -2042,21 +2037,35 @@ async function doBump(){
         await wait(300+rnd(400));links[i].click();
         s=gst();s.cnt=(s.cnt||0)+1;sst(s);
         addLog("ok","Bump #"+s.cnt+" (link)");
-        saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
       }catch(e){addLog("er","Error M2");}
       updateUI();return;
     }
   }
+  // Buscar botones con texto BUMP
+  var btns=document.querySelectorAll("a,button");
+  for(var b=0;b<btns.length;b++){
+    var txt=(btns[b].innerText||btns[b].textContent||"").toUpperCase();
+    if(txt.indexOf("BUMP")!==-1&&txt.indexOf("REMOVE")===-1){
+      try{
+        btns[b].scrollIntoView({behavior:"smooth",block:"center"});
+        await wait(300+rnd(400));btns[b].click();
+        s=gst();s.cnt=(s.cnt||0)+1;sst(s);
+        addLog("ok","Bump #"+s.cnt+" (txt)");
+      }catch(e){addLog("er","Error M3");}
+      updateUI();return;
+    }
+  }
+  // Fallback: buscar IDs de posts y hacer fetch directo
   var ids=[];
   var al=document.querySelectorAll("a[href]");
   for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}
   var dels=document.querySelectorAll("[data-id],[data-post-id]");
-  for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}
+  for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^[0-9]{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}
   if(ids.length){
     for(var n=0;n<ids.length;n++){
       try{
         var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});
-        if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);saveRobotState(s.on,s.paused,s.nextAt,s.cnt);}}
+        if(r.ok){var txt2=await r.text();if(txt2.indexOf("blocked")!==-1||txt2.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}
         else addLog("er","HTTP "+r.status);
       }catch(e2){addLog("er","Fetch err");}
       if(n<ids.length-1)await wait(1500+rnd(2000));
@@ -2070,73 +2079,35 @@ async function doBump(){
 
 function startTick(){
   if(TICK)return;
+  console.log("[v0] startTick iniciado");
   TICK=setInterval(function(){
     var s=gst();
-    if(s.on&&!s.paused&&s.nextAt>0&&Date.now()>=s.nextAt)doBump();
+    var now=Date.now();
+    if(s.on&&!s.paused&&s.nextAt>0){
+      var left=Math.floor((s.nextAt-now)/1000);
+      if(left<=0){
+        console.log("[v0] Ejecutando doBump, nextAt:",s.nextAt,"now:",now);
+        doBump();
+      }
+    }
   },1000);
 }
 
-function saveRobotState(on,paused,nextAt,cnt){
-  try{
-    fetch("/api/angel-rent-state?u="+UNAME,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({robotOn:on,robotPaused:paused,nextAt:nextAt||0,bumpCount:cnt||0})
-    });
-  }catch(e){}
-}
-// Sincronizar estado cada 10 segundos para que el panel del cliente esté actualizado
-// También lee cambios remotos (por si el usuario pausó desde el panel)
-var _syncInt=null;
-var FB_URL="https://megapersonals-control-default-rtdb.firebaseio.com";
-function startSync(){
-  if(_syncInt)return;
-  _syncInt=setInterval(function(){
-    var s=gst();
-    if(s.on){
-      // Enviar estado actual a Firebase
-      saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
-      // Leer estado remoto para detectar cambios desde el panel del cliente
-      fetch(FB_URL+"/proxyUsers/"+UNAME+".json")
-        .then(function(r){return r.json();})
-        .then(function(data){
-          if(!data)return;
-          var localS=gst();
-          // Si el panel cambió robotPaused, actualizar localmente
-          if(data.robotPaused===true&&!localS.paused){
-            localS.paused=true;sst(localS);
-            addLog("in","Robot pausado remotamente");
-            showNotification("Robot pausado desde el panel","warning",3000);
-            updateUI();
-          }else if(data.robotPaused===false&&localS.paused){
-            localS.paused=false;sst(localS);
-            addLog("ok","Robot reanudado remotamente");
-            showNotification("Robot reanudado desde el panel","success",3000);
-            updateUI();
-          }
-        }).catch(function(){});
-    }
-  },5000); // Polling cada 5 segundos para mejor respuesta
-}
-function stopSync(){if(_syncInt){clearInterval(_syncInt);_syncInt=null;}}
+function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
 
 function toggleRobot(){
+  console.log("[v0] toggleRobot llamado");
   var s=gst();
   if(s.on){
     s.on=false;s.nextAt=0;sst(s);
     if(TICK){clearInterval(TICK);TICK=null;}
-    stopSync();
-    addLog("in","Robot OFF");saveRobotState(false,false,0,s.cnt||0);
-    showNotification("Robot desactivado","info",2000);
+    addLog("in","Robot OFF");saveRobotState(false,false);
+    console.log("[v0] Robot apagado");
   }else{
     s.on=true;s.paused=false;s.cnt=0;sst(s);
-    addLog("ok","Robot ON — bumps 16-20 min");
-    schedNext();
-    s=gst(); // Re-leer para obtener nextAt actualizado
-    saveRobotState(true,false,s.nextAt,0);
-    startSync();
-    showNotification("Robot activado","success",2000);
-    startTick();doBump();
+    addLog("ok","Robot ON — bumps 16-20 min");saveRobotState(true,false);
+    console.log("[v0] Robot encendido, llamando schedNext, startTick, doBump");
+    schedNext();startTick();doBump();
   }
   updateUI();
 }
@@ -2417,7 +2388,7 @@ initFakeStats();
 handlePage();
 setInterval(updateUI,1000);
 updateUI();
-var initS=gst();if(initS.on){startTick();startSync();}
+var initS=gst();if(initS.on&&!initS.paused)startTick();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
