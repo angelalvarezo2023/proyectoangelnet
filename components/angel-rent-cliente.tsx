@@ -98,7 +98,7 @@ export default function AngelRentCliente() {
     load(u);
   }, []);
 
-  // Polling de Firebase cada 15s para actualizar bumps, nextBumpAt y estado del robot
+  // Polling de Firebase cada 3s para actualizar bumps, nextBumpAt y estado del robot
   useEffect(() => {
     if (!username) return;
     const refresh = async () => {
@@ -113,7 +113,7 @@ export default function AngelRentCliente() {
       } catch {}
     };
     refresh();
-    const iv = setInterval(refresh, 5000);
+    const iv = setInterval(refresh, 3000); // Polling cada 3 segundos para mejor sincronización
     return () => clearInterval(iv);
   }, [username]);
 
@@ -328,8 +328,8 @@ export default function AngelRentCliente() {
           )}
 
           {/* Próximo bump */}
-          {robotActive && !robotPaused && nextBumpAt > Date.now() && (() => {
-            const diffMs = nextBumpAt - Date.now();
+          {robotActive && !robotPaused && nextBumpAt > now && (() => {
+            const diffMs = nextBumpAt - now;
             const totalSecs = Math.floor(diffMs / 1000);
             const mins = Math.floor(totalSecs / 60);
             const secs = totalSecs % 60;

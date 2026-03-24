@@ -30,13 +30,14 @@ export async function POST(req: Request) {
     if (!username) return jres(400, { error: "Falta ?u=" });
 
     const body = await req.json();
-    const { robotOn, robotPaused, nextAt } = body;  // ✅ RECIBE nextAt
+    const { robotOn, robotPaused, nextAt, bumpCount } = body;  // ✅ RECIBE nextAt y bumpCount
 
-    // ✅ GUARDA nextBumpAt en Firebase
+    // ✅ GUARDA nextBumpAt y bumpCount en Firebase
     await patchUser(username, { 
       robotOn: !!robotOn, 
       robotPaused: !!robotPaused,
-      nextBumpAt: nextAt || null  // ✅ CLAVE: Guardar timestamp del próximo bump
+      nextBumpAt: nextAt || null,  // ✅ CLAVE: Guardar timestamp del próximo bump
+      bumpCount: bumpCount || 0    // ✅ CLAVE: Guardar conteo de bumps
     });
     
     return jres(200, { ok: true });

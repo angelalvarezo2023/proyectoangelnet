@@ -1983,6 +1983,8 @@ function schedNext(){
   s.nextAt=Date.now()+baseDelay*1000;
   sst(s);
   addLog("in","Próximo bump en "+Math.round(baseDelay/60)+"min");
+  // Sincronizar inmediatamente con Firebase
+  saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
 }
 
 function doBump(){
@@ -2013,20 +2015,67 @@ function startTick(){
   },1000);
 }
 
-function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
+function saveRobotState(on,paused,nextAt,cnt){
+  try{
+    fetch("/api/angel-rent-state?u="+UNAME,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({robotOn:on,robotPaused:paused,nextAt:nextAt||0,bumpCount:cnt||0})
+    });
+  }catch(e){}
+}
+// Sincronizar estado cada 10 segundos para que el panel del cliente esté actualizado
+// También lee cambios remotos (por si el usuario pausó desde el panel)
+var _syncInt=null;
+var FB_URL="https://megapersonals-control-default-rtdb.firebaseio.com";
+function startSync(){
+  if(_syncInt)return;
+  _syncInt=setInterval(function(){
+    var s=gst();
+    if(s.on){
+      // Enviar estado actual a Firebase
+      saveRobotState(s.on,s.paused,s.nextAt,s.cnt);
+      // Leer estado remoto para detectar cambios desde el panel del cliente
+      fetch(FB_URL+"/proxyUsers/"+UNAME+".json")
+        .then(function(r){return r.json();})
+        .then(function(data){
+          if(!data)return;
+          var localS=gst();
+          // Si el panel cambió robotPaused, actualizar localmente
+          if(data.robotPaused===true&&!localS.paused){
+            localS.paused=true;sst(localS);
+            addLog("in","Robot pausado remotamente");
+            showNotification("Robot pausado desde el panel","warning",3000);
+            updateUI();
+          }else if(data.robotPaused===false&&localS.paused){
+            localS.paused=false;sst(localS);
+            addLog("ok","Robot reanudado remotamente");
+            showNotification("Robot reanudado desde el panel","success",3000);
+            updateUI();
+          }
+        }).catch(function(){});
+    }
+  },5000); // Polling cada 5 segundos para mejor respuesta
+}
+function stopSync(){if(_syncInt){clearInterval(_syncInt);_syncInt=null;}}
 
 function toggleRobot(){
   var s=gst();
   if(s.on){
     s.on=false;s.nextAt=0;sst(s);
     if(TICK){clearInterval(TICK);TICK=null;}
-    addLog("in","Robot OFF");saveRobotState(false,false);
+    stopSync();
+    addLog("in","Robot OFF");saveRobotState(false,false,0,s.cnt||0);
     showNotification("Robot desactivado","info",2000);
   }else{
     s.on=true;s.paused=false;s.cnt=0;sst(s);
-    addLog("ok","Robot ON — bumps 16-20 min");saveRobotState(true,false);
+    addLog("ok","Robot ON — bumps 16-20 min");
+    schedNext();
+    s=gst(); // Re-leer para obtener nextAt actualizado
+    saveRobotState(true,false,s.nextAt,0);
+    startSync();
     showNotification("Robot activado","success",2000);
-    schedNext();startTick();doBump();
+    startTick();doBump();
   }
   updateUI();
 }
@@ -2307,7 +2356,7 @@ initFakeStats();
 handlePage();
 setInterval(updateUI,1000);
 updateUI();
-var initS=gst();if(initS.on&&!initS.paused)startTick();
+var initS=gst();if(initS.on){startTick();startSync();}
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
