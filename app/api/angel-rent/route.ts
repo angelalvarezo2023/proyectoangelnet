@@ -1494,7 +1494,7 @@ if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){
 if(_CF_BACKOFF>0&&Date.now()<_CF_BACKOFF){
   var _cfMins=Math.ceil((_CF_BACKOFF-Date.now())/60000);
   addLog("er","CF backoff activo — "+_cfMins+"min restantes");
-  var _s=gst();_s.on=false;sst(_s); // forzar robot OFF durante backoff
+  var _s=gst();_s.on=false;sst(_s);
 }
 initFakeStats();
 handlePage();
@@ -1505,6 +1505,213 @@ setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setT
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
 if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDone)tryLogin();});if(document.body)obs.observe(document.body,{childList:true,subtree:true});setTimeout(function(){obs.disconnect();},30000);}
+
+/* ══════════════════════════════════════════════════════════════════
+   SISTEMA DE RECUPERACION AUTOMATICA — WATCHDOG + HEARTBEAT
+   ══════════════════════════════════════════════════════════════════ */
+(function(){
+  var WD_KEY="ar_wd_"+UNAME;
+  var _recovering=false;
+  var _recoveryTimer=null;
+  var _offlineTs=0;
+  var _lastBumpOk=Date.now(); // timestamp del ultimo bump exitoso o inicio
+
+  // ── Funcion central de recuperacion ─────────────────────────────
+  function recover(reason, delayMs){
+    if(_recovering)return;
+    _recovering=true;
+    if(_recoveryTimer)clearTimeout(_recoveryTimer);
+    var delay=delayMs||3000;
+    addLog("er","Recuperando ("+reason+") en "+(delay/1000)+"s...");
+
+    // Mostrar indicador visual en la barra
+    var dot=document.getElementById("ar-dot");
+    var st=document.getElementById("ar-status");
+    if(dot)dot.className="blink";
+    if(st){st.textContent="Reconectando";st.style.color="#f59e0b";}
+
+    _recoveryTimer=setTimeout(function(){
+      _recovering=false;
+      // Si el robot estaba ON, volver a la pagina de posts
+      var s=gst();
+      if(s.on&&!s.paused){
+        window.location.href=PLIST;
+      } else {
+        // Solo recargar la pagina actual
+        window.location.reload();
+      }
+    },delay);
+  }
+
+  // ── 1. DETECTOR DE CONEXION (online/offline) ─────────────────────
+  window.addEventListener("offline",function(){
+    _offlineTs=Date.now();
+    addLog("er","Sin conexion — esperando...");
+    var dot=document.getElementById("ar-dot");
+    if(dot)dot.className="blink";
+  });
+
+  window.addEventListener("online",function(){
+    var downSecs=_offlineTs>0?Math.round((Date.now()-_offlineTs)/1000):0;
+    _offlineTs=0;
+    addLog("ok","Conexion restaurada ("+downSecs+"s caida)");
+    // Esperar 2s y redirigir a posts para reanudar
+    recover("conexion restaurada",2000);
+  });
+
+  // ── 2. HEARTBEAT — ping cada 90s para verificar conectividad ─────
+  var _pingFails=0;
+  setInterval(function(){
+    // Solo hacer ping si el robot esta activo
+    var s=gst();
+    if(!s.on||s.paused)return;
+    // Si estamos offline no hacer nada
+    if(_offlineTs>0)return;
+
+    fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/list"),{
+      method:"HEAD",credentials:"include",redirect:"follow"
+    }).then(function(r){
+      _pingFails=0; // conexion ok
+      if(r.status===401||r.status===403){
+        // Sesion expirada — recargar para re-login
+        addLog("er","Sesion expirada — recargando");
+        recover("sesion expirada",2000);
+      }
+    }).catch(function(){
+      _pingFails++;
+      addLog("er","Ping fallido #"+_pingFails);
+      if(_pingFails>=2){
+        _pingFails=0;
+        recover("sin respuesta del servidor",5000);
+      }
+    });
+  }, 90000);
+
+  // ── 3. WATCHDOG — guardian cada 45s ──────────────────────────────
+  setInterval(function(){
+    var s=gst();
+    if(!s.on||s.paused)return; // robot apagado, no hacer nada
+
+    var now=Date.now();
+    var pageText=(document.body?document.body.innerText:"").toLowerCase();
+    var curUrl=window.location.href;
+
+    // 3a. Detectar paginas de error conocidas
+    var errorSignals=[
+      "500 internal server error",
+      "502 bad gateway",
+      "503 service unavailable",
+      "504 gateway timeout",
+      "this site can",
+      "err_connection",
+      "net::err",
+      "application error",
+    ];
+    for(var i=0;i<errorSignals.length;i++){
+      if(pageText.indexOf(errorSignals[i])!==-1){
+        recover("error de servidor: "+errorSignals[i],4000);
+        return;
+      }
+    }
+
+    // 3b. Detectar Cloudflare challenge
+    if(pageText.indexOf("just a moment")!==-1||
+       pageText.indexOf("enable javascript and cookies")!==-1||
+       pageText.indexOf("checking your browser")!==-1){
+      addLog("er","Cloudflare challenge — esperando 35s");
+      recover("cf challenge",35000);
+      return;
+    }
+
+    // 3c. Si estamos en una pagina que no es de MegaPersonals
+    if(curUrl.indexOf("megapersonals.eu")===-1&&curUrl.indexOf("angel-rent")===-1){
+      addLog("er","Pagina incorrecta — volviendo");
+      recover("pagina incorrecta",2000);
+      return;
+    }
+
+    // 3d. Si el robot lleva mas de 35 minutos sin un bump exitoso
+    // (indica que algo esta atascado)
+    var sinceLastBump=now-_lastBumpOk;
+    if(sinceLastBump>35*60*1000){
+      addLog("er","Sin bumps en 35min — reiniciando");
+      _lastBumpOk=now; // resetear para no entrar en loop
+      recover("sin actividad de bump",3000);
+      return;
+    }
+
+    // 3e. Si nextAt ya paso hace mas de 5 minutos y no bumpo
+    if(s.nextAt>0&&(now-s.nextAt)>5*60*1000){
+      addLog("er","Bump atascado — reiniciando tick");
+      _lastBumpOk=now;
+      if(TICK){clearInterval(TICK);TICK=null;}
+      schedNext();
+      startTick();
+      doBump();
+    }
+
+  }, 45000);
+
+  // ── 4. Interceptar doBump para registrar exito ────────────────────
+  // El watchdog usa _lastBumpOk para saber si el robot sigue vivo
+  var _origDoBump=doBump;
+  doBump=async function(){
+    _lastBumpOk=Date.now();
+    return _origDoBump.apply(this,arguments);
+  };
+
+  // ── 5. Detectar pagina en blanco / carga fallida ──────────────────
+  // Si despues de 15s la pagina no tiene contenido significativo
+  setTimeout(function(){
+    var s=gst();
+    if(!s.on||s.paused)return;
+    var bodyLen=(document.body?document.body.innerText.trim().length:0);
+    // Menos de 50 chars = pagina en blanco o error
+    if(bodyLen<50){
+      addLog("er","Pagina en blanco — recargando");
+      recover("pagina vacia",1000);
+    }
+  },15000);
+
+  // ── 6. Capturar errores JS globales y recuperar ───────────────────
+  var _jsErrors=0;
+  window.addEventListener("error",function(e){
+    // Ignorar errores de recursos (imagenes, scripts externos)
+    if(e.filename&&e.filename.indexOf("angel-rent")===-1)return;
+    _jsErrors++;
+    if(_jsErrors>5){
+      _jsErrors=0;
+      addLog("er","Multiples errores JS — recargando");
+      recover("errores JS",5000);
+    }
+  });
+
+  // ── 7. Detectar si la pestaña quedo congelada (visibility) ────────
+  var _hiddenTs=0;
+  document.addEventListener("visibilitychange",function(){
+    var s=gst();
+    if(!s.on||s.paused)return;
+    if(document.hidden){
+      _hiddenTs=Date.now();
+    } else {
+      // La pestana volvio visible
+      if(_hiddenTs>0){
+        var hiddenSecs=Math.round((Date.now()-_hiddenTs)/1000);
+        _hiddenTs=0;
+        if(hiddenSecs>300){ // mas de 5 minutos oculta
+          addLog("in","Pestana activa tras "+hiddenSecs+"s — verificando");
+          // Verificar que el tick sigue corriendo
+          if(TICK){clearInterval(TICK);TICK=null;}
+          startTick();
+        }
+      }
+    }
+  });
+
+  addLog("ok","Watchdog activo — recuperacion automatica habilitada");
+})();
+
+// Cierre del IIFE principal
 })();
 </script>`;
 
