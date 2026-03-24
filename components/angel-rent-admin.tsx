@@ -1,7 +1,9 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+
 const FB = "https://megapersonals-control-default-rtdb.firebaseio.com";
-const ADMIN_PASS = "rolex"; // ← Cambia esto
+const ADMIN_PASS = "rolex";
+
 interface User {
   name?: string;
   proxyHost?: string; proxyPort?: string;
@@ -18,34 +20,33 @@ interface User {
   phoneNumber?: string;
   rentalDays?: number; rentalHours?: number;
 }
+
 const UA_SHORT: Record<string, string> = {
-  iphone: "📱 iPhone 15", iphone14: "📱 iPhone 14",
-  android: "🤖 Galaxy S24", android_pixel: "🤖 Pixel 8",
-  windows: "💻 Win 10", windows11: "💻 Win 11",
-  mac: "🍎 Mac", custom: "✏️ Custom",
+  iphone: "iPhone", iphone14: "iPhone 14",
+  android: "Galaxy", android_pixel: "Pixel",
+  windows: "Windows", windows11: "Win 11",
+  mac: "Mac", custom: "Custom",
 };
+
 const UA_IPHONES = [
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/121.0.6167.171 Mobile/15E148 Safari/604.1",
 ];
 const UA_ANDROID = [
   "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36",
   "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 13; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.230 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 14; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.105 Mobile Safari/537.36",
 ];
 const UA_PC = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:123.0) Gecko/20100101 Firefox/123.0",
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
-  "Mozilla/5.0 (Windows NT 11.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
 ];
+
 function genUA(type: "iphone"|"android"|"pc"): string {
   const list = type === "iphone" ? UA_IPHONES : type === "android" ? UA_ANDROID : UA_PC;
   return list[Math.floor(Math.random() * list.length)];
 }
+
 const BLANK = {
   username: "", name: "", proxyHost: "", proxyPort: "",
   proxyUser: "", proxyPass: "", userAgentKey: "iphone", userAgent: "",
@@ -53,57 +54,31 @@ const BLANK = {
   siteEmail: "", sitePass: "", notes: "", active: true,
 };
 
-// ── Días restantes (puede ser negativo = vencido) ────────────────────────────
-function rentalDays(u: User) {
-  if (!u.rentalEnd) return 9999;
-  let exp: number;
-  if (u.rentalEndTimestamp) {
-    exp = u.rentalEndTimestamp;
-  } else {
-    // Fallback UTC para evitar diferencias de zona horaria
-    const [y, m, d] = u.rentalEnd.split("-").map(Number);
-    exp = Date.UTC(y, m - 1, d, 23, 59, 59);
-  }
-  return Math.floor((exp - Date.now()) / 86400000);
-}
-
-// ── Tiempo restante real en días + horas desde rentalEndTimestamp ─────────────
-function remainingFromTimestamp(ts: number | undefined, rentalEnd: string | undefined): { days: number; hours: number } {
-  let exp = 0;
-  if (ts) {
-    exp = ts;
-  } else if (rentalEnd) {
-    const [y, m, d] = rentalEnd.split("-").map(Number);
-    exp = Date.UTC(y, m - 1, d, 23, 59, 59);
-  }
-  if (!exp) return { days: 30, hours: 0 };
+function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt: boolean; isOk: boolean; isWarning: boolean } {
+  if (!u.rentalEnd) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false };
+  const exp = u.rentalEndTimestamp || (() => { const [y,m,d] = u.rentalEnd!.split("-").map(Number); return Date.UTC(y,m-1,d,23,59,59); })();
   const diffMs = exp - Date.now();
-  // Calcular en minutos para mayor precisión
-  const totalMins = Math.trunc(diffMs / 60000); // minutos totales (negativo = deuda)
-  const totalHoursFloor = Math.trunc(totalMins / 60);
-  const days = Math.trunc(totalHoursFloor / 24);
-  const hours = Math.abs(totalHoursFloor % 24);
-  // Si hay deuda pero days=0, devolver hours negativo para indicar deuda sub-24h
-  // Usamos days=-0 no existe, así que si totalMins<0 y days=0, forzamos days negativo como señal
-  if (totalMins < 0 && days === 0) {
-    return { days: -0.001, hours }; // señal de deuda < 1 día
+  const diffH = Math.floor(diffMs / 3600000);
+  const diffD = Math.floor(diffMs / 86400000);
+  const remH = Math.floor((diffMs % 86400000) / 3600000);
+  const expDate = new Date(exp);
+  const dateFmt = expDate.toLocaleDateString("es", { day: "2-digit", month: "short" });
+  
+  if (diffMs < 0) {
+    const debtMs = Math.abs(diffMs);
+    const dd = Math.floor(debtMs / 86400000);
+    const dh = Math.floor((debtMs % 86400000) / 3600000);
+    const lbl = dd > 0 ? `-${dd}d ${dh}h` : `-${dh}h`;
+    return { label: lbl, sub: dateFmt, color: "#f97316", isDebt: true, isOk: false, isWarning: false };
   }
-  return { days, hours };
+  if (diffH < 24) {
+    return { label: `${diffH}h`, sub: "hoy", color: "#ef4444", isDebt: false, isOk: false, isWarning: true };
+  }
+  if (diffD <= 3) {
+    return { label: `${diffD}d ${remH}h`, sub: dateFmt, color: "#eab308", isDebt: false, isOk: false, isWarning: true };
+  }
+  return { label: `${diffD}d`, sub: dateFmt, color: "#22c55e", isDebt: false, isOk: true, isWarning: false };
 }
-
-const F = {
-  input: {
-    width: "100%", boxSizing: "border-box" as const,
-    background: "#0f172a", border: "1px solid rgba(255,255,255,.08)",
-    borderRadius: 8, padding: "8px 10px", color: "#fff",
-    fontSize: 13, outline: "none",
-  },
-  label: {
-    display: "block" as const, fontSize: 10,
-    color: "rgba(255,255,255,.35)", textTransform: "uppercase" as const,
-    letterSpacing: ".5px", marginBottom: 4, marginTop: 12,
-  },
-};
 
 export default function AngelRentAdmin() {
   const [authed, setAuthed] = useState(false);
@@ -118,7 +93,9 @@ export default function AngelRentAdmin() {
   const [rentDays, setRentDays] = useState("30");
   const [rentHours, setRentHours] = useState("0");
   const [useLocalProxy, setUseLocalProxy] = useState(false);
-  const [rentMode, setRentMode] = useState<"set"|"add">("set"); // "set"=establecer, "add"=agregar
+  const [rentMode, setRentMode] = useState<"set"|"add">("set");
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("ar_admin") === "ok") {
@@ -142,7 +119,7 @@ export default function AngelRentAdmin() {
     if (pass === ADMIN_PASS) {
       localStorage.setItem("ar_admin", "ok");
       setAuthed(true); load();
-    } else alert("Contraseña incorrecta");
+    } else alert("Contrasena incorrecta");
   };
 
   const openNew = () => {
@@ -163,61 +140,29 @@ export default function AngelRentAdmin() {
       : key === "windows" || key === "windows11" || key === "mac" || key === "pc" ? "pc"
       : "iphone"
     );
-
-    // ✅ Calcular tiempo restante real con signo (negativo = deuda)
-    const expTs = u.rentalEndTimestamp || (() => {
-      if (!u.rentalEnd) return 0;
-      const [y,m,d] = u.rentalEnd.split("-").map(Number);
-      return Date.UTC(y,m-1,d,23,59,59);
-    })();
-    // En modo "add" siempre empezamos en 0 — el usuario ingresa cuánto tiempo NUEVO agrega
-    // La deuda se descuenta automáticamente en save()
     setRentDays("0");
     setRentHours("0");
-    setRentMode("add"); // default: agregar tiempo al existente
+    setRentMode("add");
     setUseLocalProxy(!u.proxyHost);
     setEditing(k); setModal(true);
   };
 
-  // ── Ajuste rápido de días sobre el tiempo actual ──────────────────────────
-  const adjustDays = (delta: number) => {
-    setRentDays(prev => {
-      const currentDays = parseInt(prev) || 0;
-      const currentHours = parseInt(rentHours) || 0;
-      // Convertir todo a minutos totales con signo correcto
-      const dSign = currentDays < 0 ? -1 : currentHours < 0 ? -1 : 1;
-      const totalMinsNow = dSign * ((Math.abs(currentDays) * 1440) + (Math.abs(currentHours) * 60));
-      const totalMinsNext = totalMinsNow + (delta * 1440);
-      const isNeg = totalMinsNext < 0;
-      const absMins = Math.abs(totalMinsNext);
-      const nextDays = Math.floor(absMins / 1440);
-      const nextHours = Math.floor((absMins % 1440) / 60);
-      setRentHours(isNeg ? (nextDays > 0 ? String(nextHours) : String(-nextHours)) : String(nextHours));
-      return isNeg ? (nextDays > 0 ? String(-nextDays) : "0") : String(nextDays);
-    });
-  };
-
   const save = async () => {
     const key = form.username.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
-    if (!key) { alert("Username inválido"); return; }
+    if (!key) { alert("Username invalido"); return; }
 
     const days = parseInt(rentDays) || 0;
     const hours = parseInt(rentHours) || 0;
-    // Determinar signo: si días<0 O horas<0, estamos en deuda
     const isNegInput = days < 0 || hours < 0;
     const sign = isNegInput ? -1 : 1;
     const inputMs = sign * ((Math.abs(days) * 86400000) + (Math.abs(hours) * 3600000));
 
     let rentalEndTimestamp: number;
     if (rentMode === "set") {
-      // ESTABLECER: el tiempo ingresado es el tiempo total desde ahora
       rentalEndTimestamp = Date.now() + inputMs;
     } else {
-      // AGREGAR: sumar sobre el timestamp actual (descontando deuda si existe)
       const currentTs = (form as any).rentalEndTimestamp || Date.now();
-      // Si el cliente está vencido, currentTs < now, la suma naturalmente descuenta la deuda
       rentalEndTimestamp = currentTs + inputMs;
-      // Si sigue en el pasado (deuda mayor que lo agregado), dejarlo así
     }
     const expDate = new Date(rentalEndTimestamp);
     const rentalEnd = expDate.toISOString().split("T")[0];
@@ -233,7 +178,7 @@ export default function AngelRentAdmin() {
       userAgentKey: uaKey,
       userAgent: form.userAgent || "",
       rentalStart, rentalEnd,
-      rentalEndTimestamp, // ✅ UTC puro, igual en todos los dispositivos
+      rentalEndTimestamp,
       defaultUrl: form.defaultUrl || "https://megapersonals.eu",
       siteEmail: form.siteEmail, sitePass: form.sitePass,
       notes: form.notes, active: form.active,
@@ -249,7 +194,7 @@ export default function AngelRentAdmin() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(data),
     });
-    setModal(false); showToast("✅ Guardado"); await load();
+    setModal(false); showToast("Guardado"); await load();
   };
 
   const toggle = async (k: string) => {
@@ -257,509 +202,427 @@ export default function AngelRentAdmin() {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ active: !users[k].active }),
     });
+    showToast(users[k].active ? "Desactivado" : "Activado");
     load();
   };
 
   const del = async (k: string) => {
-    if (!confirm(`¿Eliminar "${k}"?`)) return;
+    if (!confirm(`Eliminar "${k}"?`)) return;
     await fetch(`${FB}/proxyUsers/${k}.json`, { method: "DELETE" });
+    showToast("Eliminado");
     load();
   };
 
   const copyLink = (k: string) => {
     const url = `${window.location.origin}/api/angel-rent?u=${k}&url=${encodeURIComponent(users[k].defaultUrl || "https://megapersonals.eu")}`;
-    navigator.clipboard.writeText(url)
-      .then(() => showToast("🔗 Link copiado"))
-      .catch(() => prompt("Copia este link:", url));
+    navigator.clipboard.writeText(url).then(() => showToast("Link copiado")).catch(() => prompt("Copia:", url));
   };
 
   const copyClientLink = (k: string) => {
     const url = `${window.location.origin}/cliente?u=${k}`;
-    navigator.clipboard.writeText(url)
-      .then(() => showToast("👤 Link del cliente copiado"))
-      .catch(() => prompt("Link del cliente:", url));
+    navigator.clipboard.writeText(url).then(() => showToast("Link cliente copiado")).catch(() => prompt("Link:", url));
   };
 
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
 
-  // ─── AUTH ─────────────────────────────────────────────────────────────────
+  // Auth screen
   if (!authed) return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a1a", padding: 20 }}>
-      <div style={{ maxWidth: 340, width: "100%", background: "#111827", border: "1px solid rgba(255,255,255,.08)", borderRadius: 16, padding: 32, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>🔒</div>
-        <h2 style={{ color: "#fff", fontSize: 18, marginBottom: 20 }}>Admin · Angel Rent</h2>
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", padding: 20 }}>
+      <div style={{ maxWidth: 320, width: "100%", background: "rgba(15,23,42,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 24, padding: "40px 32px", textAlign: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 20px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>A</div>
+        <h1 style={{ color: "#fff", fontSize: 20, fontWeight: 700, marginBottom: 8 }}>Angel Rent</h1>
+        <p style={{ color: "rgba(255,255,255,0.4)", fontSize: 13, marginBottom: 28 }}>Panel de Administracion</p>
         <input type="password" value={pass} onChange={e => setPass(e.target.value)}
           onKeyDown={e => e.key === "Enter" && doLogin()}
-          placeholder="Contraseña"
-          style={{ ...F.input, textAlign: "center", marginBottom: 12 }}
+          placeholder="Contrasena"
+          style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 16px", color: "#fff", fontSize: 15, outline: "none", textAlign: "center", marginBottom: 16 }}
         />
-        <button onClick={doLogin} style={{ width: "100%", padding: 11, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer", fontSize: 14 }}>
+        <button onClick={doLogin} style={{ width: "100%", padding: 14, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", border: "none", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15 }}>
           Entrar
         </button>
       </div>
     </div>
   );
 
-  // ─── STATS ────────────────────────────────────────────────────────────────
   const keys = Object.keys(users).sort();
+  const filteredKeys = keys.filter(k => {
+    if (!search) return true;
+    const u = users[k];
+    const s = search.toLowerCase();
+    return k.toLowerCase().includes(s) || (u.name?.toLowerCase().includes(s)) || (u.phoneNumber?.includes(s));
+  });
+
   const stats = {
     total: keys.length,
     active: keys.filter(k => users[k].active).length,
-    expiring: keys.filter(k => { const d = rentalDays(users[k]); return !!users[k].rentalEnd && d >= 0 && d <= 1; }).length,
-    expired: keys.filter(k => !!users[k].rentalEnd && rentalDays(users[k]) <= 0).length,
+    expired: keys.filter(k => {
+      const exp = fmtExpiry(users[k]);
+      return exp.isDebt;
+    }).length,
   };
 
-  // Calcular preview de expiración para el modal
   const previewDays = parseInt(rentDays) || 0;
   const previewHours = parseInt(rentHours) || 0;
   const previewIsNeg = previewDays < 0 || previewHours < 0;
   const previewSign = previewIsNeg ? -1 : 1;
   const previewInputMs = previewSign * ((Math.abs(previewDays) * 86400000) + (Math.abs(previewHours) * 3600000));
-  // Calcular timestamp final según modo
   const previewFinalTs = rentMode === "set"
     ? Date.now() + previewInputMs
     : ((form as any).rentalEndTimestamp || Date.now()) + previewInputMs;
-  const previewMs = previewFinalTs - Date.now(); // positivo = tiempo restante, negativo = deuda
+  const previewMs = previewFinalTs - Date.now();
   const previewExp = new Date(previewFinalTs);
 
-  // helpers para formato de tiempo
-  function fmtExpiry(u: User): { label: string; sub: string; color: string; bg: string } {
-    if (!u.rentalEnd) return { label: "Sin límite", sub: "", color: "rgba(255,255,255,.3)", bg: "rgba(255,255,255,.05)" };
-    const exp = u.rentalEndTimestamp || (() => { const [y,m,d] = u.rentalEnd!.split("-").map(Number); return Date.UTC(y,m-1,d,23,59,59); })();
-    const diffMs = exp - Date.now();
-    const diffH = Math.floor(diffMs / 3600000);
-    const diffD = Math.floor(diffMs / 86400000);
-    const remH = Math.floor((diffMs % 86400000) / 3600000);
-    const expDate = new Date(exp);
-    const dateFmt = expDate.toLocaleDateString("es", { day: "2-digit", month: "short" });
-    const timeFmt = expDate.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" });
-    if (diffMs < 0) {
-      const debtMs = Math.abs(diffMs);
-      const dd = Math.floor(debtMs / 86400000);
-      const dh = Math.floor((debtMs % 86400000) / 3600000);
-      const lbl = dd > 0 ? `Debe ${dd}d ${dh}h` : `Debe ${dh}h`;
-      return { label: lbl, sub: `venció ${dateFmt}`, color: "#fb923c", bg: "rgba(251,146,60,.12)" };
-    }
-    if (diffH < 24) {
-      return { label: `${diffH}h ${Math.floor((diffMs%3600000)/60000)}m`, sub: `hoy ${timeFmt}`, color: "#f87171", bg: "rgba(248,113,113,.12)" };
-    }
-    if (diffD <= 1) {
-      return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#f87171", bg: "rgba(248,113,113,.12)" };
-    }
-    if (diffD <= 3) {
-      return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#fbbf24", bg: "rgba(251,191,36,.12)" };
-    }
-    return { label: `${diffD}d ${remH}h`, sub: `${dateFmt} ${timeFmt}`, color: "#4ade80", bg: "rgba(74,222,128,.1)" };
-  }
-
-  // ─── MAIN ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: "#080b14", minHeight: "100vh", color: "#fff", fontFamily: "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }}>
-      <div style={{ maxWidth: 980, margin: "0 auto", padding: "16px 16px" }}>
+    <div style={{ background: "#0a0a0f", minHeight: "100dvh", color: "#fff", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
+      
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: "#22c55e", color: "#fff", padding: "10px 20px", borderRadius: 99, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 20px rgba(34,197,94,0.4)" }}>
+          {toast}
+        </div>
+      )}
 
-        {/* ── Header ── */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, flexWrap: "wrap", gap: 10 }}>
+      {/* Header */}
+      <div style={{ background: "rgba(15,15,20,0.95)", backdropFilter: "blur(10px)", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "12px 16px", position: "sticky", top: 0, zIndex: 100 }}>
+        <div style={{ maxWidth: 800, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#a855f7)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>👼</div>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 800 }}>A</div>
             <div>
-              <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: "-.3px" }}>Angel Rent</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", letterSpacing: ".5px", textTransform: "uppercase" }}>Panel de control</div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>Angel Rent</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{stats.total} usuarios</div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {toast && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#4ade80", padding: "6px 14px", background: "rgba(74,222,128,.08)", borderRadius: 99, border: "1px solid rgba(74,222,128,.2)" }}>
-                <span style={{ fontSize: 14 }}>✓</span> {toast}
-              </div>
-            )}
-            <button onClick={openNew} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", background: "linear-gradient(135deg,#6366f1,#8b5cf6)", color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: "pointer", letterSpacing: "-.1px" }}>
-              <span style={{ fontSize: 16 }}>+</span> Nuevo usuario
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={load} disabled={busy} style={{ width: 40, height: 40, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.6)", fontSize: 16, cursor: "pointer" }}>
+              {busy ? "..." : "\u21BB"}
             </button>
-            <button onClick={load} style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.5)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, fontSize: 14, cursor: "pointer" }}>↻</button>
+            <button onClick={openNew} style={{ height: 40, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              <span style={{ fontSize: 18 }}>+</span>
+              <span style={{ display: "none" }} className="hide-mobile">Nuevo</span>
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* ── Stats cards ── */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 20 }}>
+      {/* Stats Cards */}
+      <div style={{ maxWidth: 800, margin: "0 auto", padding: "16px 16px 0" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 16 }}>
           {[
-            { n: stats.total, l: "Total usuarios", c: "#818cf8", icon: "◈" },
-            { n: stats.active, l: "Activos", c: "#4ade80", icon: "●" },
-            { n: stats.expiring, l: "Por vencer hoy", c: "#fbbf24", icon: "◐" },
-            { n: stats.expired, l: "Vencidos / deuda", c: "#f87171", icon: "○" },
-          ].map(({ n, l, c, icon }) => (
-            <div key={l} style={{ background: "#0f1420", border: "1px solid rgba(255,255,255,.06)", borderRadius: 14, padding: "16px 14px", position: "relative", overflow: "hidden" }}>
-              <div style={{ fontSize: 9, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 8 }}>{l}</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                <span style={{ fontSize: 30, fontWeight: 800, color: c, lineHeight: 1 }}>{n}</span>
-                <span style={{ fontSize: 16, color: c, opacity: .4 }}>{icon}</span>
-              </div>
+            { n: stats.total, l: "Total", c: "#6366f1", bg: "rgba(99,102,241,0.1)" },
+            { n: stats.active, l: "Activos", c: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+            { n: stats.expired, l: "Deuda", c: "#f97316", bg: "rgba(249,115,22,0.1)" },
+          ].map(({ n, l, c, bg }) => (
+            <div key={l} style={{ background: bg, borderRadius: 14, padding: "14px 12px", textAlign: "center" }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: c, lineHeight: 1 }}>{n}</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginTop: 4, textTransform: "uppercase", letterSpacing: 0.5 }}>{l}</div>
             </div>
           ))}
         </div>
 
-        {/* ── Table ── */}
-        <div style={{ background: "#0f1420", border: "1px solid rgba(255,255,255,.06)", borderRadius: 14, overflow: "auto" }}>
+        {/* Search */}
+        <div style={{ position: "relative", marginBottom: 16 }}>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar usuario, nombre o telefono..."
+            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 16px 12px 42px", color: "#fff", fontSize: 14, outline: "none" }}
+          />
+          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontSize: 16 }}>&#128269;</span>
+        </div>
+
+        {/* User List */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingBottom: 100 }}>
           {busy ? (
-            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,.2)", fontSize: 13 }}>Cargando...</div>
-          ) : keys.length === 0 ? (
-            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,.2)", fontSize: 13 }}>Sin usuarios. Crea uno arriba.</div>
+            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,0.3)" }}>Cargando...</div>
+          ) : filteredKeys.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 48, color: "rgba(255,255,255,0.3)" }}>
+              {search ? "Sin resultados" : "Sin usuarios"}
+            </div>
           ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 640 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,.05)" }}>
-                  {["Usuario / Nombre", "Proxy · Dispositivo", "Tiempo de renta", "Estado", "Robot", "Teléfono", ""].map(h => (
-                    <th key={h} style={{ textAlign: "left", padding: "10px 14px", fontSize: 10, textTransform: "uppercase", letterSpacing: ".6px", color: "rgba(255,255,255,.22)", fontWeight: 600, whiteSpace: "nowrap", background: "rgba(255,255,255,.02)" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map((k, idx) => {
-                  const u = users[k];
-                  const { label: rentLabel, sub: rentSub, color: rentColor, bg: rentBg } = fmtExpiry(u);
-                  const isEven = idx % 2 === 0;
-                  return (
-                    <tr key={k} style={{ borderTop: "1px solid rgba(255,255,255,.03)", background: isEven ? "transparent" : "rgba(255,255,255,.01)" }}>
-
-                      {/* Usuario */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", letterSpacing: "-.1px" }}>{k}</div>
-                        <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", marginTop: 1 }}>{u.name || "—"}</div>
-                      </td>
-
-                      {/* Proxy */}
-                      <td style={{ padding: "12px 14px" }}>
-                        {u.proxyHost
-                          ? <div style={{ fontSize: 11, fontFamily: "monospace", color: "#7dd3fc" }}>{u.proxyHost}<span style={{ color: "rgba(255,255,255,.2)" }}>:{u.proxyPort}</span></div>
-                          : <div style={{ fontSize: 10, color: "rgba(255,255,255,.15)" }}>IP local</div>}
-                        <div style={{ fontSize: 10, color: "rgba(255,255,255,.25)", marginTop: 2 }}>{UA_SHORT[u.userAgentKey || "iphone"] || "—"}</div>
-                      </td>
-
-                      {/* Renta */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ display: "inline-flex", flexDirection: "column", gap: 2 }}>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: rentColor, background: rentBg, padding: "3px 10px", borderRadius: 99, display: "inline-block" }}>
-                            {rentLabel}
-                          </span>
-                          {rentSub && <span style={{ fontSize: 9, color: "rgba(255,255,255,.2)", paddingLeft: 2 }}>{rentSub}</span>}
-                        </div>
-                      </td>
-
-                      {/* Estado */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 99, background: u.active ? "rgba(74,222,128,.1)" : "rgba(248,113,113,.1)", color: u.active ? "#4ade80" : "#f87171" }}>
-                          {u.active ? "Activo" : "Inactivo"}
+            filteredKeys.map(k => {
+              const u = users[k];
+              const exp = fmtExpiry(u);
+              const isExpanded = expandedUser === k;
+              
+              return (
+                <div key={k} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${!u.active ? "rgba(255,255,255,0.05)" : exp.isDebt ? "rgba(249,115,22,0.2)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, overflow: "hidden" }}>
+                  
+                  {/* Main Row - Clickable */}
+                  <div 
+                    onClick={() => setExpandedUser(isExpanded ? null : k)}
+                    style={{ display: "flex", alignItems: "center", padding: "14px 16px", gap: 12, cursor: "pointer" }}
+                  >
+                    {/* Avatar */}
+                    <div style={{ width: 44, height: 44, borderRadius: 12, background: u.active ? (exp.isDebt ? "rgba(249,115,22,0.15)" : "rgba(99,102,241,0.15)") : "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color: u.active ? (exp.isDebt ? "#f97316" : "#818cf8") : "rgba(255,255,255,0.3)" }}>
+                      {u.name?.charAt(0).toUpperCase() || k.charAt(0).toUpperCase()}
+                    </div>
+                    
+                    {/* Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: u.active ? "#fff" : "rgba(255,255,255,0.4)" }}>{k}</span>
+                        {!u.active && <span style={{ fontSize: 9, padding: "2px 6px", background: "rgba(255,255,255,0.1)", borderRadius: 4, color: "rgba(255,255,255,0.4)" }}>OFF</span>}
+                        {u.robotOn && !u.robotPaused && <span style={{ fontSize: 9, padding: "2px 6px", background: "rgba(34,197,94,0.15)", borderRadius: 4, color: "#22c55e" }}>BOT</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
+                        {u.name || "Sin nombre"}
+                        {u.phoneNumber && <span style={{ color: "#a78bfa", marginLeft: 8 }}>{u.phoneNumber}</span>}
+                      </div>
+                    </div>
+                    
+                    {/* Time Badge */}
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: exp.color }}>{exp.label}</div>
+                      {exp.sub && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>{exp.sub}</div>}
+                    </div>
+                    
+                    {/* Arrow */}
+                    <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 12, transition: "transform 0.2s", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>&#9660;</div>
+                  </div>
+                  
+                  {/* Expanded Actions */}
+                  {isExpanded && (
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 16px", background: "rgba(0,0,0,0.2)" }}>
+                      {/* Info Row */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, fontSize: 11 }}>
+                        <span style={{ padding: "4px 10px", background: "rgba(255,255,255,0.05)", borderRadius: 6, color: "rgba(255,255,255,0.5)" }}>
+                          {u.proxyHost ? `${u.proxyHost}:${u.proxyPort}` : "IP Local"}
                         </span>
-                      </td>
-
-                      {/* Robot */}
-                      <td style={{ padding: "12px 14px" }}>
-                        {u.robotOn === true ? (
-                          u.robotPaused
-                            ? <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(251,191,36,.1)", color: "#fbbf24" }}>⏸ Pausa</span>
-                            : <span style={{ fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 99, background: "rgba(74,222,128,.1)", color: "#4ade80" }}>⚡ ON</span>
-                        ) : (
-                          <span style={{ fontSize: 10, padding: "3px 8px", borderRadius: 99, background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.2)" }}>OFF</span>
+                        <span style={{ padding: "4px 10px", background: "rgba(255,255,255,0.05)", borderRadius: 6, color: "rgba(255,255,255,0.5)" }}>
+                          {UA_SHORT[u.userAgentKey || "iphone"] || "iPhone"}
+                        </span>
+                        {u.cookieTs && (
+                          <span style={{ padding: "4px 10px", background: "rgba(168,85,247,0.1)", borderRadius: 6, color: "#a78bfa" }}>
+                            Cookie {Math.round((Date.now()-u.cookieTs)/3600000)}h
+                          </span>
                         )}
-                        {u.cookieTs && <div style={{ fontSize: 9, color: "rgba(255,255,255,.15)", marginTop: 2 }}>cookie {Math.round((Date.now()-u.cookieTs)/3600000)}h</div>}
-                      </td>
-
-                      {/* Teléfono */}
-                      <td style={{ padding: "12px 14px" }}>
-                        {u.phoneNumber ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                            <span style={{ fontFamily: "monospace", fontSize: 11, color: "#c084fc", fontWeight: 700, letterSpacing: ".5px" }}>{u.phoneNumber}</span>
-                            <button onClick={async () => {
-                              await fetch(`${FB}/proxyUsers/${k}/phoneNumber.json`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: "null" });
-                              showToast("Teléfono borrado"); await load();
-                            }} style={{ width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(239,68,68,.2)", color: "#f87171", border: "none", borderRadius: 4, fontSize: 9, cursor: "pointer", flexShrink: 0 }}>✕</button>
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 10, color: "rgba(255,255,255,.12)" }}>—</span>
-                        )}
-                      </td>
-
-                      {/* Acciones */}
-                      <td style={{ padding: "12px 14px" }}>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          <button onClick={() => openEdit(k)} title="Editar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(99,102,241,.2)", color: "#818cf8", border: "1px solid rgba(99,102,241,.3)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✎</button>
-                          <button onClick={() => toggle(k)} title={u.active ? "Desactivar" : "Activar"} style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: u.active ? "rgba(239,68,68,.15)" : "rgba(74,222,128,.15)", color: u.active ? "#f87171" : "#4ade80", border: `1px solid ${u.active ? "rgba(239,68,68,.25)" : "rgba(74,222,128,.25)"}`, borderRadius: 8, fontSize: 12, cursor: "pointer" }}>{u.active ? "⊘" : "✓"}</button>
-                          <button onClick={() => copyLink(k)} title="Copiar link proxy" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.05)", color: "rgba(255,255,255,.4)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>⎘</button>
-                          <button onClick={() => copyClientLink(k)} title="Link panel cliente" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,.12)", color: "#c084fc", border: "1px solid rgba(168,85,247,.25)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>👤</button>
-                          <button onClick={() => del(k)} title="Eliminar" style={{ width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,.03)", color: "rgba(255,255,255,.2)", border: "1px solid rgba(255,255,255,.06)", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>✕</button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+                        <button onClick={(e) => { e.stopPropagation(); openEdit(k); }} style={{ padding: "12px 8px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 10, color: "#818cf8", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 16 }}>&#9998;</span>
+                          <span>Editar</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); toggle(k); }} style={{ padding: "12px 8px", background: u.active ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${u.active ? "rgba(239,68,68,0.25)" : "rgba(34,197,94,0.25)"}`, borderRadius: 10, color: u.active ? "#ef4444" : "#22c55e", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 16 }}>{u.active ? "\u2298" : "\u2713"}</span>
+                          <span>{u.active ? "Desact" : "Activar"}</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); copyLink(k); }} style={{ padding: "12px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 16 }}>&#128279;</span>
+                          <span>Proxy</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); copyClientLink(k); }} style={{ padding: "12px 8px", background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 10, color: "#a78bfa", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 16 }}>&#128100;</span>
+                          <span>Cliente</span>
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); del(k); }} style={{ padding: "12px 8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <span style={{ fontSize: 16 }}>\u2715</span>
+                          <span>Borrar</span>
+                        </button>
+                      </div>
+                      
+                      {/* Phone Delete */}
+                      {u.phoneNumber && (
+                        <button onClick={async (e) => {
+                          e.stopPropagation();
+                          await fetch(`${FB}/proxyUsers/${k}/phoneNumber.json`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: "null" });
+                          showToast("Telefono borrado"); await load();
+                        }} style={{ width: "100%", marginTop: 8, padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: "#ef4444", fontSize: 12, cursor: "pointer" }}>
+                          Borrar telefono ({u.phoneNumber})
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* ── MODAL ──────────────────────────────────────────────────────────── */}
+      {/* Modal */}
       {modal && (
         <div onClick={e => { if (e.target === e.currentTarget) setModal(false); }}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#1e293b", border: "1px solid rgba(255,255,255,.08)", borderRadius: 18, padding: 24, maxWidth: 480, width: "100%", maxHeight: "92vh", overflowY: "auto" }}>
-            <h3 style={{ fontSize: 15, marginBottom: 16, color: "#fff" }}>
-              {editing ? `✏️ Editar: ${editing}` : "➕ Nuevo Usuario"}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }}>
+          <div style={{ background: "#1a1a24", borderRadius: "24px 24px 0 0", padding: "20px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90dvh", overflowY: "auto" }}>
+            
+            {/* Handle */}
+            <div style={{ width: 40, height: 4, background: "rgba(255,255,255,0.2)", borderRadius: 2, margin: "0 auto 16px" }} />
+            
+            {/* Title */}
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, textAlign: "center" }}>
+              {editing ? `Editar: ${editing}` : "Nuevo Usuario"}
             </h3>
 
             {/* Username */}
-            <label style={F.label}>Username (login)</label>
-            <input style={{ ...F.input, opacity: editing ? .5 : 1 }} value={form.username} disabled={!!editing}
-              onChange={e => set("username", e.target.value.toLowerCase())} placeholder="diana" />
+            {!editing && (
+              <>
+                <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Username</label>
+                <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 15, outline: "none", marginBottom: 16 }} 
+                  value={form.username} onChange={e => set("username", e.target.value.toLowerCase())} placeholder="username" />
+              </>
+            )}
 
-            {/* Nombre */}
-            <label style={F.label}>Nombre completo</label>
-            <input style={F.input} value={form.name || ""} onChange={e => set("name", e.target.value)} placeholder="Diana Martinez" />
+            {/* Name */}
+            <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Nombre</label>
+            <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 15, outline: "none", marginBottom: 16 }} 
+              value={form.name || ""} onChange={e => set("name", e.target.value)} placeholder="Nombre completo" />
 
-            {/* PROXY */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>🌐 Configuración de Proxy</div>
-            <button onClick={() => setUseLocalProxy(!useLocalProxy)} style={{ width: "100%", padding: "8px 12px", marginBottom: 10, background: useLocalProxy ? "rgba(34,197,94,.15)" : "rgba(255,255,255,.04)", border: `1px solid ${useLocalProxy ? "rgba(34,197,94,.4)" : "rgba(255,255,255,.1)"}`, borderRadius: 8, color: useLocalProxy ? "#4ade80" : "rgba(255,255,255,.5)", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-              <span>{useLocalProxy ? "✅" : "○"}</span> Usar IP Local (sin proxy externo)
-            </button>
-            {!useLocalProxy && (<>
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
-                <div>
-                  <label style={F.label}>IP / Host</label>
-                  <input style={F.input} value={form.proxyHost || ""} onChange={e => set("proxyHost", e.target.value)} placeholder="192.168.1.1" />
-                </div>
-                <div>
-                  <label style={F.label}>Puerto</label>
-                  <input style={F.input} value={form.proxyPort || ""} onChange={e => set("proxyPort", e.target.value)} placeholder="8080" />
-                </div>
+            {/* Proxy Toggle */}
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: useLocalProxy ? 0 : 12 }}>
+                <span style={{ fontSize: 13, fontWeight: 600 }}>Proxy</span>
+                <button onClick={() => setUseLocalProxy(!useLocalProxy)} style={{ padding: "6px 12px", background: useLocalProxy ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${useLocalProxy ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, color: useLocalProxy ? "#22c55e" : "rgba(255,255,255,0.5)", fontSize: 12, cursor: "pointer" }}>
+                  {useLocalProxy ? "IP Local" : "Externo"}
+                </button>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div>
-                  <label style={F.label}>Usuario proxy</label>
-                  <input style={F.input} value={form.proxyUser || ""} onChange={e => set("proxyUser", e.target.value)} placeholder="user" />
+              {!useLocalProxy && (
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 8 }}>
+                  <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none" }} 
+                    value={form.proxyHost || ""} onChange={e => set("proxyHost", e.target.value)} placeholder="IP/Host" />
+                  <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none" }} 
+                    value={form.proxyPort || ""} onChange={e => set("proxyPort", e.target.value)} placeholder="Puerto" />
+                  <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none" }} 
+                    value={form.proxyUser || ""} onChange={e => set("proxyUser", e.target.value)} placeholder="Usuario" />
+                  <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "10px 12px", color: "#fff", fontSize: 13, outline: "none" }} 
+                    value={form.proxyPass || ""} onChange={e => set("proxyPass", e.target.value)} placeholder="Password" />
                 </div>
-                <div>
-                  <label style={F.label}>Password proxy</label>
-                  <input style={F.input} value={form.proxyPass || ""} onChange={e => set("proxyPass", e.target.value)} placeholder="pass" />
-                </div>
-              </div>
-            </>)}
+              )}
+            </div>
 
-            {/* DEVICE */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 8 }}>📱 Dispositivo</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-              {([["iphone","📱","iPhone"],["android","🤖","Android"],["pc","💻","PC"]] as const).map(([type, icon, label]) => (
+            {/* Device Type */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, marginBottom: 16 }}>
+              {([["iphone","iPhone"],["android","Android"],["pc","PC"]] as const).map(([type, label]) => (
                 <button key={type} onClick={() => { setDeviceType(type); set("userAgent", ""); }}
-                  style={{ padding: "12px 6px", borderRadius: 10, border: `1px solid ${deviceType === type ? "rgba(168,85,247,.6)" : "rgba(255,255,255,.08)"}`, background: deviceType === type ? "rgba(168,85,247,.15)" : "rgba(255,255,255,.03)", color: deviceType === type ? "#c084fc" : "rgba(255,255,255,.5)", cursor: "pointer", fontWeight: 800, fontSize: 13, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 22 }}>{icon}</span>{label}
+                  style={{ padding: "14px 8px", borderRadius: 12, border: `1px solid ${deviceType === type ? "rgba(168,85,247,0.5)" : "rgba(255,255,255,0.1)"}`, background: deviceType === type ? "rgba(168,85,247,0.15)" : "rgba(255,255,255,0.03)", color: deviceType === type ? "#c4b5fd" : "rgba(255,255,255,0.5)", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                  {label}
                 </button>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-              <div style={{ flex: 1 }}>
-                <label style={F.label}>User Agent</label>
-                <input style={{ ...F.input, fontSize: 10 }} value={form.userAgent || ""} onChange={e => set("userAgent", e.target.value)} placeholder={`User agent de ${deviceType === "iphone" ? "iPhone" : deviceType === "android" ? "Android" : "PC"}...`} />
-              </div>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
-              <button onClick={() => set("userAgent", genUA(deviceType))}
-                style={{ padding: "8px", borderRadius: 8, border: "1px solid rgba(168,85,247,.4)", background: "rgba(168,85,247,.1)", color: "#c084fc", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
-                🎲 Generar UA real
-              </button>
-              <button onClick={() => set("userAgent", "")}
-                style={{ padding: "8px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "rgba(255,255,255,.04)", color: "rgba(255,255,255,.4)", cursor: "pointer", fontWeight: 700, fontSize: 12 }}>
-                📱 Usar UA del dispositivo
-              </button>
-            </div>
-            {form.userAgent && (
-              <div style={{ marginTop: 6, padding: "6px 10px", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.2)", borderRadius: 8, fontSize: 9, color: "rgba(168,85,247,.8)", wordBreak: "break-all" as const }}>
-                {form.userAgent}
-              </div>
-            )}
 
-            {/* ── RENTA ── */}
-            {/* ═══ SECCIÓN TIEMPO DE RENTA ═══ */}
-            <div style={{ marginTop: 20, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.06)" }}>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 12 }}>📅 Tiempo de Renta</div>
+            {/* UA Generator */}
+            <button onClick={() => set("userAgent", genUA(deviceType))}
+              style={{ width: "100%", padding: 12, marginBottom: 16, borderRadius: 10, border: "1px solid rgba(168,85,247,0.3)", background: "rgba(168,85,247,0.1)", color: "#c4b5fd", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
+              Generar User Agent
+            </button>
 
-              {/* Selector de modo: Establecer / Agregar */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 14 }}>
-                <button onClick={() => setRentMode("set")}
-                  style={{
-                    padding: "12px 8px", borderRadius: 12, cursor: "pointer", fontWeight: 800, fontSize: 12,
-                    border: rentMode === "set" ? "2px solid #6366f1" : "1px solid rgba(255,255,255,.08)",
-                    background: rentMode === "set" ? "rgba(99,102,241,.18)" : "rgba(255,255,255,.03)",
-                    color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,.35)",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                    transition: "all .15s",
-                  }}>
-                  <span style={{ fontSize: 20 }}>📌</span>
-                  <span>Establecer</span>
-                  <span style={{ fontSize: 9, fontWeight: 400, color: rentMode === "set" ? "rgba(165,180,252,.7)" : "rgba(255,255,255,.2)", textAlign: "center", lineHeight: 1.4 }}>
-                    Reemplaza el tiempo actual por el nuevo valor
-                  </span>
+            {/* Rent Time */}
+            <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Tiempo de Renta</div>
+              
+              {/* Mode Toggle */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                <button onClick={() => setRentMode("set")} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${rentMode === "set" ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "set" ? "rgba(99,102,241,0.15)" : "transparent", color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
+                  Establecer
                 </button>
-                <button onClick={() => setRentMode("add")}
-                  style={{
-                    padding: "12px 8px", borderRadius: 12, cursor: "pointer", fontWeight: 800, fontSize: 12,
-                    border: rentMode === "add" ? "2px solid #22c55e" : "1px solid rgba(255,255,255,.08)",
-                    background: rentMode === "add" ? "rgba(34,197,94,.12)" : "rgba(255,255,255,.03)",
-                    color: rentMode === "add" ? "#4ade80" : "rgba(255,255,255,.35)",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
-                    transition: "all .15s",
-                  }}>
-                  <span style={{ fontSize: 20 }}>➕</span>
-                  <span>Agregar</span>
-                  <span style={{ fontSize: 9, fontWeight: 400, color: rentMode === "add" ? "rgba(74,222,128,.7)" : "rgba(255,255,255,.2)", textAlign: "center", lineHeight: 1.4 }}>
-                    Suma al tiempo restante (descuenta deuda)
-                  </span>
+                <button onClick={() => setRentMode("add")} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${rentMode === "add" ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "add" ? "rgba(34,197,94,0.15)" : "transparent", color: rentMode === "add" ? "#86efac" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
+                  Agregar
                 </button>
               </div>
 
-              {/* Presets rápidos */}
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" as const, marginBottom: 12 }}>
-                {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"],["12h","0","12"]].map(([label,d,h]) => (
+              {/* Quick Presets */}
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"]].map(([label,d,h]) => (
                   <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
-                    style={{
-                      padding: "8px 16px", borderRadius: 99, cursor: "pointer", fontSize: 12, fontWeight: 800,
-                      border: rentMode === "add" ? "1px solid rgba(34,197,94,.4)" : "1px solid rgba(99,102,241,.4)",
-                      background: rentMode === "add"
-                        ? (rentDays === d && rentHours === h ? "rgba(34,197,94,.25)" : "rgba(34,197,94,.06)")
-                        : (rentDays === d && rentHours === h ? "rgba(99,102,241,.25)" : "rgba(99,102,241,.06)"),
-                      color: rentMode === "add" ? "#4ade80" : "#a5b4fc",
-                      transition: "all .15s",
-                    }}>
+                    style={{ padding: "8px 14px", borderRadius: 99, border: "1px solid rgba(255,255,255,0.1)", background: rentDays === d && rentHours === h ? "rgba(255,255,255,0.1)" : "transparent", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
                     {label}
                   </button>
                 ))}
               </div>
 
-              {/* Input días + horas moderno */}
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 14, padding: "12px 16px" }}>
+              {/* Days/Hours Input */}
+              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
                 <div style={{ flex: 1, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 6 }}>Días</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                    <button onClick={() => setRentDays(d => String(Math.max(0, (parseInt(d)||0) - 1)))}
-                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-                    <input type="number" min="0" style={{ width: 60, textAlign: "center", background: "transparent", border: "none", fontSize: 26, fontWeight: 900, color: "#fff", outline: "none", MozAppearance: "textfield" as any }}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>DIAS</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <button onClick={() => setRentDays(d => String(Math.max(0, (parseInt(d)||0) - 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>-</button>
+                    <input type="number" style={{ width: 50, textAlign: "center", background: "transparent", border: "none", fontSize: 24, fontWeight: 800, color: "#fff", outline: "none" }}
                       value={rentDays} onChange={e => setRentDays(e.target.value)} />
-                    <button onClick={() => setRentDays(d => String((parseInt(d)||0) + 1))}
-                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                    <button onClick={() => setRentDays(d => String((parseInt(d)||0) + 1))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>+</button>
                   </div>
                 </div>
-                <div style={{ width: 1, height: 40, background: "rgba(255,255,255,.08)" }} />
                 <div style={{ flex: 1, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,.3)", textTransform: "uppercase", letterSpacing: ".8px", marginBottom: 6 }}>Horas</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
-                    <button onClick={() => setRentHours(h => String(Math.max(0, (parseInt(h)||0) - 1)))}
-                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>−</button>
-                    <input type="number" min="0" max="23" style={{ width: 60, textAlign: "center", background: "transparent", border: "none", fontSize: 26, fontWeight: 900, color: "#fff", outline: "none", MozAppearance: "textfield" as any }}
+                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>HORAS</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <button onClick={() => setRentHours(h => String(Math.max(0, (parseInt(h)||0) - 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>-</button>
+                    <input type="number" style={{ width: 50, textAlign: "center", background: "transparent", border: "none", fontSize: 24, fontWeight: 800, color: "#fff", outline: "none" }}
                       value={rentHours} onChange={e => setRentHours(e.target.value)} />
-                    <button onClick={() => setRentHours(h => String(Math.min(23, (parseInt(h)||0) + 1)))}
-                      style={{ width: 32, height: 32, borderRadius: 8, background: "rgba(255,255,255,.08)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+                    <button onClick={() => setRentHours(h => String(Math.min(23, (parseInt(h)||0) + 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>+</button>
                   </div>
                 </div>
               </div>
 
-              {/* Preview resultado */}
-              {previewInputMs > 0 && previewMs > 0 && (
-                <div style={{ padding: "10px 14px", background: "rgba(34,197,94,.07)", border: "1px solid rgba(34,197,94,.2)", borderRadius: 10, fontSize: 11 }}>
-                  {(() => {
-                    const resultMs = previewMs;
-                    const rDays = Math.floor(resultMs / 86400000);
-                    const rHours = Math.floor((resultMs % 86400000) / 3600000);
-                    const currentTs = (form as any).rentalEndTimestamp;
-                    const hadDebt = currentTs && currentTs < Date.now();
-                    const debtMs = hadDebt ? Date.now() - currentTs : 0;
-                    const debtDays = Math.floor(debtMs / 86400000);
-                    const debtHours = Math.floor((debtMs % 86400000) / 3600000);
-                    return (
-                      <div style={{ color: "#4ade80", fontWeight: 800, marginBottom: 4 }}>
-                        ✅ Quedará con {rDays}d {rHours}h
-                        {hadDebt && <span style={{ color: "rgba(255,255,255,.4)", fontWeight: 400 }}> (descontando {debtDays > 0 ? `${debtDays}d ${debtHours}h` : `${debtHours}h`} de deuda)</span>}
+              {/* Preview */}
+              {previewInputMs > 0 && (
+                <div style={{ padding: 12, background: previewMs > 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", borderRadius: 10, fontSize: 12 }}>
+                  {previewMs > 0 ? (
+                    <>
+                      <div style={{ color: "#22c55e", fontWeight: 700 }}>
+                        Quedara con {Math.floor(previewMs / 86400000)}d {Math.floor((previewMs % 86400000) / 3600000)}h
                       </div>
-                    );
-                  })()}
-                  <div style={{ color: "rgba(255,255,255,.5)", fontSize: 10 }}>
-                    Vence el <span style={{ color: "#fff", fontWeight: 700 }}>
-                      {previewExp.toLocaleDateString("es", { weekday: "short", day: "2-digit", month: "short", year: "numeric" })} a las {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
+                      <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 11, marginTop: 4 }}>
+                        Vence: {previewExp.toLocaleDateString("es", { day: "2-digit", month: "short" })} {previewExp.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+                      </div>
+                    </>
+                  ) : (
+                    <div style={{ color: "#ef4444", fontWeight: 700 }}>Sigue en deuda</div>
+                  )}
                 </div>
               )}
-              {previewInputMs > 0 && previewMs <= 0 && (() => {
-                const debtMs = Math.abs(previewMs);
-                const debtDays = Math.floor(debtMs / 86400000);
-                const debtHours = Math.floor((debtMs % 86400000) / 3600000);
-                const debtMins = Math.floor((debtMs % 3600000) / 60000);
-                const debtLabel = debtDays > 0
-                  ? `${debtDays}d ${debtHours}h`
-                  : debtHours > 0 ? `${debtHours}h ${debtMins}m` : `${debtMins}m`;
-                return (
-                  <div style={{ padding: "10px 14px", background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.25)", borderRadius: 10, fontSize: 11 }}>
-                    <div style={{ color: "#f87171", fontWeight: 800, marginBottom: 4 }}>
-                      ⚠️ Deuda restante: {debtLabel} — el cliente sigue vencido
-                    </div>
-                    <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
-                      Agrega más tiempo para saldar la deuda completa
-                    </div>
-                  </div>
-                );
-              })()}
-              {previewInputMs === 0 && (() => {
-                const currentTs = (form as any).rentalEndTimestamp;
-                const hasDebt = currentTs && currentTs < Date.now();
-                if (hasDebt) {
-                  const debtMs0 = Date.now() - currentTs;
-                  const dd = Math.floor(debtMs0 / 86400000);
-                  const dh = Math.floor((debtMs0 % 86400000) / 3600000);
-                  const dm = Math.floor((debtMs0 % 3600000) / 60000);
-                  const lbl = dd > 0 ? `${dd}d ${dh}h` : dh > 0 ? `${dh}h ${dm}m` : `${dm}m`;
-                  return (
-                    <div style={{ padding: "12px 14px", background: "rgba(251,146,60,.07)", border: "1px solid rgba(251,146,60,.25)", borderRadius: 10 }}>
-                      <div style={{ color: "#fb923c", fontWeight: 800, fontSize: 12, marginBottom: 3 }}>⏰ Deuda actual: {lbl}</div>
-                      <div style={{ color: "rgba(255,255,255,.35)", fontSize: 10 }}>
-                        {rentMode === "add" ? "Ingresa cuánto tiempo quieres agregar — la deuda se descontará automáticamente" : "Ingresa el nuevo tiempo total que tendrá el cliente"}
-                      </div>
-                    </div>
-                  );
-                }
-                return (
-                  <div style={{ padding: "8px 14px", background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 10, fontSize: 11, color: "rgba(255,255,255,.25)" }}>
-                    Ingresa días u horas para ver el resultado
-                  </div>
-                );
-              })()}
             </div>
-            {/* ════════════════════════════════════ */}
-                        <label style={F.label}>URL por defecto</label>
-            <input style={F.input} value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="https://megapersonals.eu" />
 
-            {/* CREDENCIALES */}
-            <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,.06)", fontSize: 11, color: "rgba(255,255,255,.4)", marginBottom: 4 }}>🔑 Credenciales del sitio (auto-login)</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-              <div>
-                <label style={F.label}>Email / usuario</label>
-                <input style={F.input} value={form.siteEmail || ""} onChange={e => set("siteEmail", e.target.value)} placeholder="user@email.com" />
-              </div>
-              <div>
-                <label style={F.label}>Password sitio</label>
-                <input style={F.input} value={form.sitePass || ""} onChange={e => set("sitePass", e.target.value)} placeholder="contraseña" />
-              </div>
+            {/* Site Credentials */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none" }} 
+                value={form.siteEmail || ""} onChange={e => set("siteEmail", e.target.value)} placeholder="Email sitio" />
+              <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none" }} 
+                value={form.sitePass || ""} onChange={e => set("sitePass", e.target.value)} placeholder="Password sitio" />
             </div>
-            <label style={F.label}>Notas</label>
-            <input style={F.input} value={form.notes || ""} onChange={e => set("notes", e.target.value)} placeholder="VIP, deuda, etc." />
-            <label style={F.label}>Estado</label>
-            <select style={{ ...F.input, marginTop: 0 }} value={form.active ? "true" : "false"} onChange={e => set("active", e.target.value === "true")}>
-              <option value="true">✅ Activo</option>
-              <option value="false">⛔ Inactivo</option>
-            </select>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 20 }}>
-              <button onClick={() => setModal(false)} style={{ flex: 1, padding: 11, background: "rgba(255,255,255,.07)", color: "#aaa", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>Cancelar</button>
-              <button onClick={save} style={{ flex: 1, padding: 11, background: "#3b82f6", color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>Guardar</button>
+            {/* URL */}
+            <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none", marginBottom: 16 }} 
+              value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="URL por defecto" />
+
+            {/* Notes */}
+            <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none", marginBottom: 16 }} 
+              value={form.notes || ""} onChange={e => set("notes", e.target.value)} placeholder="Notas" />
+
+            {/* Status */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
+              <button onClick={() => set("active", true)} style={{ padding: 12, borderRadius: 10, border: `1px solid ${form.active ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)"}`, background: form.active ? "rgba(34,197,94,0.15)" : "transparent", color: form.active ? "#22c55e" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600 }}>
+                Activo
+              </button>
+              <button onClick={() => set("active", false)} style={{ padding: 12, borderRadius: 10, border: `1px solid ${!form.active ? "rgba(239,68,68,0.5)" : "rgba(255,255,255,0.1)"}`, background: !form.active ? "rgba(239,68,68,0.15)" : "transparent", color: !form.active ? "#ef4444" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600 }}>
+                Inactivo
+              </button>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
+              <button onClick={() => setModal(false)} style={{ padding: 14, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)", border: "none", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15 }}>
+                Cancelar
+              </button>
+              <button onClick={save} style={{ padding: 14, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", color: "#fff", border: "none", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15 }}>
+                Guardar
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      <style>{`
+        * { -webkit-tap-highlight-color: transparent; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+        @media (min-width: 640px) {
+          .hide-mobile { display: inline !important; }
+        }
+      `}</style>
     </div>
   );
 }
