@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 
 const FB = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASS = "rolex";
@@ -19,6 +20,10 @@ interface User {
   cookies?: string; cookieTs?: number;
   phoneNumber?: string;
   rentalDays?: number; rentalHours?: number;
+  bumpInterval?: number;
+  lastBump?: number;
+  bumpsToday?: number;
+  bumpsTotal?: number;
 }
 
 const UA_SHORT: Record<string, string> = {
@@ -31,15 +36,12 @@ const UA_SHORT: Record<string, string> = {
 const UA_IPHONES = [
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
 ];
 const UA_ANDROID = [
   "Mozilla/5.0 (Linux; Android 14; SM-S928B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.6261.119 Mobile Safari/537.36",
-  "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.6167.178 Mobile Safari/537.36",
 ];
 const UA_PC = [
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
 ];
 
 function genUA(type: "iphone"|"android"|"pc"): string {
@@ -54,8 +56,8 @@ const BLANK = {
   siteEmail: "", sitePass: "", notes: "", active: true,
 };
 
-function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt: boolean; isOk: boolean; isWarning: boolean } {
-  if (!u.rentalEnd) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false };
+function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt: boolean; isOk: boolean; isWarning: boolean; diffMs: number } {
+  if (!u.rentalEnd) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false, diffMs: Infinity };
   const exp = u.rentalEndTimestamp || (() => { const [y,m,d] = u.rentalEnd!.split("-").map(Number); return Date.UTC(y,m-1,d,23,59,59); })();
   const diffMs = exp - Date.now();
   const diffH = Math.floor(diffMs / 3600000);
@@ -69,18 +71,252 @@ function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt
     const dd = Math.floor(debtMs / 86400000);
     const dh = Math.floor((debtMs % 86400000) / 3600000);
     const lbl = dd > 0 ? `-${dd}d ${dh}h` : `-${dh}h`;
-    return { label: lbl, sub: dateFmt, color: "#f97316", isDebt: true, isOk: false, isWarning: false };
+    return { label: lbl, sub: dateFmt, color: "#f97316", isDebt: true, isOk: false, isWarning: false, diffMs };
   }
   if (diffH < 24) {
-    return { label: `${diffH}h`, sub: "hoy", color: "#ef4444", isDebt: false, isOk: false, isWarning: true };
+    return { label: `${diffH}h`, sub: "hoy", color: "#ef4444", isDebt: false, isOk: false, isWarning: true, diffMs };
   }
   if (diffD <= 3) {
-    return { label: `${diffD}d ${remH}h`, sub: dateFmt, color: "#eab308", isDebt: false, isOk: false, isWarning: true };
+    return { label: `${diffD}d ${remH}h`, sub: dateFmt, color: "#eab308", isDebt: false, isOk: false, isWarning: true, diffMs };
   }
-  return { label: `${diffD}d`, sub: dateFmt, color: "#22c55e", isDebt: false, isOk: true, isWarning: false };
+  return { label: `${diffD}d`, sub: dateFmt, color: "#22c55e", isDebt: false, isOk: true, isWarning: false, diffMs };
 }
 
-export default function AngelRentAdmin() {
+// ============================================
+// PANEL DE CLIENTE
+// ============================================
+function ClientPanel({ userId }: { userId: string }) {
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
+  const [countdown, setCountdown] = useState("--:--");
+  const [busy, setBusy] = useState(false);
+
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
+  const loadUser = useCallback(async () => {
+    try {
+      const r = await fetch(`${FB}/proxyUsers/${userId}.json`);
+      const data = await r.json();
+      if (!data) {
+        setError("Usuario no encontrado");
+      } else if (!data.active) {
+        setError("Cuenta inactiva");
+      } else {
+        setUser(data);
+      }
+    } catch {
+      setError("Error de conexion");
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => { loadUser(); }, [loadUser]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!user?.robotOn || user?.robotPaused) {
+      setCountdown("--:--");
+      return;
+    }
+    
+    const interval = user.bumpInterval || 30;
+    const lastBump = user.lastBump || Date.now();
+    
+    const tick = () => {
+      const nextBump = lastBump + (interval * 60 * 1000);
+      const remaining = nextBump - Date.now();
+      
+      if (remaining <= 0) {
+        setCountdown("00:00");
+      } else {
+        const mins = Math.floor(remaining / 60000);
+        const secs = Math.floor((remaining % 60000) / 1000);
+        setCountdown(`${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`);
+      }
+    };
+    
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [user?.robotOn, user?.robotPaused, user?.bumpInterval, user?.lastBump]);
+
+  const togglePause = async () => {
+    if (!user) return;
+    setBusy(true);
+    try {
+      await fetch(`${FB}/proxyUsers/${userId}.json`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ robotPaused: !user.robotPaused }),
+      });
+      setUser({ ...user, robotPaused: !user.robotPaused });
+      showToast(user.robotPaused ? "Robot reanudado" : "Robot pausado");
+    } catch {
+      showToast("Error al cambiar estado");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return (
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)" }}>
+      <div style={{ textAlign: "center", color: "#fff" }}>
+        <div style={{ width: 48, height: 48, border: "3px solid rgba(255,255,255,0.1)", borderTopColor: "#8b5cf6", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 16px" }} />
+        <div style={{ fontSize: 14, color: "rgba(255,255,255,0.5)" }}>Cargando...</div>
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ minHeight: "100dvh", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", padding: 20 }}>
+      <div style={{ textAlign: "center", color: "#fff", maxWidth: 300 }}>
+        <div style={{ width: 64, height: 64, borderRadius: 20, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, margin: "0 auto 16px", color: "#ef4444" }}>!</div>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>{error}</div>
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Contacta al administrador</div>
+      </div>
+    </div>
+  );
+
+  if (!user) return null;
+
+  const exp = fmtExpiry(user);
+  const robotActive = user.robotOn && !user.robotPaused;
+  const rentPercent = exp.diffMs > 0 ? Math.min(100, (exp.diffMs / (30 * 86400000)) * 100) : 0;
+
+  return (
+    <div style={{ minHeight: "100dvh", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", color: "#fff", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", padding: "20px 16px" }}>
+      
+      {/* Toast */}
+      {toast && (
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: "#22c55e", color: "#fff", padding: "10px 20px", borderRadius: 99, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 20px rgba(34,197,94,0.4)" }}>
+          {toast}
+        </div>
+      )}
+
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 12px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>
+          {user.name?.charAt(0).toUpperCase() || userId.charAt(0).toUpperCase()}
+        </div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Hola, {user.name || userId}</h1>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Panel de control</p>
+      </div>
+
+      {/* Countdown Card */}
+      <div style={{ background: "rgba(255,255,255,0.05)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: 24, marginBottom: 16, textAlign: "center" }}>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Proximo Bump</div>
+        <div style={{ fontSize: 48, fontWeight: 800, fontFamily: "monospace", color: robotActive ? "#22c55e" : "rgba(255,255,255,0.3)", lineHeight: 1, marginBottom: 12 }}>
+          {countdown}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "#64748b", boxShadow: robotActive ? "0 0 12px #22c55e" : "none" }} />
+          <span style={{ fontSize: 13, color: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "rgba(255,255,255,0.4)" }}>
+            {robotActive ? "Robot activo" : user.robotOn ? "Pausado" : "Robot inactivo"}
+          </span>
+        </div>
+      </div>
+
+      {/* Control Button */}
+      {user.robotOn && (
+        <button
+          onClick={togglePause}
+          disabled={busy}
+          style={{
+            width: "100%",
+            padding: 18,
+            marginBottom: 16,
+            borderRadius: 16,
+            border: "none",
+            background: user.robotPaused
+              ? "linear-gradient(135deg, #22c55e, #16a34a)"
+              : "linear-gradient(135deg, #f97316, #ea580c)",
+            color: "#fff",
+            fontSize: 16,
+            fontWeight: 700,
+            cursor: busy ? "wait" : "pointer",
+            opacity: busy ? 0.7 : 1,
+            boxShadow: user.robotPaused
+              ? "0 8px 32px rgba(34,197,94,0.3)"
+              : "0 8px 32px rgba(249,115,22,0.3)",
+          }}
+        >
+          {busy ? "..." : user.robotPaused ? "Reanudar Robot" : "Pausar Robot"}
+        </button>
+      )}
+
+      {/* Stats Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 6 }}>Bumps Hoy</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#a78bfa" }}>{user.bumpsToday || 0}</div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 6 }}>Total Bumps</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#818cf8" }}>{user.bumpsTotal || 0}</div>
+        </div>
+      </div>
+
+      {/* Rental Time Card */}
+      <div style={{ background: "rgba(255,255,255,0.05)", backdropFilter: "blur(20px)", border: `1px solid ${exp.isDebt ? "rgba(249,115,22,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: 20, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Tiempo de Renta</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: exp.color }}>{exp.label}</div>
+          </div>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: `${exp.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
+            {exp.isDebt ? "!" : exp.isWarning ? "!" : ""}
+          </div>
+        </div>
+        
+        {/* Progress Bar */}
+        <div style={{ height: 8, background: "rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+          <div style={{ height: "100%", width: `${rentPercent}%`, background: exp.color, borderRadius: 4, transition: "width 0.3s" }} />
+        </div>
+        
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+          {exp.isDebt ? "Renta vencida - Contacta al admin" : exp.sub ? `Vence: ${exp.sub}` : "Sin limite de tiempo"}
+        </div>
+      </div>
+
+      {/* Config Info */}
+      <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 16 }}>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Configuracion</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+            <span style={{ color: "rgba(255,255,255,0.5)" }}>Intervalo</span>
+            <span style={{ color: "#fff", fontWeight: 600 }}>{user.bumpInterval || 30} min</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+            <span style={{ color: "rgba(255,255,255,0.5)" }}>Dispositivo</span>
+            <span style={{ color: "#fff", fontWeight: 600 }}>{UA_SHORT[user.userAgentKey || "iphone"] || "iPhone"}</span>
+          </div>
+          {user.lastBump && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <span style={{ color: "rgba(255,255,255,0.5)" }}>Ultimo bump</span>
+              <span style={{ color: "#a78bfa", fontWeight: 600 }}>
+                {new Date(user.lastBump).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+    </div>
+  );
+}
+
+// ============================================
+// PANEL DE ADMIN
+// ============================================
+function AdminPanel() {
   const [authed, setAuthed] = useState(false);
   const [pass, setPass] = useState("");
   const [users, setUsers] = useState<Record<string, User>>({});
@@ -219,7 +455,8 @@ export default function AngelRentAdmin() {
   };
 
   const copyClientLink = (k: string) => {
-    const url = `${window.location.origin}/cliente?u=${k}`;
+    // Genera link del panel cliente usando la misma pagina con parametro
+    const url = `${window.location.origin}${window.location.pathname}?cliente=${k}`;
     navigator.clipboard.writeText(url).then(() => showToast("Link cliente copiado")).catch(() => prompt("Link:", url));
   };
 
@@ -255,10 +492,7 @@ export default function AngelRentAdmin() {
   const stats = {
     total: keys.length,
     active: keys.filter(k => users[k].active).length,
-    expired: keys.filter(k => {
-      const exp = fmtExpiry(users[k]);
-      return exp.isDebt;
-    }).length,
+    expired: keys.filter(k => fmtExpiry(users[k]).isDebt).length,
   };
 
   const previewDays = parseInt(rentDays) || 0;
@@ -298,7 +532,6 @@ export default function AngelRentAdmin() {
             </button>
             <button onClick={openNew} style={{ height: 40, padding: "0 16px", display: "flex", alignItems: "center", gap: 6, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", border: "none", borderRadius: 10, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
               <span style={{ fontSize: 18 }}>+</span>
-              <span style={{ display: "none" }} className="hide-mobile">Nuevo</span>
             </button>
           </div>
         </div>
@@ -325,7 +558,7 @@ export default function AngelRentAdmin() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Buscar usuario, nombre o telefono..."
+            placeholder="Buscar usuario..."
             style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 16px 12px 42px", color: "#fff", fontSize: 14, outline: "none" }}
           />
           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.3)", fontSize: 16 }}>&#128269;</span>
@@ -348,17 +581,15 @@ export default function AngelRentAdmin() {
               return (
                 <div key={k} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${!u.active ? "rgba(255,255,255,0.05)" : exp.isDebt ? "rgba(249,115,22,0.2)" : "rgba(255,255,255,0.06)"}`, borderRadius: 16, overflow: "hidden" }}>
                   
-                  {/* Main Row - Clickable */}
+                  {/* Main Row */}
                   <div 
                     onClick={() => setExpandedUser(isExpanded ? null : k)}
                     style={{ display: "flex", alignItems: "center", padding: "14px 16px", gap: 12, cursor: "pointer" }}
                   >
-                    {/* Avatar */}
                     <div style={{ width: 44, height: 44, borderRadius: 12, background: u.active ? (exp.isDebt ? "rgba(249,115,22,0.15)" : "rgba(99,102,241,0.15)") : "rgba(255,255,255,0.05)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color: u.active ? (exp.isDebt ? "#f97316" : "#818cf8") : "rgba(255,255,255,0.3)" }}>
                       {u.name?.charAt(0).toUpperCase() || k.charAt(0).toUpperCase()}
                     </div>
                     
-                    {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ fontSize: 15, fontWeight: 700, color: u.active ? "#fff" : "rgba(255,255,255,0.4)" }}>{k}</span>
@@ -367,24 +598,20 @@ export default function AngelRentAdmin() {
                       </div>
                       <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)", marginTop: 2 }}>
                         {u.name || "Sin nombre"}
-                        {u.phoneNumber && <span style={{ color: "#a78bfa", marginLeft: 8 }}>{u.phoneNumber}</span>}
                       </div>
                     </div>
                     
-                    {/* Time Badge */}
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
                       <div style={{ fontSize: 14, fontWeight: 800, color: exp.color }}>{exp.label}</div>
                       {exp.sub && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>{exp.sub}</div>}
                     </div>
                     
-                    {/* Arrow */}
                     <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 12, transition: "transform 0.2s", transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)" }}>&#9660;</div>
                   </div>
                   
-                  {/* Expanded Actions */}
+                  {/* Expanded */}
                   {isExpanded && (
                     <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", padding: "12px 16px", background: "rgba(0,0,0,0.2)" }}>
-                      {/* Info Row */}
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, fontSize: 11 }}>
                         <span style={{ padding: "4px 10px", background: "rgba(255,255,255,0.05)", borderRadius: 6, color: "rgba(255,255,255,0.5)" }}>
                           {u.proxyHost ? `${u.proxyHost}:${u.proxyPort}` : "IP Local"}
@@ -392,47 +619,31 @@ export default function AngelRentAdmin() {
                         <span style={{ padding: "4px 10px", background: "rgba(255,255,255,0.05)", borderRadius: 6, color: "rgba(255,255,255,0.5)" }}>
                           {UA_SHORT[u.userAgentKey || "iphone"] || "iPhone"}
                         </span>
-                        {u.cookieTs && (
-                          <span style={{ padding: "4px 10px", background: "rgba(168,85,247,0.1)", borderRadius: 6, color: "#a78bfa" }}>
-                            Cookie {Math.round((Date.now()-u.cookieTs)/3600000)}h
-                          </span>
-                        )}
                       </div>
                       
-                      {/* Action Buttons */}
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-                        <button onClick={(e) => { e.stopPropagation(); openEdit(k); }} style={{ padding: "12px 8px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 10, color: "#818cf8", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 16 }}>&#9998;</span>
+                      {/* Botones 5 columnas */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 6 }}>
+                        <button onClick={(e) => { e.stopPropagation(); openEdit(k); }} style={{ padding: "10px 4px", background: "rgba(99,102,241,0.15)", border: "1px solid rgba(99,102,241,0.3)", borderRadius: 10, color: "#818cf8", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 14 }}>&#9998;</span>
                           <span>Editar</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); toggle(k); }} style={{ padding: "12px 8px", background: u.active ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${u.active ? "rgba(239,68,68,0.25)" : "rgba(34,197,94,0.25)"}`, borderRadius: 10, color: u.active ? "#ef4444" : "#22c55e", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 16 }}>{u.active ? "\u2298" : "\u2713"}</span>
+                        <button onClick={(e) => { e.stopPropagation(); toggle(k); }} style={{ padding: "10px 4px", background: u.active ? "rgba(239,68,68,0.1)" : "rgba(34,197,94,0.1)", border: `1px solid ${u.active ? "rgba(239,68,68,0.25)" : "rgba(34,197,94,0.25)"}`, borderRadius: 10, color: u.active ? "#ef4444" : "#22c55e", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 14 }}>{u.active ? "\u2298" : "\u2713"}</span>
                           <span>{u.active ? "Desact" : "Activar"}</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); copyLink(k); }} style={{ padding: "12px 8px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 16 }}>&#128279;</span>
+                        <button onClick={(e) => { e.stopPropagation(); copyLink(k); }} style={{ padding: "10px 4px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, color: "rgba(255,255,255,0.6)", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 14 }}>&#128279;</span>
                           <span>Proxy</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); copyClientLink(k); }} style={{ padding: "12px 8px", background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 10, color: "#a78bfa", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 16 }}>&#128100;</span>
+                        <button onClick={(e) => { e.stopPropagation(); copyClientLink(k); }} style={{ padding: "10px 4px", background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.25)", borderRadius: 10, color: "#a78bfa", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 14 }}>&#128100;</span>
                           <span>Cliente</span>
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); del(k); }} style={{ padding: "12px 8px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "rgba(255,255,255,0.35)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-                          <span style={{ fontSize: 16 }}>\u2715</span>
+                        <button onClick={(e) => { e.stopPropagation(); del(k); }} style={{ padding: "10px 4px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "rgba(255,255,255,0.35)", fontSize: 10, fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+                          <span style={{ fontSize: 14 }}>\u2715</span>
                           <span>Borrar</span>
                         </button>
                       </div>
-                      
-                      {/* Phone Delete */}
-                      {u.phoneNumber && (
-                        <button onClick={async (e) => {
-                          e.stopPropagation();
-                          await fetch(`${FB}/proxyUsers/${k}/phoneNumber.json`, { method: "PUT", headers: {"Content-Type":"application/json"}, body: "null" });
-                          showToast("Telefono borrado"); await load();
-                        }} style={{ width: "100%", marginTop: 8, padding: 10, background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, color: "#ef4444", fontSize: 12, cursor: "pointer" }}>
-                          Borrar telefono ({u.phoneNumber})
-                        </button>
-                      )}
                     </div>
                   )}
                 </div>
@@ -448,15 +659,12 @@ export default function AngelRentAdmin() {
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: 0 }}>
           <div style={{ background: "#1a1a24", borderRadius: "24px 24px 0 0", padding: "20px 20px 32px", width: "100%", maxWidth: 480, maxHeight: "90dvh", overflowY: "auto" }}>
             
-            {/* Handle */}
             <div style={{ width: 40, height: 4, background: "rgba(255,255,255,0.2)", borderRadius: 2, margin: "0 auto 16px" }} />
             
-            {/* Title */}
             <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 20, textAlign: "center" }}>
               {editing ? `Editar: ${editing}` : "Nuevo Usuario"}
             </h3>
 
-            {/* Username */}
             {!editing && (
               <>
                 <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Username</label>
@@ -465,12 +673,11 @@ export default function AngelRentAdmin() {
               </>
             )}
 
-            {/* Name */}
             <label style={{ display: "block", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 6, textTransform: "uppercase", letterSpacing: 0.5 }}>Nombre</label>
             <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 15, outline: "none", marginBottom: 16 }} 
               value={form.name || ""} onChange={e => set("name", e.target.value)} placeholder="Nombre completo" />
 
-            {/* Proxy Toggle */}
+            {/* Proxy */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: useLocalProxy ? 0 : 12 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}>Proxy</span>
@@ -502,7 +709,6 @@ export default function AngelRentAdmin() {
               ))}
             </div>
 
-            {/* UA Generator */}
             <button onClick={() => set("userAgent", genUA(deviceType))}
               style={{ width: "100%", padding: 12, marginBottom: 16, borderRadius: 10, border: "1px solid rgba(168,85,247,0.3)", background: "rgba(168,85,247,0.1)", color: "#c4b5fd", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>
               Generar User Agent
@@ -512,7 +718,6 @@ export default function AngelRentAdmin() {
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Tiempo de Renta</div>
               
-              {/* Mode Toggle */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
                 <button onClick={() => setRentMode("set")} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${rentMode === "set" ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "set" ? "rgba(99,102,241,0.15)" : "transparent", color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
                   Establecer
@@ -522,7 +727,6 @@ export default function AngelRentAdmin() {
                 </button>
               </div>
 
-              {/* Quick Presets */}
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
                 {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"]].map(([label,d,h]) => (
                   <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
@@ -532,7 +736,6 @@ export default function AngelRentAdmin() {
                 ))}
               </div>
 
-              {/* Days/Hours Input */}
               <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
                 <div style={{ flex: 1, textAlign: "center" }}>
                   <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>DIAS</div>
@@ -554,7 +757,6 @@ export default function AngelRentAdmin() {
                 </div>
               </div>
 
-              {/* Preview */}
               {previewInputMs > 0 && (
                 <div style={{ padding: 12, background: previewMs > 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", borderRadius: 10, fontSize: 12 }}>
                   {previewMs > 0 ? (
@@ -573,7 +775,6 @@ export default function AngelRentAdmin() {
               )}
             </div>
 
-            {/* Site Credentials */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>
               <input style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none" }} 
                 value={form.siteEmail || ""} onChange={e => set("siteEmail", e.target.value)} placeholder="Email sitio" />
@@ -581,15 +782,12 @@ export default function AngelRentAdmin() {
                 value={form.sitePass || ""} onChange={e => set("sitePass", e.target.value)} placeholder="Password sitio" />
             </div>
 
-            {/* URL */}
             <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none", marginBottom: 16 }} 
               value={form.defaultUrl || ""} onChange={e => set("defaultUrl", e.target.value)} placeholder="URL por defecto" />
 
-            {/* Notes */}
             <input style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "12px 14px", color: "#fff", fontSize: 13, outline: "none", marginBottom: 16 }} 
               value={form.notes || ""} onChange={e => set("notes", e.target.value)} placeholder="Notas" />
 
-            {/* Status */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
               <button onClick={() => set("active", true)} style={{ padding: 12, borderRadius: 10, border: `1px solid ${form.active ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)"}`, background: form.active ? "rgba(34,197,94,0.15)" : "transparent", color: form.active ? "#22c55e" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600 }}>
                 Activo
@@ -599,7 +797,6 @@ export default function AngelRentAdmin() {
               </button>
             </div>
 
-            {/* Action Buttons */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 10 }}>
               <button onClick={() => setModal(false)} style={{ padding: 14, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)", border: "none", borderRadius: 12, fontWeight: 700, cursor: "pointer", fontSize: 15 }}>
                 Cancelar
@@ -619,10 +816,23 @@ export default function AngelRentAdmin() {
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
-        @media (min-width: 640px) {
-          .hide-mobile { display: inline !important; }
-        }
       `}</style>
     </div>
   );
+}
+
+// ============================================
+// COMPONENTE PRINCIPAL - DETECTA ADMIN O CLIENTE
+// ============================================
+export default function AngelRentPanel() {
+  const searchParams = useSearchParams();
+  const clienteId = searchParams.get("cliente");
+  
+  // Si hay parametro ?cliente=xxx muestra panel de cliente
+  if (clienteId) {
+    return <ClientPanel userId={clienteId} />;
+  }
+  
+  // Si no, muestra panel de admin
+  return <AdminPanel />;
 }
