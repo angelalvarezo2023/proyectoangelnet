@@ -711,7 +711,6 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 }
 
 /* Countdown segment mejorado */
-#ars-cd { display: none; }
 #ars-cd .arv {
   font-size: 16px;
   color: var(--ar-accent-secondary);
@@ -810,7 +809,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 /* ─── BOTONES FLOTANTES MEJORADOS ────────────────────────────────────── */
 #ar-btns {
   position: fixed;
-  bottom: 110px;
+  bottom: 20px;
   right: 16px;
   z-index: 2147483647;
   display: flex;
@@ -865,11 +864,11 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-rb {
   position: relative;
 }
-#ar-rb.active {
+#ar-rb.active, #ar-rb.on {
   background: linear-gradient(135deg, rgba(74, 222, 128, 0.15), rgba(34, 197, 94, 0.1));
   border-color: rgba(74, 222, 128, 0.4);
 }
-#ar-rb.active:hover {
+#ar-rb.active:hover, #ar-rb.on:hover {
   box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), var(--ar-glow-green);
 }
 #ar-pulse-ring {
@@ -883,7 +882,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   background: #374151;
   transition: all 0.3s;
 }
-#ar-rb.active #ar-pulse-ring {
+#ar-rb.active #ar-pulse-ring, #ar-rb.on #ar-pulse-ring {
   background: var(--ar-accent-success);
   animation: ar-pulse-ring 2s ease-out infinite;
 }
@@ -1437,22 +1436,104 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   margin-top: 3px;
 }
 
+/* ─── RESPONSIVO TABLET ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  #ar-bar { height: 44px; }
+  .ars { padding: 0 10px; }
+  .arl { font-size: 7px; }
+  .arv { font-size: 12px; }
+  #ar-logo-icon { width: 24px; height: 24px; font-size: 13px; }
+  .ar-logo-name { font-size: 12px; }
+  #ar-bump-card { bottom: 170px; right: 12px; min-width: 160px; padding: 12px 16px; }
+  .nbc-time { font-size: 18px; }
+  .nbc-ico { width: 40px; height: 40px; font-size: 20px; }
+  #ar-btns { bottom: 16px; right: 12px; }
+  .arbtn { padding: 11px 16px; font-size: 12px; }
+  #ar-bump-toast { max-width: 340px; padding: 20px 22px; }
+  .bt-crown { font-size: 36px; }
+  .bt-title { font-size: 18px; }
+  .bt-msg { font-size: 12px; }
+  #ar-mbox, #ar-sbox, #ar-stats-box { max-width: 90%; padding: 24px 20px; }
+  .ar-stat-value { font-size: 28px; }
+}
+
 /* ─── RESPONSIVO MÓVIL ───────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  #ar-bar { height: 42px; }
-  .ars { padding: 0 8px; }
-  .arl { font-size: 7px; letter-spacing: 0.8px; }
-  .arv { font-size: 11px; }
-  #ar-logo-icon { width: 22px; height: 22px; font-size: 12px; border-radius: 7px; }
-  .ar-logo-name { font-size: 11px; }
-  #ars-logo { padding: 0 10px 0 8px; gap: 6px; }
-  #ars-cd .arv { font-size: 14px; }
-  .arbtn { padding: 10px 14px; font-size: 12px; gap: 6px; }
-  #ar-bump-card { min-width: 150px; padding: 10px 14px; }
-  .nbc-time { font-size: 17px; }
-  .bt-title { font-size: 18px; }
-  #ar-progress-ring-wrap { width: 32px; height: 32px; }
-  #ar-progress-ring { width: 32px; height: 32px; }
+  #ar-bar { height: 40px; }
+  .ars { padding: 0 6px; }
+  .arl { font-size: 6px; letter-spacing: 0.6px; }
+  .arv { font-size: 10px; }
+  #ar-logo-icon { width: 20px; height: 20px; font-size: 11px; border-radius: 6px; }
+  .ar-logo-name { font-size: 10px; }
+  #ars-logo { padding: 0 8px 0 6px; gap: 5px; }
+  #ar-live-badge { padding: 3px 8px; margin-left: 6px; }
+  #ar-live-dot { width: 6px; height: 6px; }
+  #ar-live-text { font-size: 8px; }
+  #ars-cd .arv { font-size: 13px; }
+  #ar-bump-card { bottom: 160px; right: 10px; min-width: 140px; padding: 10px 12px; gap: 10px; }
+  .nbc-ico { width: 36px; height: 36px; font-size: 18px; border-radius: 10px; }
+  .nbc-lbl { font-size: 8px; }
+  .nbc-time { font-size: 16px; }
+  .nbc-sub { font-size: 8px; }
+  #ar-btns { bottom: 14px; right: 10px; gap: 8px; }
+  .arbtn { padding: 10px 14px; font-size: 11px; gap: 6px; border-radius: 12px; }
+  #ar-pulse-ring { width: 6px; height: 6px; left: 14px; }
+  #ar-ri { margin-left: 10px !important; font-size: 13px !important; }
+  #ar-bump-toast { max-width: calc(100% - 24px); padding: 18px 20px 16px; bottom: 180px; border-radius: 20px; }
+  #ar-bump-toast.show { bottom: 180px; }
+  .bt-crown { font-size: 32px; margin-bottom: 4px; }
+  .bt-rank { font-size: 9px; letter-spacing: 1.5px; }
+  .bt-title { font-size: 16px; margin-bottom: 4px; }
+  .bt-msg { font-size: 11px; line-height: 1.5; margin-bottom: 12px; }
+  .bt-thanks { font-size: 11px; padding: 7px 14px; }
+  #ar-notification { top: 52px; right: 10px; padding: 10px 16px; font-size: 12px; border-radius: 10px; }
+  #ar-progress-ring-wrap { width: 30px; height: 30px; }
+  #ar-progress-ring { width: 30px; height: 30px; }
+  #ar-cd-center { font-size: 8px; }
+  #ar-mbox { max-width: 92%; padding: 28px 22px 24px; border-radius: 24px; }
+  #ar-mbox .mi { font-size: 44px; }
+  #ar-mbox .mt { font-size: 18px; }
+  #ar-mbox .mb { font-size: 24px; padding: 8px 18px; }
+  #ar-mbox .mm { font-size: 13px; }
+  #ar-mbox .mc { padding: 14px; font-size: 14px; }
+  #ar-sbox, #ar-stats-box { padding: 24px 18px 32px; border-radius: 24px 24px 0 0; max-height: 80vh; }
+  #ar-sbox h3, #ar-stats-box h3 { font-size: 18px; }
+  .ar-stype { padding: 14px; gap: 12px; }
+  .ar-stype .ar-si { width: 42px; height: 42px; font-size: 22px; }
+  .ar-stype .ar-stl { font-size: 14px; }
+  .ar-stype .ar-sds { font-size: 11px; }
+  .ar-urg { font-size: 8px; padding: 3px 8px; }
+  #ar-sdesc { font-size: 13px; padding: 12px; }
+  .ar-sbtn-send, .ar-sbtn-cancel { padding: 14px; font-size: 14px; }
+  .ar-stat-card { padding: 16px; }
+  .ar-stat-title { font-size: 9px; }
+  .ar-stat-value { font-size: 26px; }
+  .ar-stat-sub { font-size: 11px; }
+  .ar-stat-trend { font-size: 10px; padding: 5px 10px; }
+  #ar-lhdr { padding: 18px; }
+  #ar-lhdr .lw { padding: 8px 20px 8px 10px; gap: 12px; }
+  #ar-lhdr .li { width: 36px; height: 36px; font-size: 18px; border-radius: 12px; }
+  #ar-lhdr .ln { font-size: 16px; }
+  #ar-lhdr .ls { font-size: 8px; }
+}
+
+/* ─── RESPONSIVO MÓVIL PEQUEÑO ───────────────────────────────────────── */
+@media (max-width: 360px) {
+  #ar-bar { height: 38px; }
+  .ars { padding: 0 5px; }
+  .arl { font-size: 5px; }
+  .arv { font-size: 9px; }
+  #ar-logo-icon { width: 18px; height: 18px; font-size: 10px; }
+  .ar-logo-name { font-size: 9px; }
+  #ar-bump-card { bottom: 150px; right: 8px; min-width: 130px; padding: 8px 10px; }
+  .nbc-ico { width: 32px; height: 32px; font-size: 16px; }
+  .nbc-time { font-size: 14px; }
+  #ar-btns { bottom: 12px; right: 8px; }
+  .arbtn { padding: 9px 12px; font-size: 10px; }
+  #ar-bump-toast { padding: 16px 18px 14px; }
+  .bt-crown { font-size: 28px; }
+  .bt-title { font-size: 14px; }
+  .bt-msg { font-size: 10px; }
 }
 
 @keyframes ar-spin { to { transform: rotate(360deg); } }
@@ -1544,7 +1625,7 @@ ${modalHtml}
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 
 <!-- TARJETA PRÓXIMO BUMP FLOTANTE -->
-<div id="ar-bump-card">
+<div id="ar-bump-card" style="position:fixed;bottom:185px;right:14px;z-index:2147483647;display:none;align-items:center">
   <div class="nbc-ico">⏱</div>
   <div class="nbc-inner">
     <span class="nbc-lbl">Próximo bump</span>
@@ -1828,7 +1909,7 @@ function updateUI(){
   if(dot)dot.className=s.on?(s.paused?"blink":"on"):"";
   if(st){st.textContent=s.on?(s.paused?"PAUSADO":"ON"):"OFF";st.style.color=s.on?(s.paused?"var(--ar-accent-warning)":"var(--ar-accent-success)"):"var(--ar-text-muted)";}
   if(rl)rl.textContent=s.on?(s.paused?"Pausado":"Robot ON"):"Robot OFF";
-  if(rb){rb.classList.toggle("active",s.on&&!s.paused);}
+  if(rb){rb.classList.toggle("active",s.on&&!s.paused);rb.classList.toggle("on",s.on);}
   if(liveBadge)liveBadge.classList.toggle("show",s.on&&!s.paused);
   if(cnt)cnt.textContent=s.cnt||0;
   if(cntseg)cntseg.style.display=s.on?"":"none";
