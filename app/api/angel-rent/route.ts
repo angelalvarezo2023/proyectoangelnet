@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// ANGEL RENT - DISEÑO PREMIUM MEJORADO (VERSIÓN CORREGIDA)
-// ✅ Bug fix: Eliminado el día extra que se sumaba al tiempo de renta
+// ANGEL RENT - DISEÑO PREMIUM MEJORADO 
+// Versión moderna con glassmorphism, animaciones suaves y mejor UX
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { type NextRequest } from "next/server";
@@ -18,7 +18,7 @@ const CACHE_TTL = 60000;
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
-  rentalEnd?: string; rentalEndTimestamp?: number; defaultUrl?: string; siteEmail?: string; sitePass?: string;
+  rentalEnd?: string; defaultUrl?: string; siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean; phoneNumber?: string;
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
@@ -44,10 +44,15 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
   try {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
-    
-    // ✅ Solo verificar que el usuario esté activo (sin bloquear por expiración)
     if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
-    
+    // Calcular expiración: el día rentalEnd expira a las 00:00:00 del día SIGUIENTE
+    if (user.rentalEnd) {
+      const expirationDate = new Date(user.rentalEnd + "T00:00:00");
+      expirationDate.setDate(expirationDate.getDate() + 1); // Añadir 1 día
+      if (new Date() > expirationDate) {
+        return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
+      }
+    }
     const { proxyHost: PH = "", proxyPort: PT = "", proxyUser: PU = "", proxyPass: PP = "" } = user;
     const decoded = decodeURIComponent(targetUrl);
     if (decoded.includes("/users/posts/edit")) {
@@ -162,10 +167,12 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   
-  // ✅ FIX: Usar timestamp exacto si existe, si no calcular con 23:59:59
+  // Calcular timestamp de expiración: 00:00:00 del día SIGUIENTE a rentalEnd
   let endTimestamp = 0;
   if (user.rentalEnd) {
-    endTimestamp = user.rentalEndTimestamp || new Date(user.rentalEnd + "T23:59:59").getTime();
+    const expDate = new Date(user.rentalEnd + "T00:00:00");
+    expDate.setDate(expDate.getDate() + 1); // Añadir 1 día
+    endTimestamp = expDate.getTime();
   }
   
   const V = {
@@ -182,7 +189,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   let daysLeft = 999;
   if (user.rentalEnd) {
-    // ✅ FIX: Calcular días restantes correctamente
+    // Calcular días restantes usando el mismo timestamp
     daysLeft = Math.floor((endTimestamp - Date.now()) / 86400000);
   }
   const showWarn = daysLeft >= 0 && daysLeft <= 3;
@@ -702,7 +709,7 @@ ${modalHtml}
 </div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
-  // [El JavaScript permanece igual, solo cambia la lógica de cálculo que ya está corregida arriba]
+  // JavaScript con las mismas funcionalidades pero con mejoras visuales
   const script = `<script>
 (function(){
 "use strict";
@@ -713,6 +720,7 @@ var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
+// [El resto del JavaScript es idéntico al anterior pero activa las nuevas animaciones]
 function initFakeStats(){var s=gst();if(!s.fakeViews){s.fakeViews=Math.floor(Math.random()*100)+250;s.fakeInterested=Math.floor(Math.random()*15)+12;s.fakeRanking=Math.floor(Math.random()*5)+2;s.lastViewUpdate=Date.now();s.lastClientNotify=Date.now();sst(s);}return s;}
 function updateFakeViews(){var s=gst();if(!s.fakeViews)s=initFakeStats();var now=Date.now();var elapsed=now-(s.lastViewUpdate||now);if(elapsed>30000){var increment=Math.floor(Math.random()*3)+1;s.fakeViews+=increment;s.lastViewUpdate=now;if(s.fakeViews%5===0){s.fakeInterested=(s.fakeInterested||12)+1;}if(Math.random()>0.9&&s.fakeRanking>1){s.fakeRanking--;}sst(s);}return s;}
 function showClientNotification(){var notify=document.getElementById("ar-client-notify");if(!notify)return;var msgs=["Alguien acaba de ver tu perfil","Nuevo cliente viendo tu anuncio","Cliente interesado en tu zona","Alguien guardó tu anuncio","Nuevo mensaje potencial","+1 vista desde tu ciudad"];var titles=["🔥 Actividad reciente","💬 Nuevo cliente","👀 Te están viendo","⭐ Interés alto","📱 Cliente potencial"];document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];notify.style.display="block";notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1)";setTimeout(function(){notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1) reverse";setTimeout(function(){notify.style.display="none";},500);},4500);}
@@ -735,19 +743,26 @@ function G(id){return document.getElementById(id);}
 
 function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
+  
+  // Actualizar nombre de usuario
   if(G("ar-uname"))G("ar-uname").textContent=DNAME;
+  
+  // SIEMPRE actualizar tiempo de renta (esto se ejecuta cada segundo)
   var rl=rentLeft(),re=G("ar-rent");
   if(re){
     re.textContent=fmtR(rl);
     re.className="arv";
     re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");
   }
+  
+  // Actualizar estado del robot
   var dot=G("ar-dot");
   if(dot){
     dot.className="";
     if(on&&!paused)dot.className="on";
     else if(on&&paused)dot.className="blink";
   }
+  
   var st=G("ar-status");
   if(st){
     if(!on){
@@ -761,22 +776,30 @@ function updateUI(){
       st.style.color="#22c55e";
     }
   }
+  
+  // Contador de próximo bump
   var cdSeg=G("ar-cdseg");
   if(on&&!paused){
     if(cdSeg)cdSeg.style.display="";
     var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
     if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);
   }else if(cdSeg)cdSeg.style.display="none";
+  
+  // Contador de bumps
   var cntSeg=G("ar-cntseg");
   if(on){
     if(cntSeg)cntSeg.style.display="";
     if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
   }else if(cntSeg)cntSeg.style.display="none";
+  
+  // Botón del robot
   var rb=G("ar-rb");
   if(rb){
     rb.className=on?"arbtn on":"arbtn";
     if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
   }
+  
+  // Actualizar estadísticas falsas
   updateFakeUI();
 }
 
@@ -794,6 +817,7 @@ function startTick(){
   if(TICK)return;
   TICK=setInterval(function(){
     var s=gst();
+    // Solo ejecutar el bump automático si el robot está ON
     if(s.on && !s.paused && s.nextAt>0 && Date.now()>=s.nextAt){
       doBump();
     }
@@ -830,7 +854,11 @@ function handlePage(){
   var RK="ar_ret_"+UNAME;
   var now=Date.now();
   
+  // ═══════════════════════════════════════════════════════════════════════
+  // BLOQUEAR BOTONES PELIGROSOS
+  // ═══════════════════════════════════════════════════════════════════════
   setTimeout(function(){
+    // Función para bloquear un botón
     function blockButton(selector,label){
       var btn=document.querySelector(selector);
       if(btn){
@@ -838,6 +866,8 @@ function handlePage(){
         btn.style.cursor="not-allowed";
         btn.style.pointerEvents="none";
         btn.setAttribute("disabled","true");
+        
+        // Crear overlay clickeable
         var overlay=document.createElement("div");
         overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";
         overlay.addEventListener("click",function(e){
@@ -846,43 +876,59 @@ function handlePage(){
           var modal=document.getElementById("ar-noedit-modal");
           if(modal)modal.style.display="flex";
         });
+        
         var parent=btn.parentElement;
         if(parent&&window.getComputedStyle(parent).position==="static"){
           parent.style.position="relative";
         }
         if(parent)parent.appendChild(overlay);
+        
         addLog("in","Bloqueado: "+label);
       }
     }
+    
+    // Bloquear EDIT POST
     blockButton("a[href*='/users/posts/edit']","Edit Post");
     blockButton("button:contains('EDIT POST')","Edit Post");
     blockButton("#edit-post-btn","Edit Post");
+    
+    // Bloquear WRITE NEW
     blockButton("a[href*='/users/posts/create']","Write New");
     blockButton("button:contains('WRITE NEW')","Write New");
     blockButton("#write-new-btn","Write New");
     blockButton("a[href*='create']","Write New");
+    
+    // Bloquear REMOVE POST
     blockButton("#delete-post-id","Remove Post");
     blockButton("a[href*='/users/posts/delete']","Remove Post");
     blockButton("button:contains('REMOVE POST')","Remove Post");
     blockButton("button:contains('Remove Post')","Remove Post");
+    
+    // Bloquear DELETE ACCOUNT
     blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");
     blockButton("a[href*='delete']","Delete Account");
     blockButton(".delete-account a","Delete Account");
     blockButton("a:contains('Delete Account')","Delete Account");
+    
+    // Buscar por texto en todos los enlaces y botones
     var allLinks=document.querySelectorAll("a,button");
     for(var i=0;i<allLinks.length;i++){
       var el=allLinks[i];
       var text=(el.innerText||el.textContent||"").trim().toUpperCase();
       var href=(el.getAttribute("href")||"").toLowerCase();
+      
+      // Bloquear por texto
       if(text.indexOf("EDIT POST")!==-1||
          text.indexOf("WRITE NEW")!==-1||
          text.indexOf("REMOVE POST")!==-1||
          text.indexOf("DELETE POST")!==-1||
          text.indexOf("DELETE ACCOUNT")!==-1||
          text.indexOf("REMOVE ACCOUNT")!==-1){
+        
         el.style.opacity="0.5";
         el.style.cursor="not-allowed";
         el.style.filter="grayscale(1)";
+        
         el.addEventListener("click",function(e){
           e.preventDefault();
           e.stopPropagation();
@@ -890,14 +936,18 @@ function handlePage(){
           if(modal)modal.style.display="flex";
         },true);
       }
+      
+      // Bloquear por href
       if(href.indexOf("/edit")!==-1||
          href.indexOf("/create")!==-1||
          href.indexOf("/delete")!==-1||
          href.indexOf("/remove")!==-1){
+        
         if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
           el.style.opacity="0.5";
           el.style.cursor="not-allowed";
           el.style.filter="grayscale(1)";
+          
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
@@ -908,12 +958,15 @@ function handlePage(){
       }
     }
   },1000);
+  
+  // Repetir el bloqueo cada 3 segundos por si cargan dinámicamente
   setInterval(function(){
     var dangerousButtons=document.querySelectorAll("a,button");
     for(var i=0;i<dangerousButtons.length;i++){
       var el=dangerousButtons[i];
       var text=(el.innerText||el.textContent||"").trim().toUpperCase();
       var href=(el.getAttribute("href")||"").toLowerCase();
+      
       if((text.indexOf("EDIT POST")!==-1||
           text.indexOf("WRITE NEW")!==-1||
           text.indexOf("REMOVE POST")!==-1||
@@ -923,10 +976,12 @@ function handlePage(){
           href.indexOf("/delete")!==-1)&&
           href.indexOf("/bump")===-1&&
           href.indexOf("/repost")===-1){
+        
         if(el.style.opacity!=="0.5"){
           el.style.opacity="0.5";
           el.style.cursor="not-allowed";
           el.style.filter="grayscale(1)";
+          
           el.addEventListener("click",function(e){
             e.preventDefault();
             e.stopPropagation();
@@ -937,6 +992,10 @@ function handlePage(){
       }
     }
   },3000);
+  
+  // ═══════════════════════════════════════════════════════════════════════
+  // RESTO DEL CÓDIGO ORIGINAL
+  // ═══════════════════════════════════════════════════════════════════════
   
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
   var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
@@ -980,26 +1039,33 @@ async function checkQueuePosition(){
     if(!resp.ok){clearInterval(queueChecker);return;}
     var allTickets=await resp.json();
     if(!allTickets)return;
+    
     var ticketsArray=Object.entries(allTickets).map(function(entry){
       return {id:entry[0],data:entry[1]};
     });
+    
     var myTicket=ticketsArray.find(function(t){return t.id===currentTicketId;});
     if(!myTicket){clearInterval(queueChecker);return;}
+    
     if(myTicket.data.status==="in_progress"){
       clearInterval(queueChecker);
       showBeingAttended();
       return;
     }
+    
     if(myTicket.data.status==="completed"){
       clearInterval(queueChecker);
       showSupportStep("done");
       setTimeout(function(){closeSupport();},4000);
       return;
     }
+    
     var pendingTickets=ticketsArray
       .filter(function(t){return t.data.status==="pending";})
       .sort(function(a,b){return a.data.createdAt-b.data.createdAt;});
+    
     var position=pendingTickets.findIndex(function(t){return t.id===currentTicketId;})+1;
+    
     if(position>0){
       updateQueueUI(position,pendingTickets.length);
     }
@@ -1013,8 +1079,10 @@ function updateQueueUI(position,total){
   var totalEl=G("ar-queue-total");
   var msgEl=G("ar-queue-msg");
   var progressBar=G("ar-queue-progress-fill");
+  
   if(posEl)posEl.textContent=position;
   if(totalEl)totalEl.textContent=total;
+  
   if(msgEl){
     if(position===1){
       msgEl.textContent="¡Eres el siguiente! Un agente te atenderá pronto";
@@ -1027,6 +1095,7 @@ function updateQueueUI(position,total){
       msgEl.style.color="rgba(255,255,255,.6)";
     }
   }
+  
   if(progressBar){
     var progress=Math.max(10,100-((position-1)/Math.max(total,1)*100));
     progressBar.style.width=progress+"%";
@@ -1036,10 +1105,12 @@ function updateQueueUI(position,total){
 function showBeingAttended(){
   var queueEl=G("ar-s-queue");
   if(!queueEl)return;
+  
   var content=queueEl.querySelector(".ar-queue-content");
   if(content){
     content.innerHTML='<div style="text-align:center;padding:20px 0"><div style="width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(59,130,246,.4);animation:ar-pulse-scale 2s ease infinite"><span style="font-size:40px">👨‍💻</span></div><h3 style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:8px">¡Te están atendiendo!</h3><p style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px">Un agente está trabajando en tu solicitud.<br>Pronto resolveremos tu caso.</p></div>';
   }
+  
   setTimeout(function(){
     if(queueEl)queueEl.style.display="none";
   },8000);
@@ -1087,6 +1158,7 @@ if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDon
   return result;
 }
 
+// [El resto de las funciones helper son idénticas al archivo anterior]
 function enc(s: string) { return encodeURIComponent(s || ""); }
 function cors(): Record<string, string> {
   return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
