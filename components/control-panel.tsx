@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { FirebaseAPI, type BrowserData, type SearchResult } from "@/lib/firebase";
-import { SearchIcon, SettingsIcon, AlertTriangleIcon } from "@/components/icons";
+import { SearchIcon } from "@/components/icons";
 import { Dashboard } from "@/components/dashboard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,36 +33,6 @@ function formatRentalTime(rental: BrowserData["rentalRemaining"]) {
   if (rental.hours > 0) parts.push(`${rental.hours}h`);
   if (rental.minutes > 0) parts.push(`${rental.minutes}m`);
   return parts.join(" ");
-}
-
-function getRentalStatus(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "neutral";
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "debt";
-  if (rental.days === 0 && rental.hours === 0) return "critical";
-  if (rental.days === 0) return "warning";
-  if (rental.days < 2) return "caution";
-  return "healthy";
-}
-
-function getRentalGradient(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "from-gray-500/10 to-gray-600/10";
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "from-red-600/30 via-red-500/20 to-red-600/30";
-  if (rental.days === 0 && rental.hours < 24) return "from-red-500/20 via-pink-500/20 to-red-600/20";
-  if (rental.days <= 1) return "from-orange-500/20 via-amber-500/20 to-orange-600/20";
-  if (rental.days <= 3) return "from-yellow-500/20 via-amber-400/20 to-yellow-600/20";
-  return "from-green-500/20 via-emerald-500/20 to-green-600/20";
-}
-
-function getRentalBorderGlow(rental: BrowserData["rentalRemaining"]) {
-  if (!rental || rental.days === -1) return "shadow-gray-500/0";
-  const isDebt = rental.days < 0 || (rental as any).isDebt === true;
-  if (isDebt) return "shadow-red-600/70 shadow-xl border-red-600/50";
-  if (rental.days === 0 && rental.hours < 24) return "shadow-red-500/50 shadow-lg";
-  if (rental.days <= 1) return "shadow-orange-500/30 shadow-md";
-  if (rental.days <= 3) return "shadow-yellow-500/20 shadow-sm";
-  return "shadow-green-500/20 shadow-sm";
 }
 
 function getRentalTextColor(rental: BrowserData["rentalRemaining"]) {
@@ -165,311 +135,105 @@ function BrowserCard({ result, onClick, viewMode }: { result: SearchResult; onCl
   const isDebt = rentalRemaining && 
     (rentalRemaining.days < 0 || (rentalRemaining as any).isDebt === true);
 
-  const rentalGradient = getRentalGradient(rentalRemaining);
-  const rentalBorderGlow = getRentalBorderGlow(rentalRemaining);
   const rentalTextColor = getRentalTextColor(rentalRemaining);
 
-  if (viewMode === 'list') {
-    return (
-      <div
-        onClick={onClick}
-        className={cn(
-          "group cursor-pointer rounded-2xl border border-white/10 p-5 sm:p-4 transition-all duration-300 hover:scale-[1.01] flex flex-col sm:flex-row items-start sm:items-center gap-4 backdrop-blur-xl",
-          hasError 
-            ? "bg-gradient-to-r from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-lg" 
-            : `bg-gradient-to-r ${rentalGradient} ${rentalBorderGlow}`
-        )}
-      >
-        <div className="flex items-center gap-3 min-w-[120px] sm:min-w-[100px]">
-          <div className={cn(
-            "h-4 w-4 sm:h-3 sm:w-3 rounded-full relative",
-            isPaused ? "bg-yellow-400" : "bg-green-400"
-          )}>
-            {!isPaused && (
-              <div className="absolute inset-0 rounded-full bg-green-400 animate-ping opacity-75" />
-            )}
-          </div>
-          <span className={cn(
-            "text-base sm:text-sm font-bold",
-            isPaused ? "text-yellow-400" : "text-green-400"
-          )}>
-            {isPaused ? "Pausado" : "Activo"}
-          </span>
-        </div>
-
-        <div className="flex-1 min-w-[150px]">
-          <h3 className="text-xl sm:text-lg font-bold text-white">{clientName}</h3>
-          {postName && postName !== "N/A" && (
-            <p className="text-base sm:text-sm text-white/60 mt-1">{postName}</p>
-          )}
-        </div>
-
-        <div className="w-full sm:w-auto sm:min-w-[140px] text-center bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
-          {isPaused ? (
-            <span className="text-xl sm:text-lg font-bold text-yellow-400">⏸ Pausado</span>
-          ) : timeRemaining ? (
-            <span className="text-3xl sm:text-2xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
-              {timeRemaining.minutes}m {timeRemaining.seconds}s
-            </span>
-          ) : (
-            <span className="text-base sm:text-sm text-white/40">Sin datos</span>
-          )}
-        </div>
-
-        <div className="w-full sm:w-auto sm:min-w-[120px] text-center sm:text-right bg-black/20 rounded-xl p-4 sm:p-3 border border-white/5">
-          <div className="text-sm sm:text-xs text-white/60 mb-1">RENTA</div>
-          <div className={cn("text-2xl sm:text-xl font-black", rentalTextColor)}>
-            {formatRentalTime(rentalRemaining)}
-          </div>
-        </div>
-
-        {isDebt && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-600/30 border-2 border-red-500 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm animate-pulse">
-            <span className="text-red-400 text-2xl sm:text-xl">💀</span>
-            <span className="text-base sm:text-sm font-bold text-red-300">PAGA YA</span>
-          </div>
-        )}
-
-        {showRentalAlert && !isDebt && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-5 py-3 sm:px-4 sm:py-2 backdrop-blur-sm">
-            <AlertTriangleIcon className="h-6 w-6 sm:h-5 sm:w-5 text-red-400 animate-pulse" />
-            <span className="text-base sm:text-sm font-bold text-red-400">¡Expira hoy!</span>
-          </div>
-        )}
-
-        {hasError && (
-          <div className="w-full sm:w-auto flex items-center gap-2 bg-red-500/20 border border-red-500/50 rounded-xl px-5 py-3 sm:px-4 sm:py-2">
-            <span className="text-red-400 text-xl sm:text-lg">⚠️</span>
-            <span className="text-base sm:text-sm font-bold text-red-400">Error</span>
-          </div>
-        )}
-
-        <div className="hidden sm:block text-white/40 opacity-0 transition-opacity group-hover:opacity-100 text-xl">
-          →
-        </div>
-      </div>
-    );
-  }
-
+  // Tarjeta simple y limpia para móviles
   return (
     <div
       onClick={onClick}
       className={cn(
-        "group cursor-pointer rounded-3xl border border-white/10 p-6 transition-all duration-500 hover:scale-[1.02] hover:-translate-y-1 backdrop-blur-xl relative overflow-hidden",
-        hasError 
-          ? "bg-gradient-to-br from-red-500/10 via-pink-500/5 to-red-500/10 border-red-500/30 shadow-red-500/20 shadow-xl" 
-          : `bg-gradient-to-br ${rentalGradient} ${rentalBorderGlow}`
+        "cursor-pointer rounded-xl border p-4 transition-all active:scale-[0.98]",
+        hasError || isDebt
+          ? "border-destructive/50 bg-destructive/10" 
+          : "border-border bg-card hover:bg-secondary/50"
       )}
     >
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-
-      {isDebt && (
-        <div className="mb-4 rounded-2xl border-3 border-red-600 bg-gradient-to-br from-red-600/40 to-red-500/30 p-5 backdrop-blur-sm animate-pulse">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-14 h-14 rounded-full bg-red-600/40 flex items-center justify-center border-2 border-red-500">
-              <span className="text-3xl">💀</span>
-            </div>
-            <div className="flex-1">
-              <h4 className="font-black text-xl text-red-300 mb-1">CUENTA VENCIDA</h4>
-              <p className="text-sm text-red-200">
-                {(() => {
-                  const absDays = Math.abs(rentalRemaining!.days);
-                  return `Deuda: ${absDays}d ${rentalRemaining!.hours}h ${rentalRemaining!.minutes}m`;
-                })()}
-              </p>
-            </div>
+      {/* Header: Estado + Nombre */}
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={cn(
+            "h-3 w-3 rounded-full flex-shrink-0",
+            isPaused ? "bg-yellow-500" : "bg-green-500"
+          )} />
+          <div className="min-w-0">
+            <h3 className="font-bold text-foreground truncate">{clientName}</h3>
+            {postName && postName !== "N/A" && (
+              <p className="text-xs text-muted-foreground truncate">{postName}</p>
+            )}
           </div>
-          <a 
-            href={`https://wa.me/18293837695?text=${encodeURIComponent(
-              `🚨 RENOVAR ${clientName} - Tengo deuda`
-            )}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="block w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3 rounded-xl font-bold text-center hover:scale-105 transition-all"
-          >
-            💀 PAGAR AHORA 💀
-          </a>
         </div>
-      )}
+        
+        {/* Badge de estado */}
+        <span className={cn(
+          "text-xs font-medium px-2 py-1 rounded-full flex-shrink-0",
+          isPaused 
+            ? "bg-yellow-500/20 text-yellow-600" 
+            : "bg-green-500/20 text-green-600"
+        )}>
+          {isPaused ? "Pausado" : "Activo"}
+        </span>
+      </div>
 
-      {hasError && (
-        <div className="mb-4 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 backdrop-blur-sm relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-r from-red-500/0 via-red-500/10 to-red-500/0 animate-pulse" />
-          <div className="relative flex items-center gap-3">
-            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-red-500/20 flex items-center justify-center">
-              <span className="text-2xl">⚠️</span>
-            </div>
-            <div>
-              <p className="text-base sm:text-sm font-bold text-red-400">
-                {hasRepublishFailure ? "⏰ Problema con Republicación" :
-                 hasDataExtractionError ? "📋 Error de Datos" :
-                 "❌ Hay un problema"}
-              </p>
-              <p className="text-sm sm:text-xs text-red-300/70 mt-1">
-                Revisa manualmente o contacta soporte
-              </p>
-            </div>
-          </div>
+      {/* Alertas importantes (simplificadas) */}
+      {isDebt && (
+        <div className="mb-3 rounded-lg bg-destructive/20 border border-destructive/50 p-3">
+          <p className="text-sm font-bold text-destructive">Cuenta vencida - Renovar ahora</p>
         </div>
       )}
 
       {showRentalAlert && !isDebt && (
-        <div className="mb-4 rounded-2xl border-2 border-red-500/50 bg-gradient-to-br from-red-500/20 to-pink-500/20 p-5 sm:p-4 backdrop-blur-sm animate-pulse">
-          <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-3 mb-4 sm:mb-3">
-            <div className="flex-shrink-0 w-16 h-16 sm:w-14 sm:h-14 rounded-2xl bg-red-500/30 flex items-center justify-center border border-red-500/50">
-              <span className="text-4xl sm:text-3xl">🚨</span>
-            </div>
-            
-            <div className="flex-1 text-center sm:text-left">
-              <p className="font-black text-xl sm:text-base text-red-400 mb-1">
-                ¡Expira en {rentalRemaining.hours}h {rentalRemaining.minutes}m!
-              </p>
-              <p className="text-sm sm:text-xs text-red-300/80">
-                Tu anuncio será eliminado automáticamente
-              </p>
-            </div>
-            
-            <a 
-              href={`https://wa.me/18293837695?text=${encodeURIComponent(
-                `🚨 URGENTE: Renovar ${clientName} - Expira en ${rentalRemaining.hours}h`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="w-full sm:w-auto px-6 py-4 sm:px-5 sm:py-3 rounded-xl font-black text-base sm:text-sm bg-gradient-to-r from-red-500 to-pink-600 text-white hover:scale-105 transition-all duration-200 shadow-lg shadow-red-500/50 border border-red-400/50 whitespace-nowrap"
-            >
-              🔥 RENOVAR
-            </a>
-          </div>
+        <div className="mb-3 rounded-lg bg-orange-500/20 border border-orange-500/50 p-3">
+          <p className="text-sm font-bold text-orange-600">
+            Expira en {rentalRemaining.hours}h {rentalRemaining.minutes}m
+          </p>
         </div>
       )}
 
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className={cn(
-            "flex items-center gap-3 px-4 py-2 rounded-full backdrop-blur-md border",
-            isPaused 
-              ? "bg-yellow-500/20 border-yellow-500/30" 
-              : "bg-green-500/20 border-green-500/30"
-          )}>
-            <div className="relative">
-              <div className={cn(
-                "h-3 w-3 rounded-full",
-                isPaused ? "bg-yellow-400" : "bg-green-400"
-              )} />
-              {!isPaused && (
-                <div className="absolute inset-0 rounded-full bg-green-400 animate-ping" />
-              )}
-            </div>
-            <span className={cn(
-              "text-sm font-bold",
-              isPaused ? "text-yellow-400" : "text-green-400"
-            )}>
-              {isPaused ? "Pausado" : "En Línea"}
-            </span>
-          </div>
-          
-          <div className="hidden sm:block opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/60 text-sm font-medium">
-            Ver detalles →
-          </div>
+      {hasError && !isDebt && (
+        <div className="mb-3 rounded-lg bg-destructive/10 border border-destructive/30 p-2">
+          <p className="text-xs font-medium text-destructive">Revisar manualmente</p>
         </div>
+      )}
 
-        <h3 className="text-3xl font-black text-white mb-2 tracking-tight">
-          {clientName}
-        </h3>
-        {postName && postName !== "N/A" && (
-          <p className="text-sm text-white/60">{postName}</p>
-        )}
-      </div>
-
-      <div className="mb-4 rounded-2xl border border-pink-500/20 bg-gradient-to-br from-pink-500/10 via-purple-500/10 to-pink-500/10 p-5 backdrop-blur-sm relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(236,72,153,0.1),transparent)]" />
-        
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full bg-pink-500/20 flex items-center justify-center">
-              <svg className="w-4 h-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-pink-400">
-              {isPaused ? "⏸ Pausado" : isCompleted ? "✓ Completado" : "Próximo Anuncio"}
-            </span>
-          </div>
-          
+      {/* Info principal: Timer + Renta */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Próximo bump */}
+        <div className="rounded-lg bg-secondary/50 p-3 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Próximo bump</p>
           {isPaused ? (
-            <div className="text-center py-4">
-              <span className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-400">
-                ⏸ En Pausa
-              </span>
-            </div>
+            <p className="text-lg font-bold text-yellow-600">--:--</p>
           ) : timeRemaining ? (
-            <>
-              <div className="text-center py-2 mb-3">
-                {isCompleted ? (
-                  <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-400">
-                    ✓ Lista
-                  </span>
-                ) : (
-                  <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-pink-400 tabular-nums">
-                    {timeRemaining.minutes}<span className="text-3xl">m</span> {timeRemaining.seconds}<span className="text-3xl">s</span>
-                  </span>
-                )}
-              </div>
-              
-              <div className="relative h-3 w-full overflow-hidden rounded-full bg-black/30 border border-white/10">
-                <div
-                  className={cn(
-                    "h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden",
-                    isCompleted 
-                      ? "bg-gradient-to-r from-green-500 via-emerald-400 to-green-500" 
-                      : "bg-gradient-to-r from-pink-500 via-purple-500 to-pink-500"
-                  )}
-                  style={{ width: `${progressPercent}%` }}
-                >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer" />
-                </div>
-              </div>
-            </>
+            <p className="text-lg font-bold text-foreground tabular-nums">
+              {timeRemaining.minutes}:{timeRemaining.seconds.toString().padStart(2, '0')}
+            </p>
           ) : (
-            <div className="text-center py-6 text-white/40">
-              Sin datos
-            </div>
+            <p className="text-lg font-bold text-muted-foreground">--:--</p>
           )}
         </div>
-      </div>
 
-      <div className={cn(
-        "rounded-2xl border p-5 backdrop-blur-sm relative overflow-hidden",
-        `bg-gradient-to-br ${rentalGradient} border-white/10`
-      )}>
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(255,255,255,0.05),transparent)]" />
-        
-        <div className="relative">
-          <div className="flex items-center gap-2 mb-2">
-            <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", 
-              isDebt ? "bg-red-600/30" : 
-              rentalRemaining?.days === 0 ? "bg-red-500/20" : "bg-white/10"
-            )}>
-              <span className="text-lg">{isDebt ? "💀" : "⏰"}</span>
-            </div>
-            <span className="text-xs font-bold uppercase tracking-wider text-white/60">
-              Tiempo de Renta
-            </span>
-          </div>
-          
-          <div className="text-center py-2">
-            <span className={cn("text-5xl font-black", rentalTextColor)}>
-              {formatRentalTime(rentalRemaining)}
-            </span>
-          </div>
+        {/* Tiempo de renta */}
+        <div className="rounded-lg bg-secondary/50 p-3 text-center">
+          <p className="text-xs text-muted-foreground mb-1">Renta</p>
+          <p className={cn("text-lg font-bold", rentalTextColor)}>
+            {formatRentalTime(rentalRemaining)}
+          </p>
         </div>
       </div>
 
-      <div className="mt-4 text-center text-xs text-white/40 opacity-0 transition-opacity group-hover:opacity-100">
-        👆 Toca para ver más opciones
-      </div>
+      {/* Barra de progreso (solo si hay timer activo) */}
+      {timeRemaining && !isPaused && (
+        <div className="mt-3">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-1000",
+                isCompleted ? "bg-green-500" : "bg-primary"
+              )}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -480,7 +244,6 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   const [resultsList, setResultsList] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState(initialError || "");
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   
   const [showCriticalModal, setShowCriticalModal] = useState(false);
   const [criticalResult, setCriticalResult] = useState<SearchResult | null>(null);
@@ -593,38 +356,38 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
   return (
     <>
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="rounded-2xl border border-border bg-card p-6 sm:p-8 min-h-[360px] sm:min-h-[320px] flex flex-col justify-center">
-          <div className="mb-6 sm:mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-20 w-20 sm:h-20 sm:w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20">
-              <SettingsIcon className="h-10 w-10 sm:h-10 sm:w-10 text-primary" />
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-4 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+              <SearchIcon className="h-6 w-6 text-primary" />
             </div>
-            <h2 className="mb-2 text-3xl sm:text-3xl font-bold text-foreground">Mis Anuncios</h2>
-            <p className="text-lg sm:text-base text-muted-foreground px-4">Escribe tu nombre para buscar</p>
+            <h2 className="text-xl font-bold text-foreground">Mis Anuncios</h2>
+            <p className="text-sm text-muted-foreground">Escribe tu nombre para buscar</p>
           </div>
 
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-3">
+          <div className="space-y-3">
+            <div className="flex gap-2">
               <Input
                 type="text"
                 value={clientSearch}
                 onChange={(e) => setClientSearch(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Escribe tu nombre..."
-                className="h-16 sm:h-12 flex-1 bg-input text-foreground text-lg sm:text-sm px-5"
+                placeholder="Tu nombre..."
+                className="h-11 flex-1"
                 disabled={searching}
               />
               <Button
                 onClick={handleSearch}
                 disabled={searching}
-                className="h-16 sm:h-12 bg-gradient-to-r from-pink-500 to-purple-500 sm:px-8 px-6 text-white hover:from-pink-600 hover:to-purple-600 font-bold text-lg sm:text-sm whitespace-nowrap"
+                className="h-11 px-4"
               >
-                <SearchIcon className="mr-2 h-6 w-6 sm:h-4 sm:w-4" />
-                {searching ? "Buscando..." : "🔍 Buscar"}
+                <SearchIcon className="h-4 w-4 mr-1.5" />
+                {searching ? "..." : "Buscar"}
               </Button>
             </div>
 
             {error && (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/10 px-5 py-4 text-center text-base sm:text-sm text-destructive">
+              <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
                 {error}
               </div>
             )}
@@ -632,56 +395,20 @@ export function ControlPanel({ initialBrowserData, initialError }: ControlPanelP
         </div>
 
         {resultsList.length > 0 && (
-          <div className="mt-8 space-y-6">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-center sm:text-left flex-1 w-full sm:w-auto">
-                <h3 className="text-2xl md:text-3xl font-bold text-foreground">
-                  Tus Perfiles
-                </h3>
-                <p className="text-base md:text-base text-muted-foreground">
-                  {resultsList.length} {resultsList.length === 1 ? "perfil" : "perfiles"}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-2 bg-secondary/50 backdrop-blur-sm rounded-xl p-1.5 border border-border w-full sm:w-auto justify-center">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={cn(
-                    "px-5 py-3 sm:px-4 sm:py-2 rounded-lg text-base sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
-                    viewMode === 'grid'
-                      ? "bg-background text-foreground shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <span className="text-xl sm:text-base">🔲</span>
-                  <span>Grid</span>
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={cn(
-                    "px-5 py-3 sm:px-4 sm:py-2 rounded-lg text-base sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 flex-1 sm:flex-initial justify-center",
-                    viewMode === 'list'
-                      ? "bg-background text-foreground shadow-lg"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <span className="text-xl sm:text-base">📋</span>
-                  <span>Lista</span>
-                </button>
-              </div>
+          <div className="mt-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold text-foreground">
+                Tus Perfiles ({resultsList.length})
+              </h3>
             </div>
 
-            <div className={cn(
-              viewMode === 'grid' 
-                ? "grid gap-4 sm:gap-6 grid-cols-1 lg:grid-cols-2" 
-                : "space-y-3"
-            )}>
+            <div className="space-y-3">
               {resultsList.map((result, idx) => (
                 <BrowserCard
                   key={`${result.browserName}-${result.postId || 'single'}-${idx}`}
                   result={result}
                   onClick={() => handleSelectResult(result)}
-                  viewMode={viewMode}
+                  viewMode="list"
                 />
               ))}
             </div>
