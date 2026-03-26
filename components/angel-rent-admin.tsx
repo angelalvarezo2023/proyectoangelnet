@@ -57,8 +57,9 @@ const BLANK = {
 };
 
 function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt: boolean; isOk: boolean; isWarning: boolean; diffMs: number } {
-  if (!u.rentalEnd) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false, diffMs: Infinity };
-  const exp = u.rentalEndTimestamp || (() => { const [y,m,d] = u.rentalEnd!.split("-").map(Number); return Date.UTC(y,m-1,d,23,59,59); })();
+  if (!u.rentalEnd && !u.rentalEndTimestamp) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false, diffMs: Infinity };
+  // Priorizar rentalEndTimestamp (mas preciso), si no calcular desde rentalEnd
+  const exp = u.rentalEndTimestamp || new Date(u.rentalEnd + "T23:59:59").getTime();
   const diffMs = exp - Date.now();
   const diffH = Math.floor(diffMs / 3600000);
   const diffD = Math.floor(diffMs / 86400000);
@@ -714,48 +715,56 @@ function AdminPanel() {
               Generar User Agent
             </button>
 
-            {/* Rent Time */}
+            {/* Rent Time - Simplificado para rentas semanales */}
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12 }}>Tiempo de Renta</div>
               
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-                <button onClick={() => setRentMode("set")} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${rentMode === "set" ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "set" ? "rgba(99,102,241,0.15)" : "transparent", color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
-                  Establecer
+              {/* Botones rapidos de semanas */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 12 }}>
+                <button onClick={() => { setRentMode("add"); setRentDays("7"); setRentHours("0"); }}
+                  style={{ padding: "14px 8px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.15)", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                  +1 Sem
                 </button>
-                <button onClick={() => setRentMode("add")} style={{ padding: "10px", borderRadius: 10, border: `1px solid ${rentMode === "add" ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "add" ? "rgba(34,197,94,0.15)" : "transparent", color: rentMode === "add" ? "#86efac" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 12 }}>
-                  Agregar
+                <button onClick={() => { setRentMode("add"); setRentDays("14"); setRentHours("0"); }}
+                  style={{ padding: "14px 8px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.15)", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                  +2 Sem
+                </button>
+                <button onClick={() => { setRentMode("add"); setRentDays("21"); setRentHours("0"); }}
+                  style={{ padding: "14px 8px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.15)", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                  +3 Sem
+                </button>
+                <button onClick={() => { setRentMode("add"); setRentDays("30"); setRentHours("0"); }}
+                  style={{ padding: "14px 8px", borderRadius: 10, border: "1px solid rgba(34,197,94,0.4)", background: "rgba(34,197,94,0.15)", color: "#22c55e", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                  +1 Mes
                 </button>
               </div>
 
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                {[["1d","1","0"],["7d","7","0"],["15d","15","0"],["30d","30","0"]].map(([label,d,h]) => (
-                  <button key={label} onClick={() => { setRentDays(d); setRentHours(h); }}
-                    style={{ padding: "8px 14px", borderRadius: 99, border: "1px solid rgba(255,255,255,0.1)", background: rentDays === d && rentHours === h ? "rgba(255,255,255,0.1)" : "transparent", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                    {label}
-                  </button>
-                ))}
-              </div>
-
-              <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-                <div style={{ flex: 1, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>DIAS</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                    <button onClick={() => setRentDays(d => String(Math.max(0, (parseInt(d)||0) - 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>-</button>
-                    <input type="number" style={{ width: 50, textAlign: "center", background: "transparent", border: "none", fontSize: 24, fontWeight: 800, color: "#fff", outline: "none" }}
-                      value={rentDays} onChange={e => setRentDays(e.target.value)} />
-                    <button onClick={() => setRentDays(d => String((parseInt(d)||0) + 1))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>+</button>
+              {/* Modo manual colapsable */}
+              <details style={{ marginBottom: 12 }}>
+                <summary style={{ cursor: "pointer", fontSize: 11, color: "rgba(255,255,255,0.4)", marginBottom: 8 }}>Ajuste manual</summary>
+                <div style={{ paddingTop: 12 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                    <button onClick={() => setRentMode("set")} style={{ padding: "8px", borderRadius: 8, border: `1px solid ${rentMode === "set" ? "rgba(99,102,241,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "set" ? "rgba(99,102,241,0.15)" : "transparent", color: rentMode === "set" ? "#a5b4fc" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 11 }}>
+                      Establecer
+                    </button>
+                    <button onClick={() => setRentMode("add")} style={{ padding: "8px", borderRadius: 8, border: `1px solid ${rentMode === "add" ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.1)"}`, background: rentMode === "add" ? "rgba(34,197,94,0.15)" : "transparent", color: rentMode === "add" ? "#86efac" : "rgba(255,255,255,0.4)", cursor: "pointer", fontWeight: 600, fontSize: 11 }}>
+                      Agregar
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>DIAS</div>
+                      <input type="number" style={{ width: "100%", boxSizing: "border-box", textAlign: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px", fontSize: 18, fontWeight: 700, color: "#fff", outline: "none" }}
+                        value={rentDays} onChange={e => setRentDays(e.target.value)} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", marginBottom: 4 }}>HORAS</div>
+                      <input type="number" style={{ width: "100%", boxSizing: "border-box", textAlign: "center", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px", fontSize: 18, fontWeight: 700, color: "#fff", outline: "none" }}
+                        value={rentHours} onChange={e => setRentHours(e.target.value)} />
+                    </div>
                   </div>
                 </div>
-                <div style={{ flex: 1, textAlign: "center" }}>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", marginBottom: 6 }}>HORAS</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                    <button onClick={() => setRentHours(h => String(Math.max(0, (parseInt(h)||0) - 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>-</button>
-                    <input type="number" style={{ width: 50, textAlign: "center", background: "transparent", border: "none", fontSize: 24, fontWeight: 800, color: "#fff", outline: "none" }}
-                      value={rentHours} onChange={e => setRentHours(e.target.value)} />
-                    <button onClick={() => setRentHours(h => String(Math.min(23, (parseInt(h)||0) + 1)))} style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", fontSize: 18, cursor: "pointer" }}>+</button>
-                  </div>
-                </div>
-              </div>
+              </details>
 
               {previewInputMs > 0 && (
                 <div style={{ padding: 12, background: previewMs > 0 ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", borderRadius: 10, fontSize: 12 }}>
