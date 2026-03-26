@@ -185,97 +185,130 @@ function ClientPanel({ userId }: { userId: string }) {
 
   const exp = fmtExpiry(user);
   const robotActive = user.robotOn && !user.robotPaused;
+  const rentPercent = exp.diffMs > 0 ? Math.min(100, (exp.diffMs / (30 * 86400000)) * 100) : 0;
 
   return (
-    <div style={{ minHeight: "100dvh", background: "#111", color: "#fff", fontFamily: "-apple-system, sans-serif", padding: 16 }}>
+    <div style={{ minHeight: "100dvh", background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", color: "#fff", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", padding: "20px 16px" }}>
       
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 99, background: "#22c55e", color: "#fff", padding: "8px 16px", borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+        <div style={{ position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 9999, background: "#22c55e", color: "#fff", padding: "10px 20px", borderRadius: 99, fontSize: 13, fontWeight: 600, boxShadow: "0 4px 20px rgba(34,197,94,0.4)" }}>
           {toast}
         </div>
       )}
 
-      {/* Header simple */}
-      <div style={{ marginBottom: 16 }}>
-        <h1 style={{ fontSize: 18, fontWeight: 700 }}>{user.name || userId}</h1>
-        <p style={{ fontSize: 12, color: "#888" }}>Panel de control</p>
+      {/* Header */}
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 16, background: "linear-gradient(135deg, #6366f1, #8b5cf6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, margin: "0 auto 12px", boxShadow: "0 8px 32px rgba(99,102,241,0.3)" }}>
+          {user.name?.charAt(0).toUpperCase() || userId.charAt(0).toUpperCase()}
+        </div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Hola, {user.name || userId}</h1>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.4)" }}>Panel de control</p>
       </div>
 
-      {/* Estado y Timer */}
-      <div style={{ background: "#1a1a1a", border: "1px solid #333", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+      {/* Countdown Card */}
+      <div style={{ background: "rgba(255,255,255,0.05)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 20, padding: 24, marginBottom: 16, textAlign: "center" }}>
+        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>Proximo Bump</div>
+        <div style={{ fontSize: 48, fontWeight: 800, fontFamily: "monospace", color: robotActive ? "#22c55e" : "rgba(255,255,255,0.3)", lineHeight: 1, marginBottom: 12 }}>
+          {countdown}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "#64748b", boxShadow: robotActive ? "0 0 12px #22c55e" : "none" }} />
+          <span style={{ fontSize: 13, color: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "rgba(255,255,255,0.4)" }}>
+            {robotActive ? "Robot activo" : user.robotOn ? "Pausado" : "Robot inactivo"}
+          </span>
+        </div>
+      </div>
+
+      {/* Control Button */}
+      {user.robotOn && (
+        <button
+          onClick={togglePause}
+          disabled={busy}
+          style={{
+            width: "100%",
+            padding: 18,
+            marginBottom: 16,
+            borderRadius: 16,
+            border: "none",
+            background: user.robotPaused
+              ? "linear-gradient(135deg, #22c55e, #16a34a)"
+              : "linear-gradient(135deg, #f97316, #ea580c)",
+            color: "#fff",
+            fontSize: 16,
+            fontWeight: 700,
+            cursor: busy ? "wait" : "pointer",
+            opacity: busy ? 0.7 : 1,
+            boxShadow: user.robotPaused
+              ? "0 8px 32px rgba(34,197,94,0.3)"
+              : "0 8px 32px rgba(249,115,22,0.3)",
+          }}
+        >
+          {busy ? "..." : user.robotPaused ? "Reanudar Robot" : "Pausar Robot"}
+        </button>
+      )}
+
+      {/* Stats Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 6 }}>Bumps Hoy</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#a78bfa" }}>{user.bumpsToday || 0}</div>
+        </div>
+        <div style={{ background: "rgba(255,255,255,0.05)", borderRadius: 16, padding: 16, textAlign: "center" }}>
+          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", marginBottom: 6 }}>Total Bumps</div>
+          <div style={{ fontSize: 28, fontWeight: 800, color: "#818cf8" }}>{user.bumpsTotal || 0}</div>
+        </div>
+      </div>
+
+      {/* Rental Time Card */}
+      <div style={{ background: "rgba(255,255,255,0.05)", backdropFilter: "blur(20px)", border: `1px solid ${exp.isDebt ? "rgba(249,115,22,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: 20, padding: 20, marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "#666" }} />
-            <span style={{ fontSize: 13, color: robotActive ? "#22c55e" : user.robotOn ? "#eab308" : "#888" }}>
-              {robotActive ? "Activo" : user.robotOn ? "Pausado" : "Inactivo"}
-            </span>
+          <div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Tiempo de Renta</div>
+            <div style={{ fontSize: 24, fontWeight: 800, color: exp.color }}>{exp.label}</div>
           </div>
-          <span style={{ fontSize: 12, color: "#666" }}>Intervalo: {user.bumpInterval || 30}min</span>
+          <div style={{ width: 56, height: 56, borderRadius: 14, background: `${exp.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24 }}>
+            {exp.isDebt ? "!" : exp.isWarning ? "!" : ""}
+          </div>
         </div>
         
-        <div style={{ textAlign: "center", marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: "#666", marginBottom: 4 }}>Proximo bump</div>
-          <div style={{ fontSize: 36, fontWeight: 700, fontFamily: "monospace", color: robotActive ? "#fff" : "#444" }}>
-            {countdown}
+        {/* Progress Bar */}
+        <div style={{ height: 8, background: "rgba(255,255,255,0.1)", borderRadius: 4, overflow: "hidden", marginBottom: 8 }}>
+          <div style={{ height: "100%", width: `${rentPercent}%`, background: exp.color, borderRadius: 4, transition: "width 0.3s" }} />
+        </div>
+        
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)" }}>
+          {exp.isDebt ? "Renta vencida - Contacta al admin" : exp.sub ? `Vence: ${exp.sub}` : "Sin limite de tiempo"}
+        </div>
+      </div>
+
+      {/* Config Info */}
+      <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 16, padding: 16 }}>
+        <div style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", marginBottom: 12, textTransform: "uppercase", letterSpacing: 0.5 }}>Configuracion</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+            <span style={{ color: "rgba(255,255,255,0.5)" }}>Intervalo</span>
+            <span style={{ color: "#fff", fontWeight: 600 }}>{user.bumpInterval || 30} min</span>
           </div>
-        </div>
-
-        {/* Boton pausar/reanudar */}
-        {user.robotOn && (
-          <button
-            onClick={togglePause}
-            disabled={busy}
-            style={{
-              width: "100%",
-              padding: 12,
-              borderRadius: 8,
-              border: "none",
-              background: user.robotPaused ? "#22c55e" : "#f97316",
-              color: "#fff",
-              fontSize: 14,
-              fontWeight: 600,
-              cursor: busy ? "wait" : "pointer",
-              opacity: busy ? 0.7 : 1,
-            }}
-          >
-            {busy ? "..." : user.robotPaused ? "Reanudar" : "Pausar"}
-          </button>
-        )}
-      </div>
-
-      {/* Stats en fila */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
-        <div style={{ background: "#1a1a1a", borderRadius: 8, padding: 12, textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>Hoy</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{user.bumpsToday || 0}</div>
-        </div>
-        <div style={{ background: "#1a1a1a", borderRadius: 8, padding: 12, textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>Total</div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>{user.bumpsTotal || 0}</div>
-        </div>
-        <div style={{ background: "#1a1a1a", borderRadius: 8, padding: 12, textAlign: "center" }}>
-          <div style={{ fontSize: 10, color: "#666", marginBottom: 4 }}>Renta</div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: exp.color }}>{exp.label}</div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+            <span style={{ color: "rgba(255,255,255,0.5)" }}>Dispositivo</span>
+            <span style={{ color: "#fff", fontWeight: 600 }}>{UA_SHORT[user.userAgentKey || "iphone"] || "iPhone"}</span>
+          </div>
+          {user.lastBump && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
+              <span style={{ color: "rgba(255,255,255,0.5)" }}>Ultimo bump</span>
+              <span style={{ color: "#a78bfa", fontWeight: 600 }}>
+                {new Date(user.lastBump).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Info adicional */}
-      {(exp.isDebt || exp.isWarning) && (
-        <div style={{ background: exp.isDebt ? "#7f1d1d" : "#78350f", border: `1px solid ${exp.isDebt ? "#b91c1c" : "#a16207"}`, borderRadius: 8, padding: 12, marginBottom: 12 }}>
-          <p style={{ fontSize: 13, fontWeight: 600 }}>
-            {exp.isDebt ? "Renta vencida - Contacta al admin" : `Vence pronto: ${exp.sub}`}
-          </p>
-        </div>
-      )}
-
-      {user.lastBump && (
-        <div style={{ fontSize: 12, color: "#666", textAlign: "center" }}>
-          Ultimo bump: {new Date(user.lastBump).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })}
-        </div>
-      )}
-
-      <style>{`* { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; }`}</style>
+      <style>{`
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; margin: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
