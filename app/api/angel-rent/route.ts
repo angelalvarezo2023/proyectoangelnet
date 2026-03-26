@@ -241,11 +241,11 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .ar-ws-val.yellow{color:#fbbf24}
 .ar-ws-val.red{color:#ef4444}
 #ar-widget-expiry{
-  font-size:10px;text-align:center;padding-top:6px;
-  border-top:1px solid #222;margin-top:4px;
+  font-size:11px;text-align:center;padding-top:8px;
+  border-top:1px solid #333;margin-top:6px;
 }
-#ar-widget-expiry-label{color:#666}
-#ar-widget-expiry-day{font-weight:700;color:#ef4444;margin-left:4px}
+#ar-widget-expiry span:first-child{color:#888}
+#ar-expiry-day{font-weight:800;color:#ef4444;margin-left:3px}
 
 /* ─── Botones flotantes ─────────────────────────────────────────────── */
 #ar-btns{
