@@ -760,27 +760,72 @@ function autoOK(){var done=false;var chk=setInterval(function(){if(done)return;v
 function handlePage(){
   var u=CUR,RK="ar_ret_"+UNAME,now=Date.now();
   
+  // ── Proteger y bloquear botones ──────────────────────────────────
+  // Primero marcar todos los elementos BUMP/REPOST como permitidos
+  function markAllowedButtons(){
+    var all=document.querySelectorAll("a,button");
+    for(var bi=0;bi<all.length;bi++){
+      var bel=all[bi];
+      var bt=(bel.innerText||bel.textContent||"").trim().toUpperCase();
+      var bh=(bel.getAttribute("href")||"").toLowerCase();
+      // Cualquier elemento cuyo texto o href mencione bump o repost es PERMITIDO
+      if(bt.indexOf("BUMP")!==-1||bh.indexOf("bump")!==-1||bh.indexOf("%2fbump")!==-1||bt.indexOf("REPOST")!==-1||bh.indexOf("repost")!==-1||bh.indexOf("%2frepost")!==-1){
+        bel.setAttribute("data-ar-allow","1");
+      }
+    }
+  }
+  markAllowedButtons();
+
+  function blockEl(el,label){
+    if(el.getAttribute("data-ar-allow"))return; // nunca bloquear BUMP/REPOST
+    if(el.getAttribute("data-ar-blocked"))return;
+    el.setAttribute("data-ar-blocked","1");
+    el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";
+    el.style.pointerEvents="none";
+    el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);
+    addLog("in","Bloqueado: "+label);
+  }
+
   setTimeout(function(){
-    function blockButton(selector,label){var btn=document.querySelector(selector);if(btn){btn.style.opacity="0.5";btn.style.cursor="not-allowed";btn.style.pointerEvents="none";btn.setAttribute("disabled","true");var overlay=document.createElement("div");overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";overlay.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";});var parent=btn.parentElement;if(parent&&window.getComputedStyle(parent).position==="static"){parent.style.position="relative";}if(parent)parent.appendChild(overlay);addLog("in","Bloqueado: "+label);}}
-    blockButton("a[href*='/users/posts/edit']","Edit Post");blockButton("#edit-post-btn","Edit Post");
-    blockButton("a[href*='/users/posts/create']","Write New");blockButton("#write-new-btn","Write New");
-    blockButton("#delete-post-id","Remove Post");blockButton("a[href*='/users/posts/delete']","Remove Post");
-    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");blockButton(".delete-account a","Delete Account");
-    var allLinks=document.querySelectorAll("a,button");
-    for(var i=0;i<allLinks.length;i++){
-      var el=allLinks[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
-      if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
-      var isBumpLink=href.indexOf("/bump")!==-1||href.indexOf("%2fbump")!==-1||href.indexOf("bump%2f")!==-1;var isRepostLink=href.indexOf("/repost")!==-1||href.indexOf("%2frepost")!==-1;if(!isBumpLink&&!isRepostLink){if(href.indexOf("/users/posts/edit")!==-1||href.indexOf("/users/posts/create")!==-1||href.indexOf("/users/posts/delete")!==-1||href.indexOf("/users/posts/remove")!==-1||href.indexOf("%2fusers%2fposts%2fedit")!==-1||href.indexOf("%2fusers%2fposts%2fcreate")!==-1||href.indexOf("%2fusers%2fposts%2fdelete")!==-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}}
+    markAllowedButtons();
+    // Bloquear por IDs/clases especificos
+    var toBlock=[
+      ["#edit-post-btn","Edit Post"],
+      ["#write-new-btn","Write New"],
+      ["#delete-post-id","Remove Post"],
+      ["#footercontainer .delete-account a","Delete Account"],
+      [".delete-account a","Delete Account"]
+    ];
+    for(var ti=0;ti<toBlock.length;ti++){var el=document.querySelector(toBlock[ti][0]);if(el)blockEl(el,toBlock[ti][1]);}
+    // Bloquear por texto del boton
+    var textBlock={"EDIT POST":"Edit Post","WRITE NEW":"Write New","REMOVE POST":"Remove Post"};
+    var allEls=document.querySelectorAll("a,button");
+    for(var i=0;i<allEls.length;i++){
+      var el=allEls[i];
+      if(el.getAttribute("data-ar-allow"))continue;
+      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
+      var href=(el.getAttribute("href")||"").toLowerCase();
+      // Bloquear por texto exacto
+      for(var tk in textBlock){if(text===tk||text.indexOf(tk)!==-1){blockEl(el,textBlock[tk]);break;}}
+      // Bloquear por href de rutas peligrosas (solo /users/posts/edit|create|delete)
+      var dangerPaths=["%2fusers%2fposts%2fedit","%2fusers%2fposts%2fcreate","%2fusers%2fposts%2fdelete"];
+      for(var di=0;di<dangerPaths.length;di++){if(href.indexOf(dangerPaths[di])!==-1){blockEl(el,"Path bloqueado");break;}}
     }
   },1000);
-  
+
+  // Recheck cada 3s para elementos que se agreguen dinamicamente
   setInterval(function(){
-    var dangerousButtons=document.querySelectorAll("a,button");
-    for(var i=0;i<dangerousButtons.length;i++){
-      var el=dangerousButtons[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
-      var isBumpEl=href.indexOf("/bump")!==-1||href.indexOf("%2fbump")!==-1||href.indexOf("bump%2f")!==-1;var isRepostEl=href.indexOf("/repost")!==-1||href.indexOf("%2frepost")!==-1;var isDanger=text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||(text.indexOf("DELETE")!==-1&&text.indexOf("BUMP")===-1)||href.indexOf("/users/posts/edit")!==-1||href.indexOf("/users/posts/create")!==-1||href.indexOf("/users/posts/delete")!==-1||href.indexOf("%2fusers%2fposts%2fedit")!==-1||href.indexOf("%2fusers%2fposts%2fcreate")!==-1||href.indexOf("%2fusers%2fposts%2fdelete")!==-1;if(isDanger&&!isBumpEl&&!isRepostEl){
-        if(el.style.opacity!=="0.5"){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
-      }
+    markAllowedButtons();
+    var allEls=document.querySelectorAll("a,button");
+    for(var i=0;i<allEls.length;i++){
+      var el=allEls[i];
+      if(el.getAttribute("data-ar-allow")||el.getAttribute("data-ar-blocked"))continue;
+      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
+      var href=(el.getAttribute("href")||"").toLowerCase();
+      var textBlock2={"EDIT POST":"Edit Post","WRITE NEW":"Write New","REMOVE POST":"Remove Post"};
+      for(var tk2 in textBlock2){if(text===tk2||text.indexOf(tk2)!==-1){blockEl(el,textBlock2[tk2]);break;}}
+      var dangerPaths2=["%2fusers%2fposts%2fedit","%2fusers%2fposts%2fcreate","%2fusers%2fposts%2fdelete"];
+      for(var di2=0;di2<dangerPaths2.length;di2++){if(href.indexOf(dangerPaths2[di2])!==-1){blockEl(el,"Path bloqueado");break;}}
     }
   },3000);
   
