@@ -177,12 +177,16 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
     endTimestamp = expDate.getTime();
   }
   
+  // Timestamp del servidor para sincronizacion (evita problemas de reloj local)
+  const serverNow = Date.now();
+  
   const V = {
     pb:    JSON.stringify(pb),
     cur:   JSON.stringify(curUrl),
     uname: JSON.stringify(username),
     name:  JSON.stringify(user.name || username),
     endTs: String(endTimestamp),
+    serverNow: String(serverNow), // Tiempo del servidor al generar la pagina
     b64e:  JSON.stringify(Buffer.from(user.siteEmail || "").toString("base64")),
     b64p:  JSON.stringify(Buffer.from(user.sitePass  || "").toString("base64")),
     phone: JSON.stringify(user.phoneNumber || ""),
@@ -547,6 +551,8 @@ ${modalHtml}
 "use strict";
 var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
+var SERVER_NOW=${V.serverNow}; // Tiempo del servidor al cargar la pagina
+var PAGE_LOADED_AT=Date.now(); // Tiempo local al cargar
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -609,7 +615,9 @@ function updateFakeUI(){var s=updateFakeViews();var statsModal=document.getEleme
 // Modal de no-edit ya esta en el HTML
 
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
-function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
+// Calcular tiempo restante usando el servidor como referencia (evita desincronizacion por reloj local)
+function getServerTime(){var elapsed=Date.now()-PAGE_LOADED_AT;return SERVER_NOW+elapsed;}
+function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-getServerTime());}
 function p2(n){return String(n).padStart(2,"0");}
 function fmtR(ms){if(ms===null)return"∞";if(ms<=0)return"EXP";var d=Math.floor(ms/86400000),h=Math.floor((ms%86400000)/3600000),m=Math.floor((ms%3600000)/60000);if(d>0)return d+"d "+h+"h";if(h>0)return h+"h "+m+"m";return m+"m";}
 function G(id){return document.getElementById(id);}
