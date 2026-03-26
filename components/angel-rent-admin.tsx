@@ -1,9 +1,17 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 
 const FB = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASS = "rolex";
+
+// Variable global para el offset del servidor (diferencia entre tiempo local y servidor)
+let serverTimeOffset = 0;
+
+// Funcion para obtener el tiempo sincronizado del servidor
+function getServerTime(): number {
+  return Date.now() + serverTimeOffset;
+}
 
 interface User {
   name?: string;
@@ -60,7 +68,8 @@ function fmtExpiry(u: User): { label: string; sub: string; color: string; isDebt
   if (!u.rentalEnd && !u.rentalEndTimestamp) return { label: "Sin limite", sub: "", color: "#64748b", isDebt: false, isOk: false, isWarning: false, diffMs: Infinity };
   // Priorizar rentalEndTimestamp (mas preciso), si no calcular desde rentalEnd
   const exp = u.rentalEndTimestamp || new Date(u.rentalEnd + "T23:59:59").getTime();
-  const diffMs = exp - Date.now();
+  // Usar tiempo del servidor sincronizado para evitar diferencias por reloj local
+  const diffMs = exp - getServerTime();
   const diffH = Math.floor(diffMs / 3600000);
   const diffD = Math.floor(diffMs / 86400000);
   const remH = Math.floor((diffMs % 86400000) / 3600000);
@@ -98,6 +107,16 @@ function ClientPanel({ userId }: { userId: string }) {
 
   const loadUser = useCallback(async () => {
     try {
+      // Sincronizar tiempo con el servidor de Firebase
+      const timeStart = Date.now();
+      const timeRes = await fetch(`${FB}/.sv.json`);
+      const serverTime = await timeRes.json();
+      if (typeof serverTime === "number") {
+        // Calcular offset considerando latencia de red
+        const latency = (Date.now() - timeStart) / 2;
+        serverTimeOffset = serverTime - Date.now() + latency;
+      }
+      
       const r = await fetch(`${FB}/proxyUsers/${userId}.json`);
       const data = await r.json();
       if (!data) {
@@ -116,7 +135,7 @@ function ClientPanel({ userId }: { userId: string }) {
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
-  // Countdown timer
+  // Countdown timer (usando tiempo del servidor sincronizado)
   useEffect(() => {
     if (!user?.robotOn || user?.robotPaused) {
       setCountdown("--:--");
@@ -124,11 +143,11 @@ function ClientPanel({ userId }: { userId: string }) {
     }
     
     const interval = user.bumpInterval || 30;
-    const lastBump = user.lastBump || Date.now();
+    const lastBump = user.lastBump || getServerTime();
     
     const tick = () => {
       const nextBump = lastBump + (interval * 60 * 1000);
-      const remaining = nextBump - Date.now();
+      const remaining = nextBump - getServerTime();
       
       if (remaining <= 0) {
         setCountdown("00:00");
@@ -344,6 +363,15 @@ function AdminPanel() {
   const load = useCallback(async () => {
     setBusy(true);
     try {
+      // Sincronizar tiempo con el servidor de Firebase primero
+      const timeStart = Date.now();
+      const timeRes = await fetch(`${FB}/.sv.json`);
+      const serverTime = await timeRes.json();
+      if (typeof serverTime === "number") {
+        const latency = (Date.now() - timeStart) / 2;
+        serverTimeOffset = serverTime - Date.now() + latency;
+      }
+      
       const r = await fetch(`${FB}/proxyUsers.json`);
       setUsers((await r.json()) || {});
     } catch (e: any) { alert("Error: " + e.message); }
@@ -394,11 +422,13 @@ function AdminPanel() {
     const sign = isNegInput ? -1 : 1;
     const inputMs = sign * ((Math.abs(days) * 86400000) + (Math.abs(hours) * 3600000));
 
+    // Usar tiempo del servidor sincronizado para evitar desincronizacion
+    const now = getServerTime();
     let rentalEndTimestamp: number;
     if (rentMode === "set") {
-      rentalEndTimestamp = Date.now() + inputMs;
+      rentalEndTimestamp = now + inputMs;
     } else {
-      const currentTs = (form as any).rentalEndTimestamp || Date.now();
+      const currentTs = (form as any).rentalEndTimestamp || now;
       rentalEndTimestamp = currentTs + inputMs;
     }
     const expDate = new Date(rentalEndTimestamp);
@@ -501,10 +531,12 @@ function AdminPanel() {
   const previewIsNeg = previewDays < 0 || previewHours < 0;
   const previewSign = previewIsNeg ? -1 : 1;
   const previewInputMs = previewSign * ((Math.abs(previewDays) * 86400000) + (Math.abs(previewHours) * 3600000));
+  // Usar tiempo del servidor sincronizado
+  const serverTimeNow = getServerTime();
   const previewFinalTs = rentMode === "set"
-    ? Date.now() + previewInputMs
-    : ((form as any).rentalEndTimestamp || Date.now()) + previewInputMs;
-  const previewMs = previewFinalTs - Date.now();
+    ? serverTimeNow + previewInputMs
+    : ((form as any).rentalEndTimestamp || serverTimeNow) + previewInputMs;
+  const previewMs = previewFinalTs - serverTimeNow;
   const previewExp = new Date(previewFinalTs);
 
   return (
