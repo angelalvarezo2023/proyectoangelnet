@@ -286,7 +286,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .ar-stat-sub{font-size:11px;color:#666;margin-top:2px}
 .ar-stat-trend{display:inline-block;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:6px;background:rgba(34,197,94,.15);color:#4ade80}
 
-/* ─── Soporte buttons ─────────────────────────────────────────────────── */
+/* ─── Soporte buttons ──────────────────────���──────────────────────────── */
 .ar-stype{
   display:flex;align-items:center;gap:10px;padding:12px;
   border:1px solid #333;border-radius:10px;background:#222;
@@ -344,6 +344,54 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-noedit-modal .noedit-msg{font-size:12px;color:#888;line-height:1.5;margin-bottom:14px}
 #ar-noedit-modal .noedit-btn{display:block;width:100%;padding:10px;background:#0088cc;color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:8px}
 #ar-noedit-modal .noedit-close{width:100%;padding:8px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit}
+
+/* ─── Publicidad sutil ───────────────────────────────────────────────────── */
+#ar-promo{
+  position:fixed;bottom:0;left:0;right:0;z-index:2147483645;
+  background:linear-gradient(90deg,#7c3aed,#a855f7);
+  padding:8px 12px;text-align:center;
+  font-family:-apple-system,sans-serif;font-size:11px;font-weight:600;color:#fff;
+  display:none;
+}
+#ar-promo a{color:#fff;text-decoration:underline}
+
+/* ─── Aviso robot apagado ────────────────────────────────────────────────── */
+#ar-robot-off-alert{
+  position:fixed;bottom:130px;right:12px;z-index:2147483646;
+  background:#1a1a1a;border:1px solid #ef4444;border-radius:10px;
+  padding:12px 14px;max-width:200px;display:none;
+  font-family:-apple-system,sans-serif;animation:pulse-border 2s infinite;
+}
+@keyframes pulse-border{0%,100%{border-color:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{border-color:#f87171;box-shadow:0 0 12px rgba(239,68,68,.4)}}
+#ar-robot-off-alert .alert-title{font-size:12px;font-weight:700;color:#ef4444;margin-bottom:4px}
+#ar-robot-off-alert .alert-msg{font-size:10px;color:#888;line-height:1.4}
+#ar-robot-off-alert .alert-arrow{
+  position:absolute;bottom:-20px;right:20px;
+  width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;
+  border-top:10px solid #ef4444;animation:bounce-arrow 1s infinite;
+}
+@keyframes bounce-arrow{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+
+/* ─── Boton robot con efecto cuando esta OFF ─────────────────────────────── */
+#ar-rb.needs-attention{animation:attention-pulse 1.5s infinite}
+@keyframes attention-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
+
+/* ─── Modal advertencia al apagar ────────────────────────────────────────── */
+#ar-turnoff-modal{
+  position:fixed;inset:0;z-index:2147483649;background:rgba(0,0,0,.9);
+  display:none;align-items:center;justify-content:center;padding:16px;
+}
+#ar-turnoff-modal.show{display:flex}
+#ar-turnoff-box{
+  background:#1a1a1a;border:1px solid #ef4444;border-radius:16px;
+  padding:24px 20px;max-width:300px;width:100%;text-align:center;
+  font-family:-apple-system,sans-serif;color:#fff;
+}
+#ar-turnoff-box .turnoff-icon{font-size:40px;margin-bottom:10px}
+#ar-turnoff-box .turnoff-title{font-size:16px;font-weight:800;color:#ef4444;margin-bottom:8px}
+#ar-turnoff-box .turnoff-msg{font-size:13px;color:#888;line-height:1.5;margin-bottom:16px}
+#ar-turnoff-box .turnoff-confirm{width:100%;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
+#ar-turnoff-box .turnoff-cancel{width:100%;padding:10px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:13px;cursor:pointer}
 </style>`;
 
   const modalHtml = showWarn ? `
@@ -379,6 +427,21 @@ ${modalHtml}
   <div class="notify-icon">💬</div>
   <div class="notify-title" id="notify-title">Nuevo cliente interesado</div>
   <div class="notify-msg" id="notify-msg">Alguien acaba de ver tu anuncio</div>
+</div>
+<div id="ar-robot-off-alert">
+  <div class="alert-title">Robot apagado</div>
+  <div class="alert-msg">Tu anuncio no se esta republicando. Toca el boton de abajo para activarlo.</div>
+  <div class="alert-arrow"></div>
+</div>
+<div id="ar-promo"><span id="ar-promo-txt"></span></div>
+<div id="ar-turnoff-modal">
+  <div id="ar-turnoff-box">
+    <div class="turnoff-icon">⚠️</div>
+    <div class="turnoff-title">Apagar robot?</div>
+    <div class="turnoff-msg">Si apagas el robot, tu anuncio dejara de republicarse automaticamente y perderas visibilidad frente a la competencia.</div>
+    <button class="turnoff-confirm" id="ar-turnoff-confirm">Si, apagar</button>
+    <button class="turnoff-cancel" id="ar-turnoff-cancel">Cancelar</button>
+  </div>
 </div>
 <div id="ar-btns">
   <button id="ar-stats-btn" class="arbtn"><span style="font-size:17px">📊</span><span>Estadísticas</span></button>
@@ -598,10 +661,18 @@ function updateUI(){
   // Contador de bumps
   if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
   
-  // Boton del robot
+  // Boton del robot y aviso de apagado
   var rb=G("ar-rb");
+  var offAlert=G("ar-robot-off-alert");
   if(rb){
-    rb.className=on?"arbtn on":"arbtn";
+    if(on){
+      rb.className="arbtn on";
+      rb.classList.remove("needs-attention");
+      if(offAlert)offAlert.style.display="none";
+    }else{
+      rb.className="arbtn needs-attention";
+      if(offAlert)offAlert.style.display="block";
+    }
     if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
   }
   
@@ -635,19 +706,46 @@ function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{m
 function toggleRobot(){
   var s=gst();
   var ring=document.getElementById("ar-pulse-ring");
+  var offAlert=document.getElementById("ar-robot-off-alert");
+  var rbBtn=document.getElementById("ar-rb");
+  
   if(s.on){
-    s.on=false;s.nextAt=0;sst(s);
-    if(TICK){clearInterval(TICK);TICK=null;}
-    addLog("in","Robot OFF");
-    saveRobotState(false,false);
-    if(ring)ring.style.display="none";
+    // Mostrar modal de confirmacion antes de apagar
+    var turnoffModal=document.getElementById("ar-turnoff-modal");
+    if(turnoffModal){
+      turnoffModal.classList.add("show");
+      return; // No apagar hasta que confirme
+    }
   }else{
+    // Encender robot
     s.on=true;s.paused=false;s.cnt=0;sst(s);
     addLog("ok","Robot ON - bumps 16-20 min");
     saveRobotState(true,false);
     schedNext();startTick();doBump();
     if(ring)ring.style.display="block";
+    if(offAlert)offAlert.style.display="none";
+    if(rbBtn)rbBtn.classList.remove("needs-attention");
   }
+  updateUI();
+}
+
+// Funcion para realmente apagar el robot (llamada desde modal de confirmacion)
+function doTurnOff(){
+  var s=gst();
+  var ring=document.getElementById("ar-pulse-ring");
+  var offAlert=document.getElementById("ar-robot-off-alert");
+  var rbBtn=document.getElementById("ar-rb");
+  
+  s.on=false;s.nextAt=0;sst(s);
+  if(TICK){clearInterval(TICK);TICK=null;}
+  addLog("in","Robot OFF");
+  saveRobotState(false,false);
+  if(ring)ring.style.display="none";
+  
+  // Mostrar aviso de robot apagado
+  if(offAlert)offAlert.style.display="block";
+  if(rbBtn)rbBtn.classList.add("needs-attention");
+  
   updateUI();
 }
 
@@ -944,8 +1042,47 @@ if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportSt
 if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!selectedType)return;showSupportStep("sending");try{var s=gst();var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;var now=Date.now();var email="",pass="";try{if(B64E)email=atob(B64E);if(B64P)pass=atob(B64P);}catch(e){}var ticket={clientName:DNAME||UNAME,browserName:UNAME,phoneNumber:PHONE||"N/A",email:email||"N/A",password:pass||"N/A",type:selectedType,typeLabel:selectedLabel,description:desc,priority:selectedPriority,status:"pending",createdAt:now,updatedAt:now};var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});if(!resp.ok)throw new Error("error");var result=await resp.json();currentTicketId=result.name;showSupportStep("queue");startQueueMonitoring();}catch(e){showSupportStep("select");alert("Error al enviar. Intenta de nuevo.");}});
 
 initFakeStats();
+
+// Event listeners para modal de confirmacion de apagar robot
+var turnoffConfirm=G("ar-turnoff-confirm");
+var turnoffCancel=G("ar-turnoff-cancel");
+var turnoffModal=G("ar-turnoff-modal");
+if(turnoffConfirm)turnoffConfirm.addEventListener("click",function(){
+  if(turnoffModal)turnoffModal.classList.remove("show");
+  doTurnOff();
+});
+if(turnoffCancel)turnoffCancel.addEventListener("click",function(){
+  if(turnoffModal)turnoffModal.classList.remove("show");
+});
+if(turnoffModal)turnoffModal.addEventListener("click",function(e){
+  if(e.target===turnoffModal)turnoffModal.classList.remove("show");
+});
+
+// Publicidad sutil
+var PROMOS=["Angel Rent - El mejor servicio de bump automatico","Contacto: 829-383-7695","Tu anuncio siempre arriba con Angel Rent","+2000 escorts confian en nosotros"];
+var promoIdx=0;
+function showPromo(){
+  var el=G("ar-promo");
+  var txt=G("ar-promo-txt");
+  if(!el||!txt)return;
+  txt.textContent=PROMOS[promoIdx%PROMOS.length];
+  promoIdx++;
+  el.style.display="block";
+  setTimeout(function(){el.style.display="none";},8000);
+}
+setTimeout(function(){showPromo();setInterval(showPromo,60000);},10000);
+
+// Mostrar aviso de robot apagado al inicio si esta apagado
+var initS=gst();
+if(!initS.on){
+  var offAlert=G("ar-robot-off-alert");
+  var rbBtn=G("ar-rb");
+  if(offAlert)offAlert.style.display="block";
+  if(rbBtn)rbBtn.classList.add("needs-attention");
+}
+
 handlePage();setInterval(updateUI,1000);updateUI();
-var initS=gst();if(initS.on&&!initS.paused)startTick();
+if(initS.on&&!initS.paused)startTick();
 setTimeout(tryLogin,300);setTimeout(tryLogin,900);setTimeout(tryLogin,2200);setTimeout(tryLogin,4500);
 var lri=setInterval(function(){tryLogin();if(loginDone)clearInterval(lri);},500);
 setTimeout(function(){clearInterval(lri);},30000);
