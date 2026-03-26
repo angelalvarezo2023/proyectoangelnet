@@ -285,7 +285,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-sbox h3,#ar-stats-box h3{font-size:17px;font-weight:800;text-align:center;margin:0 0 4px}
 #ar-sbox .ar-ssub{font-size:12px;color:#666;text-align:center;margin-bottom:16px}
 
-/* ─── Stats cards ─────────────────────────────────────────────────────── */
+/* ─── Stats cards ───────────────────────���─────────────────────────────── */
 .ar-stat-card{background:#222;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:10px}
 .ar-stat-title{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:6px}
 .ar-stat-value{font-size:24px;font-weight:800;color:#fff}
@@ -364,21 +364,25 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 /* ─── Aviso robot apagado ────────────────────────────────────────────────── */
 #ar-robot-off-alert{
   position:fixed;bottom:130px;right:12px;z-index:2147483646;
-  background:#1a1a1a;border:1px solid #ef4444;border-radius:10px;
-  padding:12px 14px;max-width:200px;display:none;
-  font-family:-apple-system,sans-serif;animation:pulse-border 2s infinite;
+  background:rgba(20,20,20,.98);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+  border:2px solid #ef4444;border-radius:12px;
+  padding:14px 16px;max-width:180px;display:none;
+  font-family:-apple-system,sans-serif;
+  box-shadow:0 8px 32px rgba(0,0,0,.8);
+  animation:pulse-border 2s infinite;
 }
-@keyframes pulse-border{0%,100%{border-color:#ef4444;box-shadow:0 0 0 0 rgba(239,68,68,0)}50%{border-color:#f87171;box-shadow:0 0 12px rgba(239,68,68,.4)}}
-#ar-robot-off-alert .alert-title{font-size:12px;font-weight:700;color:#ef4444;margin-bottom:4px}
-#ar-robot-off-alert .alert-msg{font-size:10px;color:#888;line-height:1.4}
+@keyframes pulse-border{0%,100%{border-color:#ef4444;box-shadow:0 8px 32px rgba(0,0,0,.8)}50%{border-color:#f87171;box-shadow:0 8px 32px rgba(0,0,0,.8),0 0 20px rgba(239,68,68,.5)}}
+#ar-robot-off-alert .alert-title{font-size:13px;font-weight:800;color:#ef4444;margin-bottom:6px}
+#ar-robot-off-alert .alert-msg{font-size:11px;color:#aaa;line-height:1.4}
 #ar-robot-off-alert .alert-arrow{
-  position:absolute;bottom:-20px;right:20px;
-  width:0;height:0;border-left:8px solid transparent;border-right:8px solid transparent;
-  border-top:10px solid #ef4444;animation:bounce-arrow 1s infinite;
+  position:absolute;bottom:-12px;right:24px;
+  width:0;height:0;border-left:10px solid transparent;border-right:10px solid transparent;
+  border-top:12px solid #ef4444;animation:bounce-arrow 1s infinite;
 }
-@keyframes bounce-arrow{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+@keyframes bounce-arrow{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
 
-/* ─── Boton robot con efecto cuando esta OFF ──────────────────���──────────── */
+/* ─── Boton robot con efecto cuando esta OFF ───────────────��──���──────────── */
 #ar-rb.needs-attention{animation:attention-pulse 1.5s infinite}
 @keyframes attention-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
 
@@ -399,37 +403,60 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-turnoff-box .turnoff-confirm{width:100%;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
 #ar-turnoff-box .turnoff-cancel{width:100%;padding:10px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:13px;cursor:pointer}
 
-/* ─── Marca de agua Angel Rent ───────────────────────────────────────────── */
+/* ─── Marca de agua Angel Rent Premium ───────────────────────────────────── */
 #ar-watermark{
-  position:fixed;bottom:16px;left:16px;z-index:2147483640;
-  display:flex;align-items:center;gap:8px;
-  padding:8px 14px 8px 10px;
-  background:linear-gradient(135deg,rgba(124,58,237,.9),rgba(168,85,247,.9));
-  border-radius:20px;
-  box-shadow:0 4px 15px rgba(124,58,237,.4);
+  position:fixed;bottom:20px;left:20px;z-index:2147483640;
+  display:flex;align-items:center;gap:12px;
+  padding:10px 18px 10px 12px;
+  background:linear-gradient(145deg,rgba(15,10,25,.95),rgba(30,20,50,.95));
+  border:1px solid rgba(168,85,247,.4);
+  border-radius:16px;
+  box-shadow:0 8px 32px rgba(0,0,0,.6),0 0 0 1px rgba(255,255,255,.05) inset,0 0 20px rgba(168,85,247,.15);
   font-family:-apple-system,sans-serif;
   text-decoration:none;
-  transition:transform .2s,box-shadow .2s;
+  transition:all .3s cubic-bezier(.4,0,.2,1);
   cursor:pointer;
+  overflow:hidden;
 }
+#ar-watermark::before{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(168,85,247,.1),transparent,rgba(236,72,153,.1));
+  opacity:0;transition:opacity .3s;
+}
+#ar-watermark:hover::before{opacity:1}
 #ar-watermark:hover{
-  transform:translateY(-2px);
-  box-shadow:0 6px 20px rgba(124,58,237,.5);
+  transform:translateY(-3px) scale(1.02);
+  box-shadow:0 12px 40px rgba(0,0,0,.7),0 0 30px rgba(168,85,247,.3);
+  border-color:rgba(168,85,247,.6);
 }
-#ar-watermark-icon{
-  width:22px;height:22px;
-  background:rgba(255,255,255,.2);
-  border-radius:6px;
+#ar-watermark-logo{
+  position:relative;width:36px;height:36px;
+  background:linear-gradient(135deg,#a855f7,#ec4899);
+  border-radius:10px;
   display:flex;align-items:center;justify-content:center;
-  font-size:12px;
+  box-shadow:0 4px 12px rgba(168,85,247,.4);
 }
-#ar-watermark-text{
-  font-size:11px;font-weight:700;color:#fff;
-  letter-spacing:.3px;
+#ar-watermark-logo svg{width:22px;height:22px;fill:#fff;filter:drop-shadow(0 1px 2px rgba(0,0,0,.3))}
+#ar-watermark-logo::after{
+  content:"";position:absolute;inset:-2px;
+  border-radius:12px;
+  background:linear-gradient(135deg,#a855f7,#ec4899);
+  z-index:-1;opacity:.4;filter:blur(6px);
 }
-#ar-watermark-sub{
-  font-size:9px;color:rgba(255,255,255,.7);
-  margin-top:1px;
+#ar-watermark-content{position:relative}
+#ar-watermark-brand{
+  font-size:14px;font-weight:800;
+  background:linear-gradient(90deg,#fff,#e9d5ff);
+  -webkit-background-clip:text;background-clip:text;
+  -webkit-text-fill-color:transparent;
+  letter-spacing:-.2px;
+}
+#ar-watermark-tagline{
+  font-size:9px;font-weight:600;
+  color:rgba(168,85,247,.8);
+  text-transform:uppercase;
+  letter-spacing:1px;
+  margin-top:2px;
 }
 </style>`;
 
@@ -474,10 +501,16 @@ ${modalHtml}
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
 <a id="ar-watermark" href="https://wa.me/18293837695" target="_blank" rel="noopener">
-  <div id="ar-watermark-icon">A</div>
-  <div>
-    <div id="ar-watermark-text">Angel Rent</div>
-    <div id="ar-watermark-sub">Bump automatico</div>
+  <div id="ar-watermark-logo">
+    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 2C9.5 2 7.5 4 7.5 6.5c0 1.5.7 2.8 1.8 3.7C6.5 11.5 4.5 14 4.5 17c0 .3 0 .5.1.8.2 1.2 1.2 2.2 2.4 2.2h10c1.2 0 2.2-1 2.4-2.2.1-.3.1-.5.1-.8 0-3-2-5.5-4.8-6.8 1.1-.9 1.8-2.2 1.8-3.7C16.5 4 14.5 2 12 2zm-4 15c0-2.2 1.8-4 4-4s4 1.8 4 4H8zm4-7c-1.4 0-2.5-1.1-2.5-2.5S10.6 5 12 5s2.5 1.1 2.5 2.5S13.4 10 12 10z"/>
+      <path d="M4 8c-1.5 1-2.5 2.5-2.5 4.5 0 1 .3 2 .8 2.8.3.4.8.2.9-.3.1-.8.3-1.5.6-2.2.5-1.2 1.3-2.3 2.2-3.1.2-.2.2-.5 0-.7-.3-.4-.6-.7-1-1z" opacity=".7"/>
+      <path d="M20 8c1.5 1 2.5 2.5 2.5 4.5 0 1-.3 2-.8 2.8-.3.4-.8.2-.9-.3-.1-.8-.3-1.5-.6-2.2-.5-1.2-1.3-2.3-2.2-3.1-.2-.2-.2-.5 0-.7.3-.4.6-.7 1-1z" opacity=".7"/>
+    </svg>
+  </div>
+  <div id="ar-watermark-content">
+    <div id="ar-watermark-brand">Angel Rent</div>
+    <div id="ar-watermark-tagline">Bump Automatico 24/7</div>
   </div>
 </a>
 <div id="ar-turnoff-modal">
