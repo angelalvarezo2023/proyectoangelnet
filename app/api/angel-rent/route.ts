@@ -240,6 +240,12 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .ar-ws-val.green{color:#22c55e}
 .ar-ws-val.yellow{color:#fbbf24}
 .ar-ws-val.red{color:#ef4444}
+#ar-widget-expiry{
+  font-size:10px;text-align:center;padding-top:6px;
+  border-top:1px solid #222;margin-top:4px;
+}
+#ar-widget-expiry-label{color:#666}
+#ar-widget-expiry-day{font-weight:700;color:#ef4444;margin-left:4px}
 
 /* ─── Botones flotantes ─────────────────────────────────────────────── */
 #ar-btns{
@@ -285,7 +291,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-sbox h3,#ar-stats-box h3{font-size:17px;font-weight:800;text-align:center;margin:0 0 4px}
 #ar-sbox .ar-ssub{font-size:12px;color:#666;text-align:center;margin-bottom:16px}
 
-/* ─── Stats cards ───────────────────────���─────────────────────────────── */
+/* ─── Stats cards ───────────────────────�����─────────────────────────────── */
 .ar-stat-card{background:#222;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:10px}
 .ar-stat-title{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:6px}
 .ar-stat-value{font-size:24px;font-weight:800;color:#fff}
@@ -484,10 +490,14 @@ ${modalHtml}
   </div>
   <div id="ar-widget-timer" class="off">--:--</div>
   <div id="ar-widget-label">Proximo bump</div>
-  <div id="ar-widget-stats">
-    <div class="ar-ws"><div class="ar-ws-val" id="ar-cnt">0</div><div class="ar-ws-lbl">Bumps</div></div>
-    <div class="ar-ws"><div class="ar-ws-val green" id="ar-rent">...</div><div class="ar-ws-lbl">Renta</div></div>
-  </div>
+<div id="ar-widget-stats">
+  <div class="ar-ws"><div class="ar-ws-val" id="ar-cnt">0</div><div class="ar-ws-lbl">Bumps</div></div>
+  <div class="ar-ws"><div class="ar-ws-val green" id="ar-rent">...</div><div class="ar-ws-lbl">Renta</div></div>
+</div>
+<div id="ar-widget-expiry">
+  <span id="ar-widget-expiry-label">Vence:</span>
+  <span id="ar-expiry-day">--</span>
+</div>
 </div>
 <div id="ar-client-notify">
   <div class="notify-icon">💬</div>
@@ -743,6 +753,15 @@ function updateUI(){
   
   // Contador de bumps
   if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
+  
+  // Dia de vencimiento
+  var expiryDay=G("ar-expiry-day");
+  if(expiryDay&&ENDTS){
+    var expDate=new Date(ENDTS);
+    var dias=["Domingo","Lunes","Martes","Miercoles","Jueves","Viernes","Sabado"];
+    var diaVence=dias[expDate.getDay()];
+    expiryDay.textContent=diaVence;
+  }
   
   // Boton del robot y aviso de apagado
   var rb=G("ar-rb");
