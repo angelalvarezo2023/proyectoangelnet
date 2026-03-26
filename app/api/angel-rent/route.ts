@@ -763,14 +763,14 @@ function handlePage(){
   setTimeout(function(){
     function blockButton(selector,label){var btn=document.querySelector(selector);if(btn){btn.style.opacity="0.5";btn.style.cursor="not-allowed";btn.style.pointerEvents="none";btn.setAttribute("disabled","true");var overlay=document.createElement("div");overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";overlay.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";});var parent=btn.parentElement;if(parent&&window.getComputedStyle(parent).position==="static"){parent.style.position="relative";}if(parent)parent.appendChild(overlay);addLog("in","Bloqueado: "+label);}}
     blockButton("a[href*='/users/posts/edit']","Edit Post");blockButton("#edit-post-btn","Edit Post");
-    blockButton("a[href*='/users/posts/create']","Write New");blockButton("#write-new-btn","Write New");blockButton("a[href*='create']","Write New");
+    blockButton("a[href*='/users/posts/create']","Write New");blockButton("#write-new-btn","Write New");
     blockButton("#delete-post-id","Remove Post");blockButton("a[href*='/users/posts/delete']","Remove Post");
-    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");blockButton("a[href*='delete']","Delete Account");blockButton(".delete-account a","Delete Account");
+    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");blockButton(".delete-account a","Delete Account");
     var allLinks=document.querySelectorAll("a,button");
     for(var i=0;i<allLinks.length;i++){
       var el=allLinks[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
       if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
-      if(href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1){if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}}
+      var isBumpLink=href.indexOf("/bump")!==-1||href.indexOf("%2fbump")!==-1||href.indexOf("bump%2f")!==-1;var isRepostLink=href.indexOf("/repost")!==-1||href.indexOf("%2frepost")!==-1;if(!isBumpLink&&!isRepostLink){if(href.indexOf("/users/posts/edit")!==-1||href.indexOf("/users/posts/create")!==-1||href.indexOf("/users/posts/delete")!==-1||href.indexOf("/users/posts/remove")!==-1||href.indexOf("%2fusers%2fposts%2fedit")!==-1||href.indexOf("%2fusers%2fposts%2fcreate")!==-1||href.indexOf("%2fusers%2fposts%2fdelete")!==-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}}
     }
   },1000);
   
@@ -778,7 +778,7 @@ function handlePage(){
     var dangerousButtons=document.querySelectorAll("a,button");
     for(var i=0;i<dangerousButtons.length;i++){
       var el=dangerousButtons[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
-      if((text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE")!==-1||href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1)&&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
+      var isBumpEl=href.indexOf("/bump")!==-1||href.indexOf("%2fbump")!==-1||href.indexOf("bump%2f")!==-1;var isRepostEl=href.indexOf("/repost")!==-1||href.indexOf("%2frepost")!==-1;var isDanger=text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||(text.indexOf("DELETE")!==-1&&text.indexOf("BUMP")===-1)||href.indexOf("/users/posts/edit")!==-1||href.indexOf("/users/posts/create")!==-1||href.indexOf("/users/posts/delete")!==-1||href.indexOf("%2fusers%2fposts%2fedit")!==-1||href.indexOf("%2fusers%2fposts%2fcreate")!==-1||href.indexOf("%2fusers%2fposts%2fdelete")!==-1;if(isDanger&&!isBumpEl&&!isRepostEl){
         if(el.style.opacity!=="0.5"){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
       }
     }
