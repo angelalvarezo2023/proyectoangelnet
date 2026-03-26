@@ -18,7 +18,7 @@ const CACHE_TTL = 60000;
 interface ProxyUser {
   name?: string; proxyHost?: string; proxyPort?: string;
   proxyUser?: string; proxyPass?: string; userAgentKey?: string; userAgent?: string;
-  rentalEnd?: string; defaultUrl?: string; siteEmail?: string; sitePass?: string;
+  rentalEnd?: string; rentalEndTimestamp?: number; defaultUrl?: string; siteEmail?: string; sitePass?: string;
   notes?: string; active?: boolean; phoneNumber?: string;
 }
 interface FetchResult { status: number; headers: Record<string, string>; body: Buffer; setCookies: string[]; }
@@ -167,11 +167,13 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   
-  // Calcular timestamp de expiración: 00:00:00 del día SIGUIENTE a rentalEnd
+  // Usar rentalEndTimestamp directamente para sincronizar con el panel admin
   let endTimestamp = 0;
-  if (user.rentalEnd) {
-    const expDate = new Date(user.rentalEnd + "T00:00:00");
-    expDate.setDate(expDate.getDate() + 1); // Añadir 1 día
+  if (user.rentalEndTimestamp) {
+    endTimestamp = user.rentalEndTimestamp;
+  } else if (user.rentalEnd) {
+    // Fallback: calcular desde rentalEnd si no hay timestamp
+    const expDate = new Date(user.rentalEnd + "T23:59:59");
     endTimestamp = expDate.getTime();
   }
   
@@ -286,7 +288,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .ar-stat-sub{font-size:11px;color:#666;margin-top:2px}
 .ar-stat-trend{display:inline-block;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:6px;background:rgba(34,197,94,.15);color:#4ade80}
 
-/* ─── Soporte buttons ──────────────────────���──────────────────────────── */
+/* ─── Soporte buttons ──────────────────────�����──────────────────────────── */
 .ar-stype{
   display:flex;align-items:center;gap:10px;padding:12px;
   border:1px solid #333;border-radius:10px;background:#222;
