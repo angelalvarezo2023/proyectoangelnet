@@ -196,85 +196,238 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const warnDays = daysLeft;
 
   // ═══════════════════════════════════════════════════════════════════
-  // CSS SIMPLIFICADO PARA MOVILES
+  // CSS MEJORADO CON DISEÑO MODERNO
   // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
-/* ─── Barra superior simple ───────────────────────────────────────────── */
+/* ─── Barra superior con glassmorphism ───────────────────────────────── */
 #ar-bar{
   position:fixed;top:0;left:0;right:0;z-index:2147483647;
-  background:#111;border-bottom:1px solid #333;
-  height:40px;display:flex;align-items:center;
+  background:rgba(10,3,24,.85);
+  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(168,85,247,.2);
+  box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;
+  height:48px;display:flex;align-items:center;
   overflow-x:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;font-family:-apple-system,sans-serif;
+  scrollbar-width:none;-ms-overflow-style:none;
+  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
 }
 #ar-bar::-webkit-scrollbar{display:none}
-.ars{display:flex;align-items:center;gap:4px;padding:0 10px;height:100%;flex-shrink:0;border-right:1px solid #222;white-space:nowrap}
-.ars:first-child{padding-left:8px}
-.arl{font-size:9px;color:#666;text-transform:uppercase}
-.arv{font-size:12px;font-weight:700;color:#fff}
-#ar-dot{width:6px;height:6px;border-radius:50%;background:#444}
-#ar-dot.on{background:#22c55e}
-#ar-dot.blink{background:#f59e0b;animation:ar-blink 1s infinite}
-@keyframes ar-blink{50%{opacity:.3}}
-.arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#a78bfa!important}
-#ar-logo-icon{width:24px;height:24px;background:#7c3aed;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px}
-.ars-hide-mobile{display:none}
 
-/* ─── Botones flotantes simples ─────────────────────────────────────── */
-#ar-btns{position:fixed;bottom:12px;right:12px;z-index:2147483647;display:flex;flex-direction:column;gap:8px}
+.ars{
+  display:flex;align-items:center;gap:5px;
+  padding:0 14px;height:100%;flex-shrink:0;
+  border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;
+  transition:background .2s;
+}
+.ars:hover{background:rgba(255,255,255,.03)}
+.ars:first-child{padding-left:10px}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  #ar-bar{height:44px}
+  .ars{padding:0 10px;gap:4px}
+  .ars:first-child{padding-left:8px}
+  .arl{font-size:8px;letter-spacing:.7px}
+  .arv{font-size:11px}
+  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
+  
+  /* Ocultar segmentos menos críticos en móviles muy pequeños */
+  @media (max-width: 480px) {
+    .ars-hide-mobile{display:none!important}
+  }
+}
+
+.arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
+.arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
+#ar-dot{
+  width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;
+  transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0);
+}
+#ar-dot.on{
+  background:#22c55e;
+  box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);
+  animation:ar-pulse-dot 2s ease infinite;
+}
+#ar-dot.blink{
+  background:#f59e0b;
+  animation:ar-blink 1.2s ease-in-out infinite;
+}
+@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2)}50%{box-shadow:0 0 20px rgba(34,197,94,1), 0 0 0 8px rgba(34,197,94,.1)}}
+@keyframes ar-blink{0%,100%{opacity:1;transform:scale(1.1)}50%{opacity:.2;transform:scale(.7)}}
+.arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#c084fc!important}
+#ar-logo-icon{
+  width:28px;height:28px;
+  background:linear-gradient(135deg,#a855f7,#ec4899);
+  border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;
+  box-shadow:0 4px 12px rgba(168,85,247,.4);
+}
+
+/* ─── Botones flotantes modernos ─────────────────────────────────────── */
+#ar-btns{
+  position:fixed;bottom:24px;right:16px;z-index:2147483647;
+  display:flex;flex-direction:column;gap:12px;align-items:flex-end;
+}
+
+/* Mobile optimizations for floating buttons */
+@media (max-width: 768px) {
+  #ar-btns{bottom:16px;right:12px;gap:10px}
+  .arbtn{
+    padding:12px 20px;font-size:13px;
+    border-radius:50px;gap:8px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:15px!important}
+}
+
+@media (max-width: 480px) {
+  #ar-btns{bottom:12px;right:8px;gap:8px}
+  .arbtn{
+    padding:10px 16px;font-size:12px;
+    border-radius:40px;gap:6px;
+  }
+  .arbtn span[style*="font-size:17px"]{font-size:14px!important}
+}
+
 .arbtn{
-  display:flex;align-items:center;gap:6px;border:none;cursor:pointer;
-  border-radius:8px;font-weight:700;font-size:12px;padding:10px 14px;
-  font-family:-apple-system,sans-serif;-webkit-tap-highlight-color:transparent;
+  display:flex;align-items:center;gap:9px;border:none;cursor:pointer;
+  border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;
+  font-family:-apple-system,sans-serif;letter-spacing:.2px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.3);
+  transition:all .2s cubic-bezier(.34,1.56,.64,1);
+  white-space:nowrap;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;overflow:hidden;
 }
-.arbtn:active{transform:scale(.95)}
-#ar-rb{background:#222;color:#888;border:1px solid #333}
-#ar-rb.on{background:#16a34a;color:#fff;border-color:#16a34a}
-#ar-sb{background:#ec4899;color:#fff}
-#ar-stats-btn{background:#7c3aed;color:#fff}
-#ar-pulse-ring{display:none}
+.arbtn::before{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);
+  transform:translateX(-100%);
+  transition:transform .6s;
+}
+.arbtn:hover::before{transform:translateX(100%)}
+.arbtn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.5), 0 6px 12px rgba(0,0,0,.4)}
+.arbtn:active{transform:scale(.95)!important}
+#ar-rb{
+  background:linear-gradient(135deg,#27272a,#18181b);
+  color:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.1);
+}
+#ar-rb.on{
+  background:linear-gradient(135deg,#16a34a,#15803d);
+  color:#fff;border-color:transparent;
+  box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4);
+  animation:ar-glow-btn 2s ease infinite;
+}
+@keyframes ar-glow-btn{0%,100%{box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4)}50%{box-shadow:0 12px 36px rgba(34,197,94,.7), 0 6px 16px rgba(34,197,94,.6)}}
+#ar-sb{
+  background:linear-gradient(135deg,#ec4899,#d946ef);
+  color:#fff;border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 8px 24px rgba(236,72,153,.4), 0 4px 8px rgba(236,72,153,.3);
+}
+#ar-stats-btn{
+  background:linear-gradient(135deg,#7c3aed,#6d28d9);
+  color:#fff;border:1px solid rgba(255,255,255,.08);
+  box-shadow:0 8px 24px rgba(124,58,237,.4), 0 4px 8px rgba(124,58,237,.3);
+}
 
-/* ─── Notificaciones ────────────────────────────────────────────────── */
+/* ─── Efecto de anillo pulsante ────────────────────────────────────────── */
+#ar-pulse-ring{
+  position:absolute;inset:-6px;
+  border:3px solid #22c55e;border-radius:60px;
+  animation:ar-pulse-ring 2s cubic-bezier(0,0,.2,1) infinite;
+  display:none;pointer-events:none;
+}
+@keyframes ar-pulse-ring{0%{transform:scale(.9);opacity:0}50%{opacity:.4}100%{transform:scale(1.3);opacity:0}}
+
+/* ─── Notificaciones modernas ────────────────────────────────────────── */
 #ar-client-notify{
-  position:fixed;bottom:140px;right:12px;z-index:2147483647;
-  background:#059669;border-radius:8px;padding:12px;max-width:240px;display:none;
+  position:fixed;bottom:220px;right:16px;z-index:2147483647;
+  background:linear-gradient(135deg,#10b981,#059669);
+  border:1px solid rgba(16,185,129,.4);border-radius:16px;
+  padding:16px 20px;max-width:300px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5), 0 4px 12px rgba(16,185,129,.3);
+  animation:ar-slide-up .5s cubic-bezier(.34,1.56,.64,1);
+  display:none;
+  backdrop-filter:blur(10px);
 }
-#ar-client-notify .notify-icon{font-size:20px;margin-bottom:4px}
-#ar-client-notify .notify-title{font-size:13px;font-weight:700;color:#fff}
-#ar-client-notify .notify-msg{font-size:11px;color:rgba(255,255,255,.8)}
+@keyframes ar-slide-up{from{opacity:0;transform:translateY(24px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
+#ar-client-notify .notify-icon{font-size:28px;margin-bottom:8px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
+#ar-client-notify .notify-title{font-size:14px;font-weight:900;color:#fff;margin-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.3)}
+#ar-client-notify .notify-msg{font-size:12px;color:rgba(255,255,255,.9);line-height:1.5}
 
-/* ─── Modales simples ────────────────────────────────────────────────── */
+/* ─── Modales mejorados ────────────────────────────────────────────────── */
 #ar-support-modal,#ar-stats-modal{
-  position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.9);
-  display:none;align-items:flex-end;justify-content:center;
+  position:fixed;inset:0;z-index:2147483648;
+  background:rgba(0,0,0,.88);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  display:none;align-items:flex-end;justify-content:center;padding:0;
 }
 #ar-support-modal.show,#ar-stats-modal.show{display:flex}
 #ar-sbox,#ar-stats-box{
-  background:#1a1a1a;border:1px solid #333;border-radius:16px 16px 0 0;
-  padding:20px 16px 24px;width:100%;max-width:400px;
-  font-family:-apple-system,sans-serif;color:#fff;max-height:80vh;overflow-y:auto;
+  background:linear-gradient(160deg,#0a1628,#0f1f3d);
+  border:1px solid rgba(59,130,246,.3);
+  border-radius:28px 28px 0 0;
+  padding:28px 24px 36px;width:100%;max-width:500px;
+  box-shadow:0 -24px 80px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05) inset;
+  animation:ar-modal-slide .4s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;color:#fff;
+  max-height:85vh;overflow-y:auto;
 }
-#ar-sbox h3,#ar-stats-box h3{font-size:16px;font-weight:800;text-align:center;margin:0 0 4px}
-#ar-sbox .ar-ssub{font-size:12px;color:#666;text-align:center;margin-bottom:16px}
+@keyframes ar-modal-slide{from{opacity:0;transform:translateY(80px)}to{opacity:1;transform:translateY(0)}}
+#ar-sbox h3,#ar-stats-box h3{font-size:20px;font-weight:900;text-align:center;margin:0 0 6px;color:#fff}
+#ar-sbox .ar-ssub{font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:24px}
 
-/* ─── Tarjetas de estadisticas ─────────────────────────────────────────── */
-.ar-stat-card{background:#222;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:10px}
-.ar-stat-title{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:6px}
-.ar-stat-value{font-size:24px;font-weight:800;color:#fff}
-.ar-stat-sub{font-size:11px;color:#666;margin-top:2px}
-.ar-stat-trend{display:inline-block;padding:4px 8px;border-radius:4px;font-size:10px;font-weight:700;margin-top:8px;background:rgba(34,197,94,.15);color:#4ade80}
+/* ─── Tarjetas de estadísticas ─────────────────────────────────────────── */
+.ar-stat-card{
+  background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:16px;padding:20px;margin-bottom:14px;
+  transition:all .2s;position:relative;overflow:hidden;
+}
+.ar-stat-card::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,#3b82f6,#8b5cf6);opacity:.5;
+}
+.ar-stat-card:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  border-color:rgba(255,255,255,.15);
+}
+.ar-stat-title{font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:800}
+.ar-stat-value{font-size:32px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:-.5px}
+.ar-stat-sub{font-size:13px;color:rgba(255,255,255,.5)}
+.ar-stat-trend{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:6px 12px;border-radius:24px;font-size:12px;font-weight:800;margin-top:10px;
+}
+.ar-stat-trend.up{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
 
-/* ─── Botones de soporte ──────────────────────────────────────────── */
+/* ─── Botones de tipo de soporte ──────────────────────────────────────── */
 .ar-stype{
-  display:flex;align-items:center;gap:10px;padding:12px;
-  border:1px solid #333;border-radius:10px;background:#222;
-  cursor:pointer;width:100%;margin-bottom:8px;font-family:-apple-system,sans-serif;
+  display:flex;align-items:center;gap:14px;padding:16px;
+  border:1px solid rgba(255,255,255,.1);border-radius:16px;
+  background:rgba(255,255,255,.04);cursor:pointer;width:100%;
+  margin-bottom:12px;
+  transition:all .2s cubic-bezier(.34,1.56,.64,1);
+  font-family:-apple-system,sans-serif;
 }
-.ar-stype:active{background:#333}
-.ar-stype .ar-si{font-size:20px;width:36px;height:36px;border-radius:8px;background:#333;display:flex;align-items:center;justify-content:center}
+.ar-stype:hover{
+  background:rgba(59,130,246,.12);
+  border-color:rgba(59,130,246,.4);
+  transform:translateX(4px);
+  box-shadow:0 4px 16px rgba(59,130,246,.2);
+}
+.ar-stype:active{transform:scale(.98) translateX(4px)}
+.ar-stype .ar-si{
+  font-size:28px;width:48px;height:48px;border-radius:14px;
+  background:rgba(59,130,246,.12);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:transform .2s;
+}
+.ar-stype:hover .ar-si{transform:scale(1.1) rotate(5deg)}
 .ar-stype .ar-stxt{text-align:left;flex:1}
-.ar-stype .ar-stl{display:block;font-size:13px;font-weight:700;color:#fff}
-.ar-stype .ar-sds{display:block;font-size:11px;color:#666}
+.ar-stype .ar-stl{display:block;font-size:15px;font-weight:800;color:#fff;margin-bottom:2px}
+.ar-stype .ar-sds{display:block;font-size:12px;color:rgba(255,255,255,.4)}
 .ar-urg{
   font-size:9px;font-weight:900;padding:4px 10px;border-radius:99px;
   background:rgba(239,68,68,.2);color:#f87171;
