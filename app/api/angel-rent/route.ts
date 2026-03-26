@@ -378,7 +378,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 }
 @keyframes bounce-arrow{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
 
-/* ─── Boton robot con efecto cuando esta OFF ─────────────────────────────── */
+/* ─── Boton robot con efecto cuando esta OFF ──────────────────���──────────── */
 #ar-rb.needs-attention{animation:attention-pulse 1.5s infinite}
 @keyframes attention-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
 
@@ -398,6 +398,39 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-turnoff-box .turnoff-msg{font-size:13px;color:#888;line-height:1.5;margin-bottom:16px}
 #ar-turnoff-box .turnoff-confirm{width:100%;padding:12px;background:#ef4444;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px}
 #ar-turnoff-box .turnoff-cancel{width:100%;padding:10px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:13px;cursor:pointer}
+
+/* ─── Marca de agua Angel Rent ───────────────────────────────────────────── */
+#ar-watermark{
+  position:fixed;bottom:16px;left:16px;z-index:2147483640;
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px 8px 10px;
+  background:linear-gradient(135deg,rgba(124,58,237,.9),rgba(168,85,247,.9));
+  border-radius:20px;
+  box-shadow:0 4px 15px rgba(124,58,237,.4);
+  font-family:-apple-system,sans-serif;
+  text-decoration:none;
+  transition:transform .2s,box-shadow .2s;
+  cursor:pointer;
+}
+#ar-watermark:hover{
+  transform:translateY(-2px);
+  box-shadow:0 6px 20px rgba(124,58,237,.5);
+}
+#ar-watermark-icon{
+  width:22px;height:22px;
+  background:rgba(255,255,255,.2);
+  border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;
+}
+#ar-watermark-text{
+  font-size:11px;font-weight:700;color:#fff;
+  letter-spacing:.3px;
+}
+#ar-watermark-sub{
+  font-size:9px;color:rgba(255,255,255,.7);
+  margin-top:1px;
+}
 </style>`;
 
   const modalHtml = showWarn ? `
@@ -440,6 +473,13 @@ ${modalHtml}
   <div class="alert-arrow"></div>
 </div>
 <div id="ar-promo"><span id="ar-promo-txt"></span></div>
+<a id="ar-watermark" href="https://wa.me/18293837695" target="_blank" rel="noopener">
+  <div id="ar-watermark-icon">A</div>
+  <div>
+    <div id="ar-watermark-text">Angel Rent</div>
+    <div id="ar-watermark-sub">Bump automatico</div>
+  </div>
+</a>
 <div id="ar-turnoff-modal">
   <div id="ar-turnoff-box">
     <div class="turnoff-icon">⚠️</div>
