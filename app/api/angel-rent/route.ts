@@ -45,10 +45,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const user = await getUser(username);
     if (!user) return jres(403, { error: "Usuario no encontrado" });
     if (!user.active) return expiredPage("Cuenta Desactivada", "Tu cuenta fue desactivada.");
-    // Calcular expiración: el día rentalEnd expira a las 00:00:00 del día SIGUIENTE
     if (user.rentalEnd) {
       const expirationDate = new Date(user.rentalEnd + "T00:00:00");
-      expirationDate.setDate(expirationDate.getDate() + 1); // Añadir 1 día
+      expirationDate.setDate(expirationDate.getDate() + 1);
       if (new Date() > expirationDate) {
         return expiredPage("Plan Expirado", "Tu plan vencio el " + user.rentalEnd + ".");
       }
@@ -167,17 +166,14 @@ async function saveCookies(username: string, newCookies: string[], existing: str
 function injectUI(html: string, curUrl: string, username: string, user: ProxyUser): string {
   const pb = `/api/angel-rent?u=${enc(username)}&url=`;
   
-  // Usar rentalEndTimestamp directamente para sincronizar con el panel admin
   let endTimestamp = 0;
   if (user.rentalEndTimestamp) {
     endTimestamp = user.rentalEndTimestamp;
   } else if (user.rentalEnd) {
-    // Fallback: calcular desde rentalEnd si no hay timestamp
     const expDate = new Date(user.rentalEnd + "T23:59:59");
     endTimestamp = expDate.getTime();
   }
   
-  // Timestamp del servidor para sincronizacion (evita problemas de reloj local)
   const serverNow = Date.now();
   
   const V = {
@@ -186,7 +182,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
     uname: JSON.stringify(username),
     name:  JSON.stringify(user.name || username),
     endTs: String(endTimestamp),
-    serverNow: String(serverNow), // Tiempo del servidor al generar la pagina
+    serverNow: String(serverNow),
     b64e:  JSON.stringify(Buffer.from(user.siteEmail || "").toString("base64")),
     b64p:  JSON.stringify(Buffer.from(user.sitePass  || "").toString("base64")),
     phone: JSON.stringify(user.phoneNumber || ""),
@@ -195,19 +191,15 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   let daysLeft = 999;
   if (user.rentalEnd) {
-    // Calcular días restantes usando el mismo timestamp
     daysLeft = Math.floor((endTimestamp - Date.now()) / 86400000);
   }
   const showWarn = daysLeft >= 0 && daysLeft <= 3;
   const warnDays = daysLeft;
 
-  // ═══════════════════════════════════════════════════════════════════
-  // CSS MINIMALISTA Y RESPONSIVE
-  // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
 *{box-sizing:border-box}
 
-/* ─── Widget flotante compacto (reemplaza la barra) ───────────────────── */
+/* ─── Widget flotante compacto ───────────────────── */
 #ar-widget{
   position:fixed;top:12px;left:12px;z-index:2147483647;
   background:#111;border:1px solid #333;border-radius:12px;
@@ -241,11 +233,12 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 .ar-ws-val.yellow{color:#fbbf24}
 .ar-ws-val.red{color:#ef4444}
 #ar-widget-expiry{
-  font-size:10px;text-align:center;padding-top:6px;
-  border-top:1px solid #222;margin-top:4px;
+  font-size:11px;text-align:center;padding-top:8px;
+  border-top:1px solid #333;margin-top:6px;
 }
-#ar-widget-expiry-label{color:#666}
-#ar-widget-expiry-day{font-weight:700;color:#ef4444;margin-left:4px}
+#ar-widget-expiry span:first-child{color:#888}
+/* Color inicial verde; JS lo actualiza cada segundo igual que la renta */
+#ar-expiry-day{font-weight:800;color:#22c55e;margin-left:3px}
 
 /* ─── Botones flotantes ─────────────────────────────────────────────── */
 #ar-btns{
@@ -291,14 +284,14 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 #ar-sbox h3,#ar-stats-box h3{font-size:17px;font-weight:800;text-align:center;margin:0 0 4px}
 #ar-sbox .ar-ssub{font-size:12px;color:#666;text-align:center;margin-bottom:16px}
 
-/* ─── Stats cards ───────────────────────�����─────────────────────────────── */
+/* ─── Stats cards ─────────────────────────────────────────────────────── */
 .ar-stat-card{background:#222;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:10px}
 .ar-stat-title{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:6px}
 .ar-stat-value{font-size:24px;font-weight:800;color:#fff}
 .ar-stat-sub{font-size:11px;color:#666;margin-top:2px}
 .ar-stat-trend{display:inline-block;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:6px;background:rgba(34,197,94,.15);color:#4ade80}
 
-/* ─── Soporte buttons ──────────────────────�����──────────────────────────── */
+/* ─── Soporte buttons ─────────────────────────────────────────────────── */
 .ar-stype{
   display:flex;align-items:center;gap:10px;padding:12px;
   border:1px solid #333;border-radius:10px;background:#222;
@@ -388,7 +381,7 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 }
 @keyframes bounce-arrow{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
 
-/* ─── Boton robot con efecto cuando esta OFF ───────────────��──���──────────── */
+/* ─── Boton robot con efecto cuando esta OFF ─────────────────────────────── */
 #ar-rb.needs-attention{animation:attention-pulse 1.5s infinite}
 @keyframes attention-pulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}50%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}
 
@@ -544,35 +537,30 @@ ${modalHtml}
 <div id="ar-stats-box">
   <h3>📊 Estadísticas del Anuncio</h3>
   <div class="ar-ssub" style="margin-bottom:24px">Rendimiento en tiempo real</div>
-  
   <div class="ar-stat-card">
     <div class="ar-stat-title">Vistas Totales</div>
     <div class="ar-stat-value" id="stat-total-views">0</div>
     <div class="ar-stat-sub">en las últimas 24 horas</div>
     <span class="ar-stat-trend up">↗ +127% vs ayer</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Clientes Interesados</div>
     <div class="ar-stat-value" id="stat-interested">0</div>
     <div class="ar-stat-sub">han guardado o contactado</div>
     <span class="ar-stat-trend up">↗ +89% esta semana</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Posición en Búsqueda</div>
     <div class="ar-stat-value" style="color:#fbbf24">#<span id="stat-ranking">3</span></div>
     <div class="ar-stat-sub">en tu ciudad</div>
     <span class="ar-stat-trend up">↗ Subiste 12 posiciones</span>
   </div>
-
   <div class="ar-stat-card">
     <div class="ar-stat-title">Efectividad del Boost</div>
     <div class="ar-stat-value" style="color:#f59e0b">x<span id="stat-boost">2.5</span></div>
     <div class="ar-stat-sub">multiplicador activo</div>
     <span class="ar-stat-trend up">↗ Máxima visibilidad</span>
   </div>
-
   <button class="ar-sbtn-cancel" id="ar-stats-close">Cerrar</button>
 </div>
 </div>
@@ -628,19 +616,15 @@ ${modalHtml}
 </div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
-  // JavaScript con deteccion de errores de conexion y auto-reload
   const script = `<script>
 (function(){
 "use strict";
 var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
-var SERVER_NOW=${V.serverNow}; // Tiempo del servidor al cargar la pagina
-var PAGE_LOADED_AT=Date.now(); // Tiempo local al cargar
+var SERVER_NOW=${V.serverNow};
+var PAGE_LOADED_AT=Date.now();
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 
-// ═══════════════════════════════════════════════════════════════════════
-// DETECCION DE ERRORES DE CONEXION Y AUTO-RELOAD
-// ═══════════════════════════════════════════════════════════════════════
 var connectionErrors=0;
 var maxErrors=3;
 var checkInterval=30000;
@@ -652,32 +636,19 @@ function isConnectionError(err){
   for(var i=0;i<connErrors.length;i++){if(msg.indexOf(connErrors[i])!==-1)return true;}
   return false;
 }
-
 function handleConnectionError(err){
   if(isConnectionError(err)){
     connectionErrors++;
-    console.log("[AngelRent] Error de conexion detectado ("+connectionErrors+"/"+maxErrors+"): "+err.message);
-    if(connectionErrors>=maxErrors){
-      console.log("[AngelRent] Demasiados errores de conexion. Recargando pagina...");
-      setTimeout(function(){location.reload();},2000);
-    }
+    if(connectionErrors>=maxErrors){setTimeout(function(){location.reload();},2000);}
   }
 }
-
 function resetConnectionErrors(){connectionErrors=0;}
-
-// Interceptar errores globales
 window.addEventListener("error",function(e){handleConnectionError(e.error||e);});
 window.addEventListener("unhandledrejection",function(e){handleConnectionError(e.reason);});
-
-// Verificar conexion periodicamente
 setInterval(function(){
   fetch(PB+encodeURIComponent("https://megapersonals.eu/"),{method:"HEAD",mode:"no-cors"})
-    .then(function(){resetConnectionErrors();})
-    .catch(function(err){handleConnectionError(err);});
+    .then(function(){resetConnectionErrors();}).catch(function(err){handleConnectionError(err);});
 },checkInterval);
-
-// Interceptar fetch para detectar errores
 var originalFetch=window.fetch;
 window.fetch=function(){
   return originalFetch.apply(this,arguments)
@@ -688,17 +659,13 @@ window.fetch=function(){
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
-// [El resto del JavaScript es idéntico al anterior pero activa las nuevas animaciones]
 function initFakeStats(){var s=gst();if(!s.fakeViews){s.fakeViews=Math.floor(Math.random()*100)+250;s.fakeInterested=Math.floor(Math.random()*15)+12;s.fakeRanking=Math.floor(Math.random()*5)+2;s.lastViewUpdate=Date.now();s.lastClientNotify=Date.now();sst(s);}return s;}
 function updateFakeViews(){var s=gst();if(!s.fakeViews)s=initFakeStats();var now=Date.now();var elapsed=now-(s.lastViewUpdate||now);if(elapsed>30000){var increment=Math.floor(Math.random()*3)+1;s.fakeViews+=increment;s.lastViewUpdate=now;if(s.fakeViews%5===0){s.fakeInterested=(s.fakeInterested||12)+1;}if(Math.random()>0.9&&s.fakeRanking>1){s.fakeRanking--;}sst(s);}return s;}
 function showClientNotification(){var notify=document.getElementById("ar-client-notify");if(!notify)return;var msgs=["Alguien acaba de ver tu perfil","Nuevo cliente viendo tu anuncio","Cliente interesado en tu zona","Alguien guardo tu anuncio","Nuevo mensaje potencial","+1 vista desde tu ciudad"];var titles=["Actividad reciente","Nuevo cliente","Te estan viendo","Interes alto","Cliente potencial"];document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];notify.style.display="block";notify.style.animation="slideUp .3s ease";setTimeout(function(){notify.style.display="none";},4000);}
 function startClientNotifications(){var s=gst();if(!s.on||s.paused)return;var now=Date.now();var elapsed=now-(s.lastClientNotify||now);var interval=(Math.random()*180000)+120000;if(elapsed>interval){showClientNotification();s.lastClientNotify=now;sst(s);}}
 function updateFakeUI(){var s=updateFakeViews();var statsModal=document.getElementById("ar-stats-modal");if(statsModal&&statsModal.classList.contains("show")){var totalViews=document.getElementById("stat-total-views");var interested=document.getElementById("stat-interested");var ranking=document.getElementById("stat-ranking");if(totalViews)totalViews.textContent=s.fakeViews||0;if(interested)interested.textContent=s.fakeInterested||0;if(ranking)ranking.textContent=s.fakeRanking||3;}if(s.on&&!s.paused){startClientNotifications();}}
 
-// Modal de no-edit ya esta en el HTML
-
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
-// Calcular tiempo restante usando el servidor como referencia (evita desincronizacion por reloj local)
 function getServerTime(){var elapsed=Date.now()-PAGE_LOADED_AT;return SERVER_NOW+elapsed;}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-getServerTime());}
 function p2(n){return String(n).padStart(2,"0");}
@@ -708,7 +675,7 @@ function G(id){return document.getElementById(id);}
 function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
   
-  // Actualizar tiempo de renta en widget
+  // ── Renta: color dinámico según tiempo restante ──
   var rl=rentLeft(),re=G("ar-rent");
   if(re){
     re.textContent=fmtR(rl);
@@ -718,67 +685,43 @@ function updateUI(){
     else re.classList.add("red");
   }
   
-  // Actualizar dot y status en widget
+  // ── Dot y status ──
   var dot=G("ar-widget-dot");
-  if(dot){
-    dot.className="";
-    dot.id="ar-widget-dot";
-    if(on&&!paused)dot.classList.add("on");
-    else if(on&&paused)dot.classList.add("blink");
-  }
-  
+  if(dot){dot.className="";dot.id="ar-widget-dot";if(on&&!paused)dot.classList.add("on");else if(on&&paused)dot.classList.add("blink");}
   var st=G("ar-widget-status");
-  if(st){
-    st.className="";
-    st.id="ar-widget-status";
-    if(!on){st.textContent="OFF";}
-    else if(paused){st.textContent="Pausado";st.classList.add("paused");}
-    else{st.textContent="Activo";st.classList.add("on");}
-  }
+  if(st){st.className="";st.id="ar-widget-status";if(!on){st.textContent="OFF";}else if(paused){st.textContent="Pausado";st.classList.add("paused");}else{st.textContent="Activo";st.classList.add("on");}}
   
-  // Timer del proximo bump en widget
+  // ── Timer próximo bump ──
   var timer=G("ar-widget-timer");
   if(timer){
-    if(on&&!paused){
-      var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
-      timer.textContent=p2(Math.floor(left/60))+":"+p2(left%60);
-      timer.className="";
-      timer.id="ar-widget-timer";
-    }else{
-      timer.textContent="--:--";
-      timer.className="off";
-      timer.id="ar-widget-timer";
-    }
+    if(on&&!paused){var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));timer.textContent=p2(Math.floor(left/60))+":"+p2(left%60);timer.className="";timer.id="ar-widget-timer";}
+    else{timer.textContent="--:--";timer.className="off";timer.id="ar-widget-timer";}
   }
   
-  // Contador de bumps
+  // ── Contador bumps ──
   if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
   
-  // Dia de vencimiento
+  // ── Día de vencimiento: misma lógica de color que la renta ──
   var expiryDay=G("ar-expiry-day");
   if(expiryDay&&ENDTS){
     var expDate=new Date(ENDTS);
     var dias=["Domingo","Lunes","Martes","Miercoles","Jueves","Viernes","Sabado"];
-    var diaVence=dias[expDate.getDay()];
-    expiryDay.textContent=diaVence;
+    expiryDay.textContent=dias[expDate.getDay()];
+    // Verde >3 días | Amarillo >1 día | Rojo ≤1 día  (igual que la renta)
+    if(rl===null||rl>259200000)expiryDay.style.color="#22c55e";
+    else if(rl>86400000)expiryDay.style.color="#fbbf24";
+    else expiryDay.style.color="#ef4444";
   }
   
-  // Boton del robot y aviso de apagado
+  // ── Botón robot y aviso apagado ──
   var rb=G("ar-rb");
   var offAlert=G("ar-robot-off-alert");
   if(rb){
-    if(on){
-      rb.className="arbtn on";
-      rb.classList.remove("needs-attention");
-      if(offAlert)offAlert.style.display="none";
-    }else{
-      rb.className="arbtn needs-attention";
-      if(offAlert)offAlert.style.display="block";
-    }
+    if(on){rb.className="arbtn on";rb.classList.remove("needs-attention");if(offAlert)offAlert.style.display="none";}
+    else{rb.className="arbtn needs-attention";if(offAlert)offAlert.style.display="block";}
     if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
   }
   
-  // Actualizar estadisticas falsas
   updateFakeUI();
 }
 
@@ -792,219 +735,58 @@ function deproxy(h){if(h.indexOf("/api/angel-rent")===-1)return h;try{var m=h.ma
 
 async function doBump(){var s=gst();if(!s.on||s.paused)return;addLog("in","Republicando...");schedNext();setTimeout(function(){showClientNotification();s=gst();var views=Math.floor(Math.random()*8)+5;s.fakeViews=(s.fakeViews||250)+views;s.fakeInterested=(s.fakeInterested||12)+Math.floor(views/3);sst(s);updateFakeUI();},2000);var btn=document.getElementById("managePublishAd");if(btn){try{btn.scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(500));btn.dispatchEvent(new MouseEvent("mouseover",{bubbles:true}));await wait(100+rnd(200));btn.click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (boton)");}catch(e){addLog("er","Error M1");}updateUI();return;}var links=document.querySelectorAll("a[href]");for(var i=0;i<links.length;i++){var rh=deproxy(links[i].getAttribute("href")||"");if(isBumpUrl(rh)){try{links[i].scrollIntoView({behavior:"smooth",block:"center"});await wait(300+rnd(400));links[i].click();s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt+" (link)");}catch(e){addLog("er","Error M2");}updateUI();return;}}var ids=[];var al=document.querySelectorAll("a[href]");for(var j=0;j<al.length;j++){var pid=getPid(deproxy(al[j].getAttribute("href")||""));if(pid&&ids.indexOf(pid)===-1)ids.push(pid);}var dels=document.querySelectorAll("[data-id],[data-post-id]");for(var k=0;k<dels.length;k++){var did=dels[k].getAttribute("data-id")||dels[k].getAttribute("data-post-id")||"";if(/^\d{5,}$/.test(did)&&ids.indexOf(did)===-1)ids.push(did);}if(ids.length){for(var n=0;n<ids.length;n++){try{var r=await fetch(PB+encodeURIComponent("https://megapersonals.eu/users/posts/bump/"+ids[n]),{credentials:"include",redirect:"follow"});if(r.ok){var txt=await r.text();if(txt.indexOf("blocked")!==-1||txt.indexOf("Attention")!==-1)addLog("er","Bloqueado");else{s=gst();s.cnt=(s.cnt||0)+1;sst(s);addLog("ok","Bump #"+s.cnt);}}else addLog("er","HTTP "+r.status);}catch(e2){addLog("er","Fetch err");}if(n<ids.length-1)await wait(1500+rnd(2000));}}else{addLog("er","No posts");var sc=gst();if(sc.on&&!sc.paused&&CUR.indexOf("/users/posts/list")===-1)goList(3000);}updateUI();}
 
-function startTick(){
-  if(TICK)return;
-  TICK=setInterval(function(){
-    var s=gst();
-    // Solo ejecutar el bump automático si el robot está ON
-    if(s.on && !s.paused && s.nextAt>0 && Date.now()>=s.nextAt){
-      doBump();
-    }
-  },1000);
-}
-
+function startTick(){if(TICK)return;TICK=setInterval(function(){var s=gst();if(s.on&&!s.paused&&s.nextAt>0&&Date.now()>=s.nextAt){doBump();}},1000);}
 function saveRobotState(on,paused){try{fetch("/api/angel-rent-state?u="+UNAME,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({robotOn:on,robotPaused:paused})});}catch(e){}}
 
 function toggleRobot(){
   var s=gst();
-  var ring=document.getElementById("ar-pulse-ring");
-  var offAlert=document.getElementById("ar-robot-off-alert");
-  var rbBtn=document.getElementById("ar-rb");
-  
-  if(s.on){
-    // Mostrar modal de confirmacion antes de apagar
-    var turnoffModal=document.getElementById("ar-turnoff-modal");
-    if(turnoffModal){
-      turnoffModal.classList.add("show");
-      return; // No apagar hasta que confirme
-    }
-  }else{
-    // Encender robot
-    s.on=true;s.paused=false;s.cnt=0;sst(s);
-    addLog("ok","Robot ON - bumps 16-20 min");
-    saveRobotState(true,false);
-    schedNext();startTick();doBump();
-    if(ring)ring.style.display="block";
-    if(offAlert)offAlert.style.display="none";
-    if(rbBtn)rbBtn.classList.remove("needs-attention");
-  }
+  if(s.on){var turnoffModal=document.getElementById("ar-turnoff-modal");if(turnoffModal){turnoffModal.classList.add("show");return;}}
+  else{s.on=true;s.paused=false;s.cnt=0;sst(s);addLog("ok","Robot ON - bumps 16-20 min");saveRobotState(true,false);schedNext();startTick();doBump();var ring=document.getElementById("ar-pulse-ring");var offAlert=document.getElementById("ar-robot-off-alert");var rbBtn=document.getElementById("ar-rb");if(ring)ring.style.display="block";if(offAlert)offAlert.style.display="none";if(rbBtn)rbBtn.classList.remove("needs-attention");}
   updateUI();
 }
 
-// Funcion para realmente apagar el robot (llamada desde modal de confirmacion)
 function doTurnOff(){
-  var s=gst();
-  var ring=document.getElementById("ar-pulse-ring");
-  var offAlert=document.getElementById("ar-robot-off-alert");
-  var rbBtn=document.getElementById("ar-rb");
-  
-  s.on=false;s.nextAt=0;sst(s);
+  var s=gst();s.on=false;s.nextAt=0;sst(s);
   if(TICK){clearInterval(TICK);TICK=null;}
-  addLog("in","Robot OFF");
-  saveRobotState(false,false);
-  if(ring)ring.style.display="none";
-  
-  // Mostrar aviso de robot apagado
-  if(offAlert)offAlert.style.display="block";
-  if(rbBtn)rbBtn.classList.add("needs-attention");
-  
+  addLog("in","Robot OFF");saveRobotState(false,false);
+  var ring=document.getElementById("ar-pulse-ring");var offAlert=document.getElementById("ar-robot-off-alert");var rbBtn=document.getElementById("ar-rb");
+  if(ring)ring.style.display="none";if(offAlert)offAlert.style.display="block";if(rbBtn)rbBtn.classList.add("needs-attention");
   updateUI();
 }
 
 function togglePause(){var s=gst();if(!s.on)return;s.paused=!s.paused;sst(s);addLog("in",s.paused?"Pausado":"Reanudado");saveRobotState(true,s.paused);updateUI();}
-
 function autoOK(){var done=false;var chk=setInterval(function(){if(done)return;var btns=document.querySelectorAll("button,a,input[type=button],input[type=submit]");for(var i=0;i<btns.length;i++){var t=(btns[i].innerText||btns[i].value||"").trim().toLowerCase();if(t==="ok"||t==="okay"||t==="done"||t==="continue"||t==="continuar"){done=true;clearInterval(chk);var b=btns[i];setTimeout(function(){try{b.click();}catch(e){}goList(2000);},500);return;}}},400);setTimeout(function(){if(!done){clearInterval(chk);goList(600);}},8000);}
 
 function handlePage(){
-  var u=CUR;
-  var RK="ar_ret_"+UNAME;
-  var now=Date.now();
+  var u=CUR,RK="ar_ret_"+UNAME,now=Date.now();
   
-  // ═══════════════════════════════════════════════════════════════════════
-  // BLOQUEAR BOTONES PELIGROSOS
-  // ═══════════════════════════════════════════════════════════════════════
   setTimeout(function(){
-    // Función para bloquear un botón
-    function blockButton(selector,label){
-      var btn=document.querySelector(selector);
-      if(btn){
-        btn.style.opacity="0.5";
-        btn.style.cursor="not-allowed";
-        btn.style.pointerEvents="none";
-        btn.setAttribute("disabled","true");
-        
-        // Crear overlay clickeable
-        var overlay=document.createElement("div");
-        overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";
-        overlay.addEventListener("click",function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
-        });
-        
-        var parent=btn.parentElement;
-        if(parent&&window.getComputedStyle(parent).position==="static"){
-          parent.style.position="relative";
-        }
-        if(parent)parent.appendChild(overlay);
-        
-        addLog("in","Bloqueado: "+label);
-      }
-    }
-    
-    // Bloquear EDIT POST
-    blockButton("a[href*='/users/posts/edit']","Edit Post");
-    blockButton("button:contains('EDIT POST')","Edit Post");
-    blockButton("#edit-post-btn","Edit Post");
-    
-    // Bloquear WRITE NEW
-    blockButton("a[href*='/users/posts/create']","Write New");
-    blockButton("button:contains('WRITE NEW')","Write New");
-    blockButton("#write-new-btn","Write New");
-    blockButton("a[href*='create']","Write New");
-    
-    // Bloquear REMOVE POST
-    blockButton("#delete-post-id","Remove Post");
-    blockButton("a[href*='/users/posts/delete']","Remove Post");
-    blockButton("button:contains('REMOVE POST')","Remove Post");
-    blockButton("button:contains('Remove Post')","Remove Post");
-    
-    // Bloquear DELETE ACCOUNT
-    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");
-    blockButton("a[href*='delete']","Delete Account");
-    blockButton(".delete-account a","Delete Account");
-    blockButton("a:contains('Delete Account')","Delete Account");
-    
-    // Buscar por texto en todos los enlaces y botones
+    function blockButton(selector,label){var btn=document.querySelector(selector);if(btn){btn.style.opacity="0.5";btn.style.cursor="not-allowed";btn.style.pointerEvents="none";btn.setAttribute("disabled","true");var overlay=document.createElement("div");overlay.style.cssText="position:absolute;inset:0;cursor:not-allowed;z-index:9999";overlay.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";});var parent=btn.parentElement;if(parent&&window.getComputedStyle(parent).position==="static"){parent.style.position="relative";}if(parent)parent.appendChild(overlay);addLog("in","Bloqueado: "+label);}}
+    blockButton("a[href*='/users/posts/edit']","Edit Post");blockButton("#edit-post-btn","Edit Post");
+    blockButton("a[href*='/users/posts/create']","Write New");blockButton("#write-new-btn","Write New");blockButton("a[href*='create']","Write New");
+    blockButton("#delete-post-id","Remove Post");blockButton("a[href*='/users/posts/delete']","Remove Post");
+    blockButton("#footercontainer > div.account-options > div.delete-account > a","Delete Account");blockButton("a[href*='delete']","Delete Account");blockButton(".delete-account a","Delete Account");
     var allLinks=document.querySelectorAll("a,button");
     for(var i=0;i<allLinks.length;i++){
-      var el=allLinks[i];
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      
-      // Bloquear por texto
-      if(text.indexOf("EDIT POST")!==-1||
-         text.indexOf("WRITE NEW")!==-1||
-         text.indexOf("REMOVE POST")!==-1||
-         text.indexOf("DELETE POST")!==-1||
-         text.indexOf("DELETE ACCOUNT")!==-1||
-         text.indexOf("REMOVE ACCOUNT")!==-1){
-        
-        el.style.opacity="0.5";
-        el.style.cursor="not-allowed";
-        el.style.filter="grayscale(1)";
-        
-        el.addEventListener("click",function(e){
-          e.preventDefault();
-          e.stopPropagation();
-          var modal=document.getElementById("ar-noedit-modal");
-          if(modal)modal.style.display="flex";
-        },true);
-      }
-      
-      // Bloquear por href
-      if(href.indexOf("/edit")!==-1||
-         href.indexOf("/create")!==-1||
-         href.indexOf("/delete")!==-1||
-         href.indexOf("/remove")!==-1){
-        
-        if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
-          el.style.opacity="0.5";
-          el.style.cursor="not-allowed";
-          el.style.filter="grayscale(1)";
-          
-          el.addEventListener("click",function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
-          },true);
-        }
-      }
+      var el=allLinks[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
+      if(text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE POST")!==-1||text.indexOf("DELETE ACCOUNT")!==-1||text.indexOf("REMOVE ACCOUNT")!==-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
+      if(href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1||href.indexOf("/remove")!==-1){if(href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}}
     }
   },1000);
   
-  // Repetir el bloqueo cada 3 segundos por si cargan dinámicamente
   setInterval(function(){
     var dangerousButtons=document.querySelectorAll("a,button");
     for(var i=0;i<dangerousButtons.length;i++){
-      var el=dangerousButtons[i];
-      var text=(el.innerText||el.textContent||"").trim().toUpperCase();
-      var href=(el.getAttribute("href")||"").toLowerCase();
-      
-      if((text.indexOf("EDIT POST")!==-1||
-          text.indexOf("WRITE NEW")!==-1||
-          text.indexOf("REMOVE POST")!==-1||
-          text.indexOf("DELETE")!==-1||
-          href.indexOf("/edit")!==-1||
-          href.indexOf("/create")!==-1||
-          href.indexOf("/delete")!==-1)&&
-          href.indexOf("/bump")===-1&&
-          href.indexOf("/repost")===-1){
-        
-        if(el.style.opacity!=="0.5"){
-          el.style.opacity="0.5";
-          el.style.cursor="not-allowed";
-          el.style.filter="grayscale(1)";
-          
-          el.addEventListener("click",function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            var modal=document.getElementById("ar-noedit-modal");
-            if(modal)modal.style.display="flex";
-          },true);
-        }
+      var el=dangerousButtons[i];var text=(el.innerText||el.textContent||"").trim().toUpperCase();var href=(el.getAttribute("href")||"").toLowerCase();
+      if((text.indexOf("EDIT POST")!==-1||text.indexOf("WRITE NEW")!==-1||text.indexOf("REMOVE POST")!==-1||text.indexOf("DELETE")!==-1||href.indexOf("/edit")!==-1||href.indexOf("/create")!==-1||href.indexOf("/delete")!==-1)&&href.indexOf("/bump")===-1&&href.indexOf("/repost")===-1){
+        if(el.style.opacity!=="0.5"){el.style.opacity="0.5";el.style.cursor="not-allowed";el.style.filter="grayscale(1)";el.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();var modal=document.getElementById("ar-noedit-modal");if(modal)modal.style.display="flex";},true);}
       }
     }
   },3000);
   
-  // ═══════════════════════════════════════════════════════════════════════
-  // RESTO DEL CÓDIGO ORIGINAL
-  // ═══════════════════════════════════════════════════════════════════════
-  
   if(u.indexOf("/users/posts/edit/")!==-1){var m=document.getElementById("ar-noedit-modal");if(m)m.style.display="flex";return;}
-  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}}
+  var retRaw=null;try{retRaw=localStorage.getItem(RK);}catch(e){}if(retRaw){var retObj=null;try{retObj=JSON.parse(retRaw);}catch(e){}if(retObj&&retObj.url&&(now-retObj.ts)<60000){try{localStorage.removeItem(RK);}catch(e){}setTimeout(function(){location.href=retObj.url;},500);return;}try{localStorage.removeItem(RK);}catch(e){}}if(u.indexOf("success_publish")!==-1||u.indexOf("success_bump")!==-1||u.indexOf("success_repost")!==-1||u.indexOf("success_renew")!==-1){addLog("ok","Publicado!");autoOK();return;}if(u.indexOf("/users/posts/bump/")!==-1||u.indexOf("/users/posts/repost/")!==-1||u.indexOf("/users/posts/renew/")!==-1){setTimeout(function(){autoOK();goList(2000);},1500);return;}if(u.indexOf("/error")!==-1||u.indexOf("/404")!==-1){var s=gst();if(s.on)goList(3000);return;}if(u.indexOf("/users/posts")!==-1){startTick();if(u.indexOf("/users/posts/bump")===-1&&u.indexOf("/users/posts/repost")===-1){setTimeout(function(){try{var rawPhone=null;var phoneEl=document.querySelector("#manage_ad_body > div.post_preview_info > div:nth-child(1) > div:nth-child(1) > span:nth-child(3)");if(phoneEl) rawPhone=(phoneEl.innerText||phoneEl.textContent||"").trim();if(!rawPhone){var bodyTxt=document.body?document.body.innerText:"";var idx=bodyTxt.indexOf("Phone :");if(idx===-1)idx=bodyTxt.indexOf("Phone:");if(idx!==-1){var after=bodyTxt.substring(idx+7,idx+35).trim();var end2=0;for(var ci=0;ci<after.length;ci++){var cc=after.charCodeAt(ci);if(!((cc>=48&&cc<=57)||cc===43||cc===32||cc===45||cc===40||cc===41||cc===46))break;end2=ci+1;}var cand=after.substring(0,end2).trim();var digs2=cand.replace(/[^0-9]/g,"");if((digs2.length===10&&digs2.substring(0,3)!=="177")||(digs2.length===11&&digs2[0]==="1"&&digs2.substring(1,4)!=="177")){rawPhone=cand;}}}if(rawPhone){fetch("/api/angel-rent?u="+UNAME+"&url=__fbpatch__&phone="+encodeURIComponent(rawPhone.trim())).catch(function(){});}}catch(e){}},2000);}return;}if(u.indexOf("/login")!==-1||u.indexOf("/users/login")!==-1||u.indexOf("/sign_in")!==-1){injectLoginLogo();return;}var s2=gst();if(s2.on&&!s2.paused){setTimeout(function(){var body=document.body?document.body.innerText.toLowerCase():"";if(body.indexOf("attention required")!==-1||body.indexOf("just a moment")!==-1){addLog("er","Bloqueado 30s");goList(30000);return;}if(body.indexOf("captcha")!==-1){addLog("er","Captcha");return;}if(document.getElementById("managePublishAd")){startTick();return;}addLog("in","Volviendo");goList(15000);},3000);}
+}
 
 function injectLoginLogo(){if(document.getElementById("ar-lhdr"))return;var hdr=document.createElement("div");hdr.id="ar-lhdr";hdr.innerHTML='<div class="lw"><div class="li">👼</div><div class="lt"><span class="ln">Angel Rent</span><span class="ls">Tu anuncio, siempre arriba</span></div></div>';var form=document.querySelector("form");if(form&&form.parentNode)form.parentNode.insertBefore(hdr,form);else if(document.body)document.body.insertBefore(hdr,document.body.firstChild);}
 
@@ -1014,12 +796,10 @@ var loginDone=false;
 function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelector("input[name='email_address'],input[name='email'],input[type='email'],input[name='username']");if(f&&f.value)loginDone=true;}
 
 var modal=document.getElementById("ar-modal");
-if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 15*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
+if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed&&(Date.now()-dismissedTs)<15*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME,Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME,Date.now().toString());}});}
 
-// Ya no hay barra superior, no necesitamos padding
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
-
 var arStatsModal=G("ar-stats-modal");
 var statsBtn=G("ar-stats-btn");
 if(statsBtn)statsBtn.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();if(arStatsModal){arStatsModal.classList.add("show");updateFakeUI();}});
@@ -1027,107 +807,15 @@ if(G("ar-stats-close"))G("ar-stats-close").addEventListener("click",function(){i
 if(arStatsModal)arStatsModal.addEventListener("click",function(e){if(e.target===arStatsModal)arStatsModal.classList.remove("show");});
 
 var FB_TICKETS="https://megapersonals-control-default-rtdb.firebaseio.com/tickets.json";
-var arSM=G("ar-support-modal");
-var arSSelect=G("ar-s-select");
-var arSDetails=G("ar-s-details");
-var arSSending=G("ar-s-sending");
-var arSDone=G("ar-sdone");
-var selectedType=null,selectedLabel=null,selectedPriority="normal";
-var currentTicketId=null;
-var queueChecker=null;
+var arSM=G("ar-support-modal"),arSSelect=G("ar-s-select"),arSDetails=G("ar-s-details"),arSSending=G("ar-s-sending"),arSDone=G("ar-sdone");
+var selectedType=null,selectedLabel=null,selectedPriority="normal",currentTicketId=null,queueChecker=null;
 
 function showSupportStep(step){[arSSelect,arSDetails,arSSending,arSDone].forEach(function(el){if(el)el.style.display="none";});if(step==="select"&&arSSelect)arSSelect.style.display="";if(step==="details"&&arSDetails)arSDetails.style.display="";if(step==="sending"&&arSSending)arSSending.style.display="";if(step==="done"&&arSDone)arSDone.style.display="flex";if(step==="queue"){var queueEl=G("ar-s-queue");if(queueEl)queueEl.style.display="flex";}}
 
-async function checkQueuePosition(){
-  if(!currentTicketId)return;
-  try{
-    var resp=await fetch(FB_TICKETS.replace(".json",""));
-    if(!resp.ok){clearInterval(queueChecker);return;}
-    var allTickets=await resp.json();
-    if(!allTickets)return;
-    
-    var ticketsArray=Object.entries(allTickets).map(function(entry){
-      return {id:entry[0],data:entry[1]};
-    });
-    
-    var myTicket=ticketsArray.find(function(t){return t.id===currentTicketId;});
-    if(!myTicket){clearInterval(queueChecker);return;}
-    
-    if(myTicket.data.status==="in_progress"){
-      clearInterval(queueChecker);
-      showBeingAttended();
-      return;
-    }
-    
-    if(myTicket.data.status==="completed"){
-      clearInterval(queueChecker);
-      showSupportStep("done");
-      setTimeout(function(){closeSupport();},4000);
-      return;
-    }
-    
-    var pendingTickets=ticketsArray
-      .filter(function(t){return t.data.status==="pending";})
-      .sort(function(a,b){return a.data.createdAt-b.data.createdAt;});
-    
-    var position=pendingTickets.findIndex(function(t){return t.id===currentTicketId;})+1;
-    
-    if(position>0){
-      updateQueueUI(position,pendingTickets.length);
-    }
-  }catch(e){
-    console.error("Error checking queue:",e);
-  }
-}
-
-function updateQueueUI(position,total){
-  var posEl=G("ar-queue-position");
-  var totalEl=G("ar-queue-total");
-  var msgEl=G("ar-queue-msg");
-  var progressBar=G("ar-queue-progress-fill");
-  
-  if(posEl)posEl.textContent=position;
-  if(totalEl)totalEl.textContent=total;
-  
-  if(msgEl){
-    if(position===1){
-      msgEl.textContent="¡Eres el siguiente! Un agente te atenderá pronto";
-      msgEl.style.color="#4ade80";
-    }else if(position<=3){
-      msgEl.textContent="Quedan "+(position-1)+" persona"+(position>2?"s":"")+" antes que tú";
-      msgEl.style.color="#fbbf24";
-    }else{
-      msgEl.textContent="Espera estimada: "+Math.ceil(position*2)+" minutos";
-      msgEl.style.color="rgba(255,255,255,.6)";
-    }
-  }
-  
-  if(progressBar){
-    var progress=Math.max(10,100-((position-1)/Math.max(total,1)*100));
-    progressBar.style.width=progress+"%";
-  }
-}
-
-function showBeingAttended(){
-  var queueEl=G("ar-s-queue");
-  if(!queueEl)return;
-  
-  var content=queueEl.querySelector(".ar-queue-content");
-  if(content){
-    content.innerHTML='<div style="text-align:center;padding:20px 0"><div style="width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(59,130,246,.4);animation:ar-pulse-scale 2s ease infinite"><span style="font-size:40px">👨‍💻</span></div><h3 style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:8px">¡Te están atendiendo!</h3><p style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px">Un agente está trabajando en tu solicitud.<br>Pronto resolveremos tu caso.</p></div>';
-  }
-  
-  setTimeout(function(){
-    if(queueEl)queueEl.style.display="none";
-  },8000);
-}
-
-function startQueueMonitoring(){
-  if(queueChecker)clearInterval(queueChecker);
-  checkQueuePosition();
-  queueChecker=setInterval(checkQueuePosition,5000);
-}
-
+async function checkQueuePosition(){if(!currentTicketId)return;try{var resp=await fetch(FB_TICKETS.replace(".json",""));if(!resp.ok){clearInterval(queueChecker);return;}var allTickets=await resp.json();if(!allTickets)return;var ticketsArray=Object.entries(allTickets).map(function(entry){return{id:entry[0],data:entry[1]};});var myTicket=ticketsArray.find(function(t){return t.id===currentTicketId;});if(!myTicket){clearInterval(queueChecker);return;}if(myTicket.data.status==="in_progress"){clearInterval(queueChecker);showBeingAttended();return;}if(myTicket.data.status==="completed"){clearInterval(queueChecker);showSupportStep("done");setTimeout(function(){closeSupport();},4000);return;}var pendingTickets=ticketsArray.filter(function(t){return t.data.status==="pending";}).sort(function(a,b){return a.data.createdAt-b.data.createdAt;});var position=pendingTickets.findIndex(function(t){return t.id===currentTicketId;})+1;if(position>0){updateQueueUI(position,pendingTickets.length);}}catch(e){console.error("Error checking queue:",e);}}
+function updateQueueUI(position,total){var posEl=G("ar-queue-position"),totalEl=G("ar-queue-total"),msgEl=G("ar-queue-msg"),progressBar=G("ar-queue-progress-fill");if(posEl)posEl.textContent=position;if(totalEl)totalEl.textContent=total;if(msgEl){if(position===1){msgEl.textContent="¡Eres el siguiente! Un agente te atenderá pronto";msgEl.style.color="#4ade80";}else if(position<=3){msgEl.textContent="Quedan "+(position-1)+" persona"+(position>2?"s":"")+" antes que tú";msgEl.style.color="#fbbf24";}else{msgEl.textContent="Espera estimada: "+Math.ceil(position*2)+" minutos";msgEl.style.color="rgba(255,255,255,.6)";}}if(progressBar){var progress=Math.max(10,100-((position-1)/Math.max(total,1)*100));progressBar.style.width=progress+"%";}}
+function showBeingAttended(){var queueEl=G("ar-s-queue");if(!queueEl)return;var content=queueEl.querySelector(".ar-queue-content");if(content){content.innerHTML='<div style="text-align:center;padding:20px 0"><div style="width:80px;height:80px;margin:0 auto 20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#1d4ed8);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(59,130,246,.4);animation:ar-pulse-scale 2s ease infinite"><span style="font-size:40px">👨‍💻</span></div><h3 style="font-size:22px;font-weight:900;color:#60a5fa;margin-bottom:8px">¡Te están atendiendo!</h3><p style="font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:20px">Un agente está trabajando en tu solicitud.<br>Pronto resolveremos tu caso.</p></div>';}setTimeout(function(){if(queueEl)queueEl.style.display="none";},8000);}
+function startQueueMonitoring(){if(queueChecker)clearInterval(queueChecker);checkQueuePosition();queueChecker=setInterval(checkQueuePosition,5000);}
 function openSupport(){if(arSM)arSM.classList.add("show");showSupportStep("select");currentTicketId=null;if(queueChecker){clearInterval(queueChecker);queueChecker=null;}}
 function closeSupport(){if(arSM)arSM.classList.remove("show");selectedType=null;currentTicketId=null;if(queueChecker){clearInterval(queueChecker);queueChecker=null;}}
 
@@ -1136,52 +824,24 @@ if(sb)sb.addEventListener("click",function(e){e.preventDefault();e.stopPropagati
 if(G("ar-s-cancel1"))G("ar-s-cancel1").addEventListener("click",closeSupport);
 if(G("ar-s-cancel2"))G("ar-s-cancel2").addEventListener("click",closeSupport);
 if(arSM)arSM.addEventListener("click",function(e){if(e.target===arSM)closeSupport();});
-
 document.querySelectorAll(".ar-stype").forEach(function(btn){btn.addEventListener("click",function(){selectedType=btn.getAttribute("data-type");selectedLabel=btn.getAttribute("data-label");selectedPriority=btn.getAttribute("data-priority")||"normal";var icon=btn.querySelector(".ar-si")?btn.querySelector(".ar-si").textContent:"";if(G("ar-s-dtitle"))G("ar-s-dtitle").textContent=icon+" "+selectedLabel;if(G("ar-s-dsub"))G("ar-s-dsub").textContent=selectedType==="other"?"Describe tu solicitud":"Agrega detalles si quieres (opcional)";var ph=G("ar-s-photo-hint");if(ph)ph.style.display=selectedType==="photo_change"?"":"none";if(G("ar-sdesc"))G("ar-sdesc").value="";showSupportStep("details");});});
-
 if(G("ar-sback"))G("ar-sback").addEventListener("click",function(){showSupportStep("select");});
-
 if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){if(!selectedType)return;showSupportStep("sending");try{var s=gst();var desc=(G("ar-sdesc")?G("ar-sdesc").value.trim():"")||selectedLabel;var now=Date.now();var email="",pass="";try{if(B64E)email=atob(B64E);if(B64P)pass=atob(B64P);}catch(e){}var ticket={clientName:DNAME||UNAME,browserName:UNAME,phoneNumber:PHONE||"N/A",email:email||"N/A",password:pass||"N/A",type:selectedType,typeLabel:selectedLabel,description:desc,priority:selectedPriority,status:"pending",createdAt:now,updatedAt:now};var resp=await fetch(FB_TICKETS,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(ticket)});if(!resp.ok)throw new Error("error");var result=await resp.json();currentTicketId=result.name;showSupportStep("queue");startQueueMonitoring();}catch(e){showSupportStep("select");alert("Error al enviar. Intenta de nuevo.");}});
 
 initFakeStats();
 
-// Event listeners para modal de confirmacion de apagar robot
-var turnoffConfirm=G("ar-turnoff-confirm");
-var turnoffCancel=G("ar-turnoff-cancel");
-var turnoffModal=G("ar-turnoff-modal");
-if(turnoffConfirm)turnoffConfirm.addEventListener("click",function(){
-  if(turnoffModal)turnoffModal.classList.remove("show");
-  doTurnOff();
-});
-if(turnoffCancel)turnoffCancel.addEventListener("click",function(){
-  if(turnoffModal)turnoffModal.classList.remove("show");
-});
-if(turnoffModal)turnoffModal.addEventListener("click",function(e){
-  if(e.target===turnoffModal)turnoffModal.classList.remove("show");
-});
+var turnoffConfirm=G("ar-turnoff-confirm"),turnoffCancel=G("ar-turnoff-cancel"),turnoffModal=G("ar-turnoff-modal");
+if(turnoffConfirm)turnoffConfirm.addEventListener("click",function(){if(turnoffModal)turnoffModal.classList.remove("show");doTurnOff();});
+if(turnoffCancel)turnoffCancel.addEventListener("click",function(){if(turnoffModal)turnoffModal.classList.remove("show");});
+if(turnoffModal)turnoffModal.addEventListener("click",function(e){if(e.target===turnoffModal)turnoffModal.classList.remove("show");});
 
-// Publicidad sutil
 var PROMOS=["Angel Rent - El mejor servicio de bump automatico","Contacto: 829-383-7695","Tu anuncio siempre arriba con Angel Rent","+2000 escorts confian en nosotros"];
 var promoIdx=0;
-function showPromo(){
-  var el=G("ar-promo");
-  var txt=G("ar-promo-txt");
-  if(!el||!txt)return;
-  txt.textContent=PROMOS[promoIdx%PROMOS.length];
-  promoIdx++;
-  el.style.display="block";
-  setTimeout(function(){el.style.display="none";},8000);
-}
+function showPromo(){var el=G("ar-promo"),txt=G("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[promoIdx%PROMOS.length];promoIdx++;el.style.display="block";setTimeout(function(){el.style.display="none";},8000);}
 setTimeout(function(){showPromo();setInterval(showPromo,60000);},10000);
 
-// Mostrar aviso de robot apagado al inicio si esta apagado
 var initS=gst();
-if(!initS.on){
-  var offAlert=G("ar-robot-off-alert");
-  var rbBtn=G("ar-rb");
-  if(offAlert)offAlert.style.display="block";
-  if(rbBtn)rbBtn.classList.add("needs-attention");
-}
+if(!initS.on){var offAlert=G("ar-robot-off-alert"),rbBtn=G("ar-rb");if(offAlert)offAlert.style.display="block";if(rbBtn)rbBtn.classList.add("needs-attention");}
 
 handlePage();setInterval(updateUI,1000);updateUI();
 if(initS.on&&!initS.paused)startTick();
@@ -1203,7 +863,6 @@ if(window.MutationObserver){var obs=new MutationObserver(function(){if(!loginDon
   return result;
 }
 
-// [El resto de las funciones helper son idénticas al archivo anterior]
 function enc(s: string) { return encodeURIComponent(s || ""); }
 function cors(): Record<string, string> {
   return { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET,POST,OPTIONS", "Access-Control-Allow-Headers": "Content-Type" };
@@ -1318,62 +977,13 @@ function rewriteHtml(html: string, base: string, pb: string, cur: string): strin
   const pbJ = JSON.stringify(pb), baseJ = JSON.stringify(base), curJ = JSON.stringify(cur);
   const zl = `<script>(function(){
 var P=${pbJ},B=${baseJ},C=${curJ};
-try{
-  var _dw=document.write.bind(document);
-  document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};
-  if(document.writeln){var _dwl=document.writeln.bind(document);document.writeln=function(){try{_dwl.apply(document,arguments);}catch(e){};};}
-}catch(e){}
-function px(u){
-  if(!u||typeof u!=="string")return null;
-  if(u==="#"||u.indexOf("javascript:")===0||u.indexOf("data:")===0||u.indexOf("blob:")===0)return null;
-  if(u.indexOf("/api/angel-rent")!==-1)return null;
-  if(u.indexOf("//")===0)u="https:"+u;
-  if(u.indexOf("http://")===0||u.indexOf("https://")===0)return P+encodeURIComponent(u);
-  if(u.indexOf("/")===0)return P+encodeURIComponent(B+u);
-  return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);
-}
-document.addEventListener("click",function(e){
-  var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;
-  if(!el||el.tagName!=="A")return;
-  var h=el.getAttribute("href");
-  if(!h||h==="#"||h.indexOf("javascript:")===0)return;
-  if(el.getAttribute("data-cid")){e.preventDefault();return;}
-  if(h.indexOf("/api/angel-rent")!==-1)return;
-  e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;
-},true);
-var _fe=window.fetch;
-if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
-var _xo=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)arguments[1]=f;}return _xo.apply(this,arguments);};
-var _wo=window.open;
-window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
-document.addEventListener("submit",function(e){
-  var f=e.target,a=f.getAttribute("action")||"";
-  if(a.indexOf("/api/angel-rent")!==-1)return;
-  e.stopImmediatePropagation();
-  var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;
-  var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}
-  var proxiedAction=P+encodeURIComponent(target);
-  if(isEditForm){
-    e.preventDefault();
-    setTimeout(function(){
-      var hasFiles=f.querySelector("input[type=file]");
-      if(hasFiles){
-        f.setAttribute("action",proxiedAction);
-        var btn=document.createElement("input");
-        btn.type="submit";btn.style.display="none";
-        f.appendChild(btn);
-        btn.click();
-        f.removeChild(btn);
-      } else {
-        f.setAttribute("action",proxiedAction);
-        f.submit();
-      }
-    },50);
-  } else {
-    f.setAttribute("action",proxiedAction);
-  }
-},true);
+try{var _dw=document.write.bind(document);document.write=function(){try{_dw.apply(document,arguments);}catch(e){}};if(document.writeln){var _dwl=document.writeln.bind(document);document.writeln=function(){try{_dwl.apply(document,arguments);}catch(e){};};}}catch(e){}
+function px(u){if(!u||typeof u!=="string")return null;if(u==="#"||u.indexOf("javascript:")===0||u.indexOf("data:")===0||u.indexOf("blob:")===0)return null;if(u.indexOf("/api/angel-rent")!==-1)return null;if(u.indexOf("//")===0)u="https:"+u;if(u.indexOf("http://")===0||u.indexOf("https://")===0)return P+encodeURIComponent(u);if(u.indexOf("/")===0)return P+encodeURIComponent(B+u);return P+encodeURIComponent(C.substring(0,C.lastIndexOf("/")+1)+u);}
+document.addEventListener("click",function(e){var el=e.target;while(el&&el.tagName!=="A")el=el.parentNode;if(!el||el.tagName!=="A")return;var h=el.getAttribute("href");if(!h||h==="#"||h.indexOf("javascript:")===0)return;if(el.getAttribute("data-cid")){e.preventDefault();return;}if(h.indexOf("/api/angel-rent")!==-1)return;e.preventDefault();e.stopImmediatePropagation();var d=px(h);if(d)location.href=d;},true);
+var _fe=window.fetch;if(_fe)window.fetch=function(u,o){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}return _fe.call(this,u,o);};
+var _xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)arguments[1]=f;}return _xo.apply(this,arguments);};
+var _wo=window.open;window.open=function(u,t,f){if(u&&typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var p2=px(u);if(p2)u=p2;}return _wo.call(this,u,t,f);};
+document.addEventListener("submit",function(e){var f=e.target,a=f.getAttribute("action")||"";if(a.indexOf("/api/angel-rent")!==-1)return;e.stopImmediatePropagation();var isEditForm=C.indexOf("/users/posts/edit")!==-1||a.indexOf("/users/posts/edit")!==-1;var target;try{target=a?new URL(a,B).href:C;}catch(x){target=C;}var proxiedAction=P+encodeURIComponent(target);if(isEditForm){e.preventDefault();setTimeout(function(){var hasFiles=f.querySelector("input[type=file]");if(hasFiles){f.setAttribute("action",proxiedAction);var btn=document.createElement("input");btn.type="submit";btn.style.display="none";f.appendChild(btn);btn.click();f.removeChild(btn);}else{f.setAttribute("action",proxiedAction);f.submit();}},50);}else{f.setAttribute("action",proxiedAction);}},true);
 try{window.RTCPeerConnection=function(){throw new Error("blocked");};if(window.webkitRTCPeerConnection)window.webkitRTCPeerConnection=function(){throw new Error("blocked");};}catch(x){}
 })();<\/script>`;
 
