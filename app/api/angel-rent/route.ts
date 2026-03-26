@@ -196,392 +196,154 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
   const warnDays = daysLeft;
 
   // ═══════════════════════════════════════════════════════════════════
-  // CSS MEJORADO CON DISEÑO MODERNO
+  // CSS MINIMALISTA Y RESPONSIVE
   // ═══════════════════════════════════════════════════════════════════
   const css = `<style id="ar-css">
-/* ─── Barra superior con glassmorphism ───────────────────────────────── */
-#ar-bar{
-  position:fixed;top:0;left:0;right:0;z-index:2147483647;
-  background:rgba(10,3,24,.85);
-  -webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);
-  border-bottom:1px solid rgba(168,85,247,.2);
-  box-shadow:0 4px 30px rgba(0,0,0,.3), 0 1px 0 rgba(255,255,255,.05) inset;
-  height:48px;display:flex;align-items:center;
-  overflow-x:auto;-webkit-overflow-scrolling:touch;
-  scrollbar-width:none;-ms-overflow-style:none;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-}
-#ar-bar::-webkit-scrollbar{display:none}
+*{box-sizing:border-box}
 
-.ars{
-  display:flex;align-items:center;gap:5px;
-  padding:0 14px;height:100%;flex-shrink:0;
-  border-right:1px solid rgba(255,255,255,.06);white-space:nowrap;
-  transition:background .2s;
+/* ─── Widget flotante compacto (reemplaza la barra) ───────────────────── */
+#ar-widget{
+  position:fixed;top:12px;left:12px;z-index:2147483647;
+  background:#111;border:1px solid #333;border-radius:12px;
+  padding:10px 14px;font-family:-apple-system,sans-serif;
+  box-shadow:0 4px 20px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;gap:6px;
+  max-width:160px;
 }
-.ars:hover{background:rgba(255,255,255,.03)}
-.ars:first-child{padding-left:10px}
+#ar-widget-header{display:flex;align-items:center;gap:8px}
+#ar-widget-dot{width:8px;height:8px;border-radius:50%;background:#444;flex-shrink:0}
+#ar-widget-dot.on{background:#22c55e;box-shadow:0 0 8px #22c55e}
+#ar-widget-dot.blink{background:#f59e0b;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.3}}
+#ar-widget-status{font-size:11px;font-weight:700;color:#888}
+#ar-widget-status.on{color:#22c55e}
+#ar-widget-status.paused{color:#f59e0b}
+#ar-widget-timer{
+  font-size:24px;font-weight:800;font-family:monospace;
+  color:#fff;text-align:center;line-height:1;
+}
+#ar-widget-timer.off{color:#444}
+#ar-widget-label{font-size:9px;color:#666;text-align:center;text-transform:uppercase}
+#ar-widget-stats{
+  display:flex;gap:8px;padding-top:6px;border-top:1px solid #222;
+  margin-top:2px;
+}
+.ar-ws{flex:1;text-align:center}
+.ar-ws-val{font-size:13px;font-weight:800;color:#fff}
+.ar-ws-lbl{font-size:8px;color:#666;text-transform:uppercase}
+.ar-ws-val.green{color:#22c55e}
+.ar-ws-val.yellow{color:#fbbf24}
+.ar-ws-val.red{color:#ef4444}
 
-/* Mobile optimizations */
-@media (max-width: 768px) {
-  #ar-bar{height:44px}
-  .ars{padding:0 10px;gap:4px}
-  .ars:first-child{padding-left:8px}
-  .arl{font-size:8px;letter-spacing:.7px}
-  .arv{font-size:11px}
-  #ar-logo-icon{width:24px;height:24px;font-size:13px;border-radius:7px}
-  
-  /* Ocultar segmentos menos críticos en móviles muy pequeños */
-  @media (max-width: 480px) {
-    .ars-hide-mobile{display:none!important}
-  }
-}
-
-.arl{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:rgba(168,85,247,.6)}
-.arv{font-size:13px;font-weight:900;font-variant-numeric:tabular-nums;color:#fff}
-#ar-dot{
-  width:7px;height:7px;border-radius:50%;background:#374151;flex-shrink:0;
-  transition:all .3s;box-shadow:0 0 0 0 rgba(34,197,94,0);
-}
-#ar-dot.on{
-  background:#22c55e;
-  box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2);
-  animation:ar-pulse-dot 2s ease infinite;
-}
-#ar-dot.blink{
-  background:#f59e0b;
-  animation:ar-blink 1.2s ease-in-out infinite;
-}
-@keyframes ar-pulse-dot{0%,100%{box-shadow:0 0 12px rgba(34,197,94,1), 0 0 0 4px rgba(34,197,94,.2)}50%{box-shadow:0 0 20px rgba(34,197,94,1), 0 0 0 8px rgba(34,197,94,.1)}}
-@keyframes ar-blink{0%,100%{opacity:1;transform:scale(1.1)}50%{opacity:.2;transform:scale(.7)}}
-.arg{color:#22c55e!important}.ary{color:#fbbf24!important}.arr{color:#ef4444!important}.arp2{color:#c084fc!important}
-#ar-logo-icon{
-  width:28px;height:28px;
-  background:linear-gradient(135deg,#a855f7,#ec4899);
-  border-radius:9px;display:flex;align-items:center;justify-content:center;
-  font-size:15px;flex-shrink:0;
-  box-shadow:0 4px 12px rgba(168,85,247,.4);
-}
-
-/* ─── Botones flotantes modernos ─────────────────────────────────────── */
+/* ─── Botones flotantes ─────────────────────────────────────────────── */
 #ar-btns{
-  position:fixed;bottom:24px;right:16px;z-index:2147483647;
-  display:flex;flex-direction:column;gap:12px;align-items:flex-end;
+  position:fixed;bottom:16px;right:12px;z-index:2147483647;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-end;
 }
-
-/* Mobile optimizations for floating buttons */
-@media (max-width: 768px) {
-  #ar-btns{bottom:16px;right:12px;gap:10px}
-  .arbtn{
-    padding:12px 20px;font-size:13px;
-    border-radius:50px;gap:8px;
-  }
-  .arbtn span[style*="font-size:17px"]{font-size:15px!important}
-}
-
-@media (max-width: 480px) {
-  #ar-btns{bottom:12px;right:8px;gap:8px}
-  .arbtn{
-    padding:10px 16px;font-size:12px;
-    border-radius:40px;gap:6px;
-  }
-  .arbtn span[style*="font-size:17px"]{font-size:14px!important}
-}
-
 .arbtn{
-  display:flex;align-items:center;gap:9px;border:none;cursor:pointer;
-  border-radius:60px;font-weight:900;font-size:14px;padding:14px 24px;
-  font-family:-apple-system,sans-serif;letter-spacing:.2px;
-  box-shadow:0 8px 24px rgba(0,0,0,.4), 0 4px 8px rgba(0,0,0,.3);
-  transition:all .2s cubic-bezier(.34,1.56,.64,1);
-  white-space:nowrap;
-  -webkit-tap-highlight-color:transparent;
-  position:relative;overflow:hidden;
+  display:flex;align-items:center;gap:6px;border:none;cursor:pointer;
+  border-radius:10px;font-weight:700;font-size:13px;padding:12px 16px;
+  font-family:-apple-system,sans-serif;
+  box-shadow:0 4px 12px rgba(0,0,0,.3);
+  transition:transform .15s;-webkit-tap-highlight-color:transparent;
 }
-.arbtn::before{
-  content:"";position:absolute;inset:0;
-  background:linear-gradient(45deg,transparent,rgba(255,255,255,.15),transparent);
-  transform:translateX(-100%);
-  transition:transform .6s;
-}
-.arbtn:hover::before{transform:translateX(100%)}
-.arbtn:hover{transform:translateY(-2px);box-shadow:0 12px 32px rgba(0,0,0,.5), 0 6px 12px rgba(0,0,0,.4)}
-.arbtn:active{transform:scale(.95)!important}
-#ar-rb{
-  background:linear-gradient(135deg,#27272a,#18181b);
-  color:rgba(255,255,255,.5);
-  border:1px solid rgba(255,255,255,.1);
-}
-#ar-rb.on{
-  background:linear-gradient(135deg,#16a34a,#15803d);
-  color:#fff;border-color:transparent;
-  box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4);
-  animation:ar-glow-btn 2s ease infinite;
-}
-@keyframes ar-glow-btn{0%,100%{box-shadow:0 8px 28px rgba(34,197,94,.5), 0 4px 12px rgba(34,197,94,.4)}50%{box-shadow:0 12px 36px rgba(34,197,94,.7), 0 6px 16px rgba(34,197,94,.6)}}
-#ar-sb{
-  background:linear-gradient(135deg,#ec4899,#d946ef);
-  color:#fff;border:1px solid rgba(255,255,255,.08);
-  box-shadow:0 8px 24px rgba(236,72,153,.4), 0 4px 8px rgba(236,72,153,.3);
-}
-#ar-stats-btn{
-  background:linear-gradient(135deg,#7c3aed,#6d28d9);
-  color:#fff;border:1px solid rgba(255,255,255,.08);
-  box-shadow:0 8px 24px rgba(124,58,237,.4), 0 4px 8px rgba(124,58,237,.3);
-}
+.arbtn:active{transform:scale(.95)}
+#ar-rb{background:#222;color:#666;border:1px solid #333}
+#ar-rb.on{background:#16a34a;color:#fff;border-color:#16a34a;box-shadow:0 4px 16px rgba(22,163,74,.4)}
+#ar-sb{background:#ec4899;color:#fff}
+#ar-stats-btn{background:#7c3aed;color:#fff}
+#ar-pulse-ring{display:none}
 
-/* ─── Efecto de anillo pulsante ────────────────────────────────────────── */
-#ar-pulse-ring{
-  position:absolute;inset:-6px;
-  border:3px solid #22c55e;border-radius:60px;
-  animation:ar-pulse-ring 2s cubic-bezier(0,0,.2,1) infinite;
-  display:none;pointer-events:none;
-}
-@keyframes ar-pulse-ring{0%{transform:scale(.9);opacity:0}50%{opacity:.4}100%{transform:scale(1.3);opacity:0}}
-
-/* ─── Notificaciones modernas ────────────────────────────────────────── */
+/* ─── Notificacion ────────────────────────────────────────────────────── */
 #ar-client-notify{
-  position:fixed;bottom:220px;right:16px;z-index:2147483647;
-  background:linear-gradient(135deg,#10b981,#059669);
-  border:1px solid rgba(16,185,129,.4);border-radius:16px;
-  padding:16px 20px;max-width:300px;
-  box-shadow:0 12px 40px rgba(0,0,0,.5), 0 4px 12px rgba(16,185,129,.3);
-  animation:ar-slide-up .5s cubic-bezier(.34,1.56,.64,1);
-  display:none;
-  backdrop-filter:blur(10px);
+  position:fixed;bottom:160px;right:12px;z-index:2147483647;
+  background:#059669;border-radius:10px;padding:12px 14px;max-width:200px;
+  display:none;animation:slideUp .3s ease;
 }
-@keyframes ar-slide-up{from{opacity:0;transform:translateY(24px) scale(.95)}to{opacity:1;transform:translateY(0) scale(1)}}
-#ar-client-notify .notify-icon{font-size:28px;margin-bottom:8px;filter:drop-shadow(0 2px 4px rgba(0,0,0,.3))}
-#ar-client-notify .notify-title{font-size:14px;font-weight:900;color:#fff;margin-bottom:4px;text-shadow:0 1px 2px rgba(0,0,0,.3)}
-#ar-client-notify .notify-msg{font-size:12px;color:rgba(255,255,255,.9);line-height:1.5}
+@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+#ar-client-notify .notify-icon{font-size:20px;margin-bottom:4px}
+#ar-client-notify .notify-title{font-size:12px;font-weight:700;color:#fff}
+#ar-client-notify .notify-msg{font-size:10px;color:rgba(255,255,255,.8)}
 
-/* ─── Modales mejorados ────────────────────────────────────────────────── */
+/* ─── Modales ────────────────────────────────────────────────────────── */
 #ar-support-modal,#ar-stats-modal{
-  position:fixed;inset:0;z-index:2147483648;
-  background:rgba(0,0,0,.88);
-  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
-  display:none;align-items:flex-end;justify-content:center;padding:0;
+  position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.9);
+  display:none;align-items:flex-end;justify-content:center;
 }
 #ar-support-modal.show,#ar-stats-modal.show{display:flex}
 #ar-sbox,#ar-stats-box{
-  background:linear-gradient(160deg,#0a1628,#0f1f3d);
-  border:1px solid rgba(59,130,246,.3);
-  border-radius:28px 28px 0 0;
-  padding:28px 24px 36px;width:100%;max-width:500px;
-  box-shadow:0 -24px 80px rgba(0,0,0,.9), 0 0 0 1px rgba(255,255,255,.05) inset;
-  animation:ar-modal-slide .4s cubic-bezier(.34,1.56,.64,1);
-  font-family:-apple-system,sans-serif;color:#fff;
-  max-height:85vh;overflow-y:auto;
+  background:#1a1a1a;border:1px solid #333;border-radius:16px 16px 0 0;
+  padding:20px 16px 28px;width:100%;max-width:400px;
+  font-family:-apple-system,sans-serif;color:#fff;max-height:85vh;overflow-y:auto;
 }
-@keyframes ar-modal-slide{from{opacity:0;transform:translateY(80px)}to{opacity:1;transform:translateY(0)}}
-#ar-sbox h3,#ar-stats-box h3{font-size:20px;font-weight:900;text-align:center;margin:0 0 6px;color:#fff}
-#ar-sbox .ar-ssub{font-size:13px;color:rgba(255,255,255,.45);text-align:center;margin-bottom:24px}
+#ar-sbox h3,#ar-stats-box h3{font-size:17px;font-weight:800;text-align:center;margin:0 0 4px}
+#ar-sbox .ar-ssub{font-size:12px;color:#666;text-align:center;margin-bottom:16px}
 
-/* ─── Tarjetas de estadísticas ─────────────────────────────────────────── */
-.ar-stat-card{
-  background:rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.1);
-  border-radius:16px;padding:20px;margin-bottom:14px;
-  transition:all .2s;position:relative;overflow:hidden;
-}
-.ar-stat-card::before{
-  content:"";position:absolute;top:0;left:0;right:0;height:2px;
-  background:linear-gradient(90deg,#3b82f6,#8b5cf6);opacity:.5;
-}
-.ar-stat-card:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 24px rgba(0,0,0,.4);
-  border-color:rgba(255,255,255,.15);
-}
-.ar-stat-title{font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;font-weight:800}
-.ar-stat-value{font-size:32px;font-weight:900;color:#fff;margin-bottom:6px;letter-spacing:-.5px}
-.ar-stat-sub{font-size:13px;color:rgba(255,255,255,.5)}
-.ar-stat-trend{
-  display:inline-flex;align-items:center;gap:5px;
-  padding:6px 12px;border-radius:24px;font-size:12px;font-weight:800;margin-top:10px;
-}
-.ar-stat-trend.up{background:rgba(34,197,94,.15);color:#4ade80;border:1px solid rgba(34,197,94,.3)}
+/* ─── Stats cards ─────────────────────────────────────────────────────── */
+.ar-stat-card{background:#222;border:1px solid #333;border-radius:10px;padding:14px;margin-bottom:10px}
+.ar-stat-title{font-size:10px;color:#666;text-transform:uppercase;margin-bottom:6px}
+.ar-stat-value{font-size:24px;font-weight:800;color:#fff}
+.ar-stat-sub{font-size:11px;color:#666;margin-top:2px}
+.ar-stat-trend{display:inline-block;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:6px;background:rgba(34,197,94,.15);color:#4ade80}
 
-/* ─── Botones de tipo de soporte ──────────────────────────────────────── */
+/* ─── Soporte buttons ─────────────────────────────────────────────────── */
 .ar-stype{
-  display:flex;align-items:center;gap:14px;padding:16px;
-  border:1px solid rgba(255,255,255,.1);border-radius:16px;
-  background:rgba(255,255,255,.04);cursor:pointer;width:100%;
-  margin-bottom:12px;
-  transition:all .2s cubic-bezier(.34,1.56,.64,1);
-  font-family:-apple-system,sans-serif;
+  display:flex;align-items:center;gap:10px;padding:12px;
+  border:1px solid #333;border-radius:10px;background:#222;
+  cursor:pointer;width:100%;margin-bottom:8px;font-family:-apple-system,sans-serif;
 }
-.ar-stype:hover{
-  background:rgba(59,130,246,.12);
-  border-color:rgba(59,130,246,.4);
-  transform:translateX(4px);
-  box-shadow:0 4px 16px rgba(59,130,246,.2);
-}
-.ar-stype:active{transform:scale(.98) translateX(4px)}
-.ar-stype .ar-si{
-  font-size:28px;width:48px;height:48px;border-radius:14px;
-  background:rgba(59,130,246,.12);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:transform .2s;
-}
-.ar-stype:hover .ar-si{transform:scale(1.1) rotate(5deg)}
+.ar-stype:active{background:#333}
+.ar-stype .ar-si{font-size:20px;width:36px;height:36px;border-radius:8px;background:#333;display:flex;align-items:center;justify-content:center}
 .ar-stype .ar-stxt{text-align:left;flex:1}
-.ar-stype .ar-stl{display:block;font-size:15px;font-weight:800;color:#fff;margin-bottom:2px}
-.ar-stype .ar-sds{display:block;font-size:12px;color:rgba(255,255,255,.4)}
-.ar-urg{
-  font-size:9px;font-weight:900;padding:4px 10px;border-radius:99px;
-  background:rgba(239,68,68,.2);color:#f87171;
-  border:1px solid rgba(239,68,68,.35);flex-shrink:0;
-  animation:ar-urgent-pulse 2s ease infinite;
-}
-@keyframes ar-urgent-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.ar-stype .ar-stl{display:block;font-size:13px;font-weight:700;color:#fff}
+.ar-stype .ar-sds{display:block;font-size:11px;color:#666}
+.ar-urg{font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;background:rgba(239,68,68,.2);color:#f87171}
 
-/* ─── Inputs y controles ───────────────────────────────────────────────── */
-#ar-sdesc{
-  width:100%;padding:14px;
-  border:1px solid rgba(255,255,255,.12);border-radius:14px;
-  background:rgba(255,255,255,.06);color:#fff;font-size:14px;
-  font-family:-apple-system,sans-serif;resize:none;outline:none;
-  margin-bottom:16px;box-sizing:border-box;
-  transition:all .2s;
-}
-#ar-sdesc:focus{
-  border-color:rgba(59,130,246,.6);
-  background:rgba(255,255,255,.08);
-  box-shadow:0 0 0 4px rgba(59,130,246,.1);
-}
-#ar-sdesc::placeholder{color:rgba(255,255,255,.3)}
-.ar-sbtn-send{
-  width:100%;padding:16px;
-  background:linear-gradient(135deg,#3b82f6,#1d4ed8);
-  color:#fff;border:none;border-radius:16px;font-size:16px;font-weight:900;
-  cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:12px;
-  box-shadow:0 6px 20px rgba(59,130,246,.4);
-  transition:all .2s;
-}
-.ar-sbtn-send:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 28px rgba(59,130,246,.5);
-}
+/* ─── Inputs ─────────────────────────────────────────────────────────────── */
+#ar-sdesc{width:100%;padding:12px;border:1px solid #333;border-radius:8px;background:#222;color:#fff;font-size:13px;font-family:-apple-system,sans-serif;resize:none;outline:none;margin-bottom:12px}
+#ar-sdesc:focus{border-color:#3b82f6}
+#ar-sdesc::placeholder{color:#666}
+.ar-sbtn-send{width:100%;padding:14px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:10px}
 .ar-sbtn-send:active{transform:scale(.98)}
 .ar-sbtn-send:disabled{opacity:.4;cursor:not-allowed}
-.ar-sbtn-cancel{
-  width:100%;padding:12px;background:transparent;
-  color:rgba(255,255,255,.4);
-  border:1px solid rgba(255,255,255,.1);border-radius:14px;
-  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
-  transition:all .2s;
-}
-.ar-sbtn-cancel:hover{
-  background:rgba(255,255,255,.05);
-  border-color:rgba(255,255,255,.15);
-  color:rgba(255,255,255,.6);
-}
-#ar-sback{
-  background:none;border:none;color:rgba(255,255,255,.5);
-  font-size:14px;cursor:pointer;font-family:-apple-system,sans-serif;
-  margin-bottom:18px;padding:0;display:flex;align-items:center;gap:6px;
-  transition:color .2s;
-}
-#ar-sback:hover{color:rgba(255,255,255,.8)}
+.ar-sbtn-cancel{width:100%;padding:10px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:13px;cursor:pointer;font-family:-apple-system,sans-serif}
+#ar-sback{background:none;border:none;color:#666;font-size:13px;cursor:pointer;font-family:-apple-system,sans-serif;margin-bottom:14px;padding:0}
 
-/* ─── Animación de éxito ────────────────────────────────────────────────── */
-#ar-sdone{
-  display:flex;flex-direction:column;align-items:center;gap:14px;padding:24px 0;
-}
-#ar-sdone .ar-sdone-icon{font-size:64px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.3))}
-#ar-sdone h3{font-size:22px;font-weight:900;color:#4ade80;margin:0}
-#ar-sdone p{font-size:14px;color:rgba(255,255,255,.5);margin:0;text-align:center}
+/* ─── Done state ─────────────────────────────────────────────────────────── */
+#ar-sdone{display:flex;flex-direction:column;align-items:center;gap:10px;padding:20px 0}
+#ar-sdone .ar-sdone-icon{font-size:48px}
+#ar-sdone h3{font-size:18px;font-weight:800;color:#4ade80;margin:0}
+#ar-sdone p{font-size:12px;color:#666;margin:0;text-align:center}
 
-/* ─── Modal de advertencia ──────────────────────────────────────────────── */
-#ar-modal{
-  position:fixed;inset:0;z-index:2147483648;
-  background:rgba(0,0,0,.9);
-  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
-  display:none;align-items:center;justify-content:center;padding:20px;
-}
+/* ─── Warning modal ──────────────────────────────────────────────────────── */
+#ar-modal{position:fixed;inset:0;z-index:2147483648;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;padding:16px}
 #ar-modal.show{display:flex}
-#ar-mbox{
-  background:linear-gradient(160deg,#1c0a30,#0f0520);
-  border:1px solid rgba(245,158,11,.35);border-radius:28px;
-  padding:32px 26px 26px;max-width:340px;width:100%;text-align:center;
-  box-shadow:0 40px 100px rgba(0,0,0,.95), 0 0 0 1px rgba(255,255,255,.05) inset;
-  animation:ar-modal-pop .4s cubic-bezier(.34,1.56,.64,1);
-  font-family:-apple-system,sans-serif;color:#fff;
-}
-@keyframes ar-modal-pop{from{opacity:0;transform:scale(.9) translateY(20px)}to{opacity:1;transform:scale(1) translateY(0)}}
-#ar-mbox .mi{font-size:52px;margin-bottom:4px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))}
-#ar-mbox .mt{font-size:20px;font-weight:900;color:#fbbf24;margin-bottom:10px;letter-spacing:-.4px}
-#ar-mbox .mb{
-  display:inline-flex;align-items:center;justify-content:center;
-  background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);
-  border-radius:16px;padding:8px 20px;margin-bottom:14px;
-  font-size:28px;font-weight:900;color:#fcd34d;font-variant-numeric:tabular-nums;
-}
-#ar-mbox .mm{font-size:14px;color:rgba(255,255,255,.55);line-height:1.7;margin-bottom:22px}
-#ar-mbox .mm strong{color:rgba(255,255,255,.8);font-weight:800}
-#ar-mbox .mc{
-  width:100%;padding:15px;
-  background:linear-gradient(135deg,#f59e0b,#d97706);
-  color:#fff;border:none;border-radius:16px;font-size:15px;font-weight:900;
-  cursor:pointer;font-family:inherit;
-  box-shadow:0 6px 20px rgba(245,158,11,.45);
-  transition:all .2s;
-}
-#ar-mbox .mc:hover{
-  transform:translateY(-2px);
-  box-shadow:0 8px 28px rgba(245,158,11,.6);
-}
+#ar-mbox{background:#1a1a1a;border:1px solid #f59e0b;border-radius:16px;padding:24px 20px;max-width:300px;width:100%;text-align:center;font-family:-apple-system,sans-serif;color:#fff}
+#ar-mbox .mi{font-size:40px;margin-bottom:8px}
+#ar-mbox .mt{font-size:16px;font-weight:800;color:#fbbf24;margin-bottom:8px}
+#ar-mbox .mb{display:inline-block;background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:6px 14px;margin-bottom:12px;font-size:20px;font-weight:800;color:#fcd34d}
+#ar-mbox .mm{font-size:13px;color:#888;line-height:1.5;margin-bottom:16px}
+#ar-mbox .mm strong{color:#ccc;font-weight:700}
+#ar-mbox .mc{width:100%;padding:12px;background:#f59e0b;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit}
 #ar-mbox .mc:active{transform:scale(.98)}
-#ar-mbox .ms{
-  display:block;margin-top:14px;font-size:12px;
-  color:rgba(255,255,255,.25);cursor:pointer;background:none;
-  border:none;font-family:inherit;text-decoration:underline;
-}
-
-/* ─── Promo bar ──────────────────────────────────────────────────────────── */
-#ar-promo{
-  position:fixed;top:48px;left:0;right:0;z-index:2147483646;
-  background:linear-gradient(90deg,#4c0870,#7c1fa0,#4c0870);
-  padding:5px 14px;text-align:center;
-  font-family:-apple-system,BlinkMacSystemFont,sans-serif;
-  font-size:11px;font-weight:800;color:#fff;letter-spacing:.2px;
-  box-shadow:0 2px 12px rgba(0,0,0,.5);
-  animation:ar-promo-in .4s ease;display:none;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-@keyframes ar-promo-in{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
-@keyframes ar-promo-out{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(-10px)}}
+#ar-mbox .ms{display:block;margin-top:12px;font-size:11px;color:#666;cursor:pointer;background:none;border:none;font-family:inherit}
 
 /* ─── Login header ───────────────────────────────────────────────────────── */
-#ar-lhdr{
-  display:block;
-  background:linear-gradient(165deg,#0d0720,#1a0a35);
-  border-bottom:1px solid rgba(168,85,247,.15);
-  padding:20px;text-align:center;font-family:-apple-system,sans-serif;
-}
-#ar-lhdr .lw{
-  display:inline-flex;align-items:center;gap:12px;
-  background:rgba(168,85,247,.08);
-  border:1px solid rgba(168,85,247,.2);
-  border-radius:60px;padding:8px 22px 8px 10px;
-}
-#ar-lhdr .li{
-  width:38px;height:38px;
-  background:linear-gradient(135deg,#a855f7,#ec4899);
-  border-radius:12px;display:flex;align-items:center;justify-content:center;
-  font-size:21px;flex-shrink:0;
-  box-shadow:0 4px 14px rgba(168,85,247,.5);
-}
+#ar-lhdr{display:block;background:#111;border-bottom:1px solid #333;padding:16px;text-align:center;font-family:-apple-system,sans-serif}
+#ar-lhdr .lw{display:inline-flex;align-items:center;gap:10px;background:#222;border:1px solid #333;border-radius:30px;padding:6px 16px 6px 8px}
+#ar-lhdr .li{width:32px;height:32px;background:#7c3aed;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
 #ar-lhdr .lt{text-align:left}
-#ar-lhdr .ln{
-  display:block;font-size:17px;font-weight:900;
-  color:#fff;letter-spacing:-.4px;line-height:1.2;
-}
-#ar-lhdr .ls{
-  display:block;font-size:9px;color:rgba(168,85,247,.65);
-  text-transform:uppercase;letter-spacing:1.2px;font-weight:800;margin-top:3px;
-}
+#ar-lhdr .ln{display:block;font-size:14px;font-weight:800;color:#fff}
+#ar-lhdr .ls{display:block;font-size:8px;color:#666;text-transform:uppercase;margin-top:1px}
+
+/* ─── No edit modal ──────────────────────────────────────────────────────── */
+#ar-noedit-modal{position:fixed;inset:0;z-index:2147483649;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;padding:16px}
+#ar-noedit-modal .noedit-box{background:#1a1a1a;border:1px solid #333;border-radius:16px;padding:24px 20px;max-width:280px;width:100%;text-align:center;font-family:-apple-system,sans-serif;color:#fff}
+#ar-noedit-modal .noedit-icon{font-size:40px;margin-bottom:8px}
+#ar-noedit-modal .noedit-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:6px}
+#ar-noedit-modal .noedit-msg{font-size:12px;color:#888;line-height:1.5;margin-bottom:14px}
+#ar-noedit-modal .noedit-btn{display:block;width:100%;padding:10px;background:#0088cc;color:#fff;text-decoration:none;border-radius:8px;font-size:13px;font-weight:700;margin-bottom:8px}
+#ar-noedit-modal .noedit-close{width:100%;padding:8px;background:transparent;color:#666;border:1px solid #333;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit}
 </style>`;
 
   const modalHtml = showWarn ? `
@@ -601,22 +363,18 @@ function injectUI(html: string, curUrl: string, username: string, user: ProxyUse
 
   const uiHtml = `
 ${modalHtml}
-<div id="ar-bar">
-  <div class="ars">
-    <div id="ar-logo-icon">👼</div>
-    <span style="font-size:12px;font-weight:900;color:#fff;letter-spacing:-.3px">Angel Rent</span>
+<div id="ar-widget">
+  <div id="ar-widget-header">
+    <div id="ar-widget-dot"></div>
+    <span id="ar-widget-status">OFF</span>
   </div>
-  <div class="ars"><span class="arl">Usuario</span><span class="arv" style="color:rgba(255,255,255,.65);font-weight:700" id="ar-uname"></span></div>
-  <div class="ars"><span class="arl">Renta</span><span class="arv arg" id="ar-rent">...</span></div>
-  <div class="ars" style="gap:7px"><div id="ar-dot"></div><span class="arl">Robot</span><span class="arv" id="ar-status" style="color:rgba(255,255,255,.3)">OFF</span></div>
-  <div class="ars" id="ar-cdseg" style="display:none"><span class="arl">⏱ Próximo</span><span class="arv arp2" id="ar-cd">--:--</span></div>
-  <div class="ars" id="ar-cntseg" style="display:none"><span class="arl">🔄 Bumps</span><span class="arv arp2" id="ar-cnt">0</span></div>
-  <div class="ars ars-hide-mobile" id="ar-last-bump-seg" style="display:none"><span class="arl">⏮ Último</span><span class="arv arp2" id="ar-last-bump" style="font-size:11px">--</span></div>
-  <div class="ars ars-hide-mobile" style="gap:7px"><div style="width:7px;height:7px;border-radius:50%;background:#f59e0b;box-shadow:0 0 10px rgba(245,158,11,1);flex-shrink:0"></div><span class="arl">Boost</span><span class="arv ary" id="ar-boost">x2.5</span></div>
-  <div class="ars"><span class="arl">👁 Vistas</span><span class="arv arg" id="ar-views">...</span></div>
-  <div class="ars ars-hide-mobile"><span class="arl">🔥 Destacado</span><span class="arv ary" id="ar-featured">SI</span></div>
+  <div id="ar-widget-timer" class="off">--:--</div>
+  <div id="ar-widget-label">Proximo bump</div>
+  <div id="ar-widget-stats">
+    <div class="ar-ws"><div class="ar-ws-val" id="ar-cnt">0</div><div class="ar-ws-lbl">Bumps</div></div>
+    <div class="ar-ws"><div class="ar-ws-val green" id="ar-rent">...</div><div class="ar-ws-lbl">Renta</div></div>
+  </div>
 </div>
-<div id="ar-promo"><span id="ar-promo-txt"></span></div>
 <div id="ar-client-notify">
   <div class="notify-icon">💬</div>
   <div class="notify-title" id="notify-title">Nuevo cliente interesado</div>
@@ -707,9 +465,18 @@ ${modalHtml}
   </div>
 </div>
 </div>
+<div id="ar-noedit-modal">
+  <div class="noedit-box">
+    <div class="noedit-icon">🔒</div>
+    <div class="noedit-title">Sin permisos</div>
+    <p class="noedit-msg">No puedes editar directamente. Contacta soporte para cualquier cambio.</p>
+    <a href="https://t.me/angelrentsoporte" target="_blank" class="noedit-btn">Contactar Soporte</a>
+    <button class="noedit-close" onclick="this.parentElement.parentElement.style.display='none'">Cerrar</button>
+  </div>
+</div>
 <style>@keyframes ar-spin{to{transform:rotate(360deg)}}</style>`;
 
-  // JavaScript con las mismas funcionalidades pero con mejoras visuales
+  // JavaScript con deteccion de errores de conexion y auto-reload
   const script = `<script>
 (function(){
 "use strict";
@@ -717,23 +484,64 @@ var PB=${V.pb},CUR=${V.cur},UNAME=${V.uname},DNAME=${V.name};
 var ENDTS=${V.endTs},B64E=${V.b64e},B64P=${V.b64p},PHONE=${V.phone},PLIST=${V.plist};
 var BMIN=960,BMAX=1200,SK="ar_"+UNAME,TICK=null;
 
+// ═══════════════════════════════════════════════════════════════════════
+// DETECCION DE ERRORES DE CONEXION Y AUTO-RELOAD
+// ═══════════════════════════════════════════════════════════════════════
+var connectionErrors=0;
+var maxErrors=3;
+var checkInterval=30000;
+
+function isConnectionError(err){
+  if(!err)return false;
+  var msg=(err.message||err.toString()||"").toLowerCase();
+  var connErrors=["econnreset","econnrefused","enotfound","etimedout","enetunreach","ehostunreach","econnaborted","epipe","network","fetch","failed to fetch","load failed","networkerror","connection","timeout","abort"];
+  for(var i=0;i<connErrors.length;i++){if(msg.indexOf(connErrors[i])!==-1)return true;}
+  return false;
+}
+
+function handleConnectionError(err){
+  if(isConnectionError(err)){
+    connectionErrors++;
+    console.log("[AngelRent] Error de conexion detectado ("+connectionErrors+"/"+maxErrors+"): "+err.message);
+    if(connectionErrors>=maxErrors){
+      console.log("[AngelRent] Demasiados errores de conexion. Recargando pagina...");
+      setTimeout(function(){location.reload();},2000);
+    }
+  }
+}
+
+function resetConnectionErrors(){connectionErrors=0;}
+
+// Interceptar errores globales
+window.addEventListener("error",function(e){handleConnectionError(e.error||e);});
+window.addEventListener("unhandledrejection",function(e){handleConnectionError(e.reason);});
+
+// Verificar conexion periodicamente
+setInterval(function(){
+  fetch(PB+encodeURIComponent("https://megapersonals.eu/"),{method:"HEAD",mode:"no-cors"})
+    .then(function(){resetConnectionErrors();})
+    .catch(function(err){handleConnectionError(err);});
+},checkInterval);
+
+// Interceptar fetch para detectar errores
+var originalFetch=window.fetch;
+window.fetch=function(){
+  return originalFetch.apply(this,arguments)
+    .then(function(response){resetConnectionErrors();return response;})
+    .catch(function(err){handleConnectionError(err);throw err;});
+};
+
 function gst(){try{return JSON.parse(sessionStorage.getItem(SK)||"{}");}catch(e){return{};}}
 function sst(s){try{sessionStorage.setItem(SK,JSON.stringify(s));}catch(e){}}
 
 // [El resto del JavaScript es idéntico al anterior pero activa las nuevas animaciones]
 function initFakeStats(){var s=gst();if(!s.fakeViews){s.fakeViews=Math.floor(Math.random()*100)+250;s.fakeInterested=Math.floor(Math.random()*15)+12;s.fakeRanking=Math.floor(Math.random()*5)+2;s.lastViewUpdate=Date.now();s.lastClientNotify=Date.now();sst(s);}return s;}
 function updateFakeViews(){var s=gst();if(!s.fakeViews)s=initFakeStats();var now=Date.now();var elapsed=now-(s.lastViewUpdate||now);if(elapsed>30000){var increment=Math.floor(Math.random()*3)+1;s.fakeViews+=increment;s.lastViewUpdate=now;if(s.fakeViews%5===0){s.fakeInterested=(s.fakeInterested||12)+1;}if(Math.random()>0.9&&s.fakeRanking>1){s.fakeRanking--;}sst(s);}return s;}
-function showClientNotification(){var notify=document.getElementById("ar-client-notify");if(!notify)return;var msgs=["Alguien acaba de ver tu perfil","Nuevo cliente viendo tu anuncio","Cliente interesado en tu zona","Alguien guardó tu anuncio","Nuevo mensaje potencial","+1 vista desde tu ciudad"];var titles=["🔥 Actividad reciente","💬 Nuevo cliente","👀 Te están viendo","⭐ Interés alto","📱 Cliente potencial"];document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];notify.style.display="block";notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1)";setTimeout(function(){notify.style.animation="ar-slide-up .5s cubic-bezier(.34,1.56,.64,1) reverse";setTimeout(function(){notify.style.display="none";},500);},4500);}
+function showClientNotification(){var notify=document.getElementById("ar-client-notify");if(!notify)return;var msgs=["Alguien acaba de ver tu perfil","Nuevo cliente viendo tu anuncio","Cliente interesado en tu zona","Alguien guardo tu anuncio","Nuevo mensaje potencial","+1 vista desde tu ciudad"];var titles=["Actividad reciente","Nuevo cliente","Te estan viendo","Interes alto","Cliente potencial"];document.getElementById("notify-title").textContent=titles[Math.floor(Math.random()*titles.length)];document.getElementById("notify-msg").textContent=msgs[Math.floor(Math.random()*msgs.length)];notify.style.display="block";notify.style.animation="slideUp .3s ease";setTimeout(function(){notify.style.display="none";},4000);}
 function startClientNotifications(){var s=gst();if(!s.on||s.paused)return;var now=Date.now();var elapsed=now-(s.lastClientNotify||now);var interval=(Math.random()*180000)+120000;if(elapsed>interval){showClientNotification();s.lastClientNotify=now;sst(s);}}
-function updateFakeUI(){var s=updateFakeViews();var viewsEl=document.getElementById("ar-views");if(viewsEl)viewsEl.textContent=s.fakeViews||"...";var statsModal=document.getElementById("ar-stats-modal");if(statsModal&&statsModal.classList.contains("show")){var totalViews=document.getElementById("stat-total-views");var interested=document.getElementById("stat-interested");var ranking=document.getElementById("stat-ranking");if(totalViews)totalViews.textContent=s.fakeViews||0;if(interested)interested.textContent=s.fakeInterested||0;if(ranking)ranking.textContent=s.fakeRanking||3;}if(s.on&&!s.paused){startClientNotifications();}}
+function updateFakeUI(){var s=updateFakeViews();var statsModal=document.getElementById("ar-stats-modal");if(statsModal&&statsModal.classList.contains("show")){var totalViews=document.getElementById("stat-total-views");var interested=document.getElementById("stat-interested");var ranking=document.getElementById("stat-ranking");if(totalViews)totalViews.textContent=s.fakeViews||0;if(interested)interested.textContent=s.fakeInterested||0;if(ranking)ranking.textContent=s.fakeRanking||3;}if(s.on&&!s.paused){startClientNotifications();}}
 
-var PROMOS=["⭐ ¡Gracias por preferirnos! Contacto: 829-383-7695","🚀 El mejor servicio de bump automático","💜 Angel Rent — Tu anuncio, siempre arriba","📲 Comparte: 829-383-7695","⚡ Robot 24/7 — Tu anuncio nunca baja","🏆 Servicio #1 en MegaPersonals","🔥 +2000 escorts confían en nosotros","💎 Boost Premium activado"];
-var _promoIdx=Math.floor(Math.random()*PROMOS.length);
-var _promoTimer=null;
-function showNextPromo(){var el=document.getElementById("ar-promo");var txt=document.getElementById("ar-promo-txt");if(!el||!txt)return;txt.textContent=PROMOS[_promoIdx % PROMOS.length];_promoIdx++;el.style.animation="ar-promo-in .4s ease";el.style.display="block";document.body.style.paddingTop="74px";_promoTimer=setTimeout(function(){el.style.animation="ar-promo-out .4s ease forwards";setTimeout(function(){el.style.display="none";document.body.style.paddingTop="48px";_promoTimer=setTimeout(showNextPromo,30000);},400);},10000);}
-setTimeout(showNextPromo,5000);
-
-(function(){var modal=document.createElement("div");modal.id="ar-noedit-modal";modal.style.cssText="display:none;position:fixed;inset:0;z-index:2147483647;background:rgba(0,0,0,.8);backdrop-filter:blur(8px);align-items:center;justify-content:center;";modal.innerHTML='<div style="background:linear-gradient(145deg,#1a0533,#2d0a52);border:1px solid rgba(168,85,247,.35);border-radius:24px;padding:32px 28px;max-width:340px;width:90%;text-align:center;box-shadow:0 24px 72px rgba(0,0,0,.8);position:relative;">  <div style="font-size:42px;margin-bottom:12px;filter:drop-shadow(0 4px 8px rgba(0,0,0,.5))">🔒</div>  <div style="font-size:18px;font-weight:900;color:#fff;margin-bottom:12px;line-height:1.3">Sin permisos de edición</div>  <div style="font-size:14px;color:rgba(255,255,255,.7);line-height:1.7;margin-bottom:24px">Hola 👋 No tienes permisos para hacer ninguna edición directamente.<br><br>Si necesitas editar algo, contáctanos por Telegram.</div>  <a href="https://t.me/angelrentsoporte" target="_blank" style="display:block;background:linear-gradient(135deg,#0088cc,#0066aa);color:#fff;text-decoration:none;font-weight:900;font-size:15px;padding:14px 22px;border-radius:50px;margin-bottom:12px;box-shadow:0 6px 18px rgba(0,136,204,.5)">📲 Contactar por Telegram</a>  <button id="ar-noedit-close" style="background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.6);font-size:14px;font-weight:700;padding:12px 22px;border-radius:50px;cursor:pointer;width:100%">Cerrar</button></div>';document.body.appendChild(modal);document.getElementById("ar-noedit-close").addEventListener("click",function(){modal.style.display="none";});modal.addEventListener("click",function(e){if(e.target===modal)modal.style.display="none";});})();
+// Modal de no-edit ya esta en el HTML
 
 function addLog(t,m){var s=gst();if(!s.logs)s.logs=[];var h=new Date().toLocaleTimeString("es",{hour:"2-digit",minute:"2-digit"});s.logs.unshift({t:t,m:"["+h+"] "+m});if(s.logs.length>30)s.logs=s.logs.slice(0,30);sst(s);}
 function rentLeft(){if(!ENDTS)return null;return Math.max(0,ENDTS-Date.now());}
@@ -744,62 +552,60 @@ function G(id){return document.getElementById(id);}
 function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
   
-  // Actualizar nombre de usuario
-  if(G("ar-uname"))G("ar-uname").textContent=DNAME;
-  
-  // SIEMPRE actualizar tiempo de renta (esto se ejecuta cada segundo)
+  // Actualizar tiempo de renta en widget
   var rl=rentLeft(),re=G("ar-rent");
   if(re){
     re.textContent=fmtR(rl);
-    re.className="arv";
-    re.classList.add(rl===null||rl>259200000?"arg":rl>86400000?"ary":"arr");
+    re.className="ar-ws-val";
+    if(rl===null||rl>259200000)re.classList.add("green");
+    else if(rl>86400000)re.classList.add("yellow");
+    else re.classList.add("red");
   }
   
-  // Actualizar estado del robot
-  var dot=G("ar-dot");
+  // Actualizar dot y status en widget
+  var dot=G("ar-widget-dot");
   if(dot){
     dot.className="";
-    if(on&&!paused)dot.className="on";
-    else if(on&&paused)dot.className="blink";
+    dot.id="ar-widget-dot";
+    if(on&&!paused)dot.classList.add("on");
+    else if(on&&paused)dot.classList.add("blink");
   }
   
-  var st=G("ar-status");
+  var st=G("ar-widget-status");
   if(st){
-    if(!on){
-      st.textContent="OFF";
-      st.style.color="rgba(255,255,255,.3)";
-    }else if(paused){
-      st.textContent="Pausado";
-      st.style.color="#f59e0b";
+    st.className="";
+    st.id="ar-widget-status";
+    if(!on){st.textContent="OFF";}
+    else if(paused){st.textContent="Pausado";st.classList.add("paused");}
+    else{st.textContent="Activo";st.classList.add("on");}
+  }
+  
+  // Timer del proximo bump en widget
+  var timer=G("ar-widget-timer");
+  if(timer){
+    if(on&&!paused){
+      var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
+      timer.textContent=p2(Math.floor(left/60))+":"+p2(left%60);
+      timer.className="";
+      timer.id="ar-widget-timer";
     }else{
-      st.textContent="Activo";
-      st.style.color="#22c55e";
+      timer.textContent="--:--";
+      timer.className="off";
+      timer.id="ar-widget-timer";
     }
   }
   
-  // Contador de próximo bump
-  var cdSeg=G("ar-cdseg");
-  if(on&&!paused){
-    if(cdSeg)cdSeg.style.display="";
-    var left=Math.max(0,Math.floor((nextAt-Date.now())/1000));
-    if(G("ar-cd"))G("ar-cd").textContent=p2(Math.floor(left/60))+":"+p2(left%60);
-  }else if(cdSeg)cdSeg.style.display="none";
-  
   // Contador de bumps
-  var cntSeg=G("ar-cntseg");
-  if(on){
-    if(cntSeg)cntSeg.style.display="";
-    if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
-  }else if(cntSeg)cntSeg.style.display="none";
+  if(G("ar-cnt"))G("ar-cnt").textContent=String(cnt);
   
-  // Botón del robot
+  // Boton del robot
   var rb=G("ar-rb");
   if(rb){
     rb.className=on?"arbtn on":"arbtn";
     if(G("ar-rl"))G("ar-rl").textContent=on?"Robot ON":"Robot OFF";
   }
   
-  // Actualizar estadísticas falsas
+  // Actualizar estadisticas falsas
   updateFakeUI();
 }
 
@@ -1010,7 +816,7 @@ function tryLogin(){if(loginDone)return;doAutoLogin();var f=document.querySelect
 var modal=document.getElementById("ar-modal");
 if(modal){var dismissed=localStorage.getItem("ar_wd_"+UNAME);var dismissedTs=parseInt(dismissed||"0");if(dismissed && (Date.now()-dismissedTs) < 15*3600*1000){modal.style.display="none";modal.classList.remove("show");}var mok=document.getElementById("ar-mok");var msk=document.getElementById("ar-msk");if(mok)mok.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");});if(msk)msk.addEventListener("click",function(){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());});modal.addEventListener("click",function(e){if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME, Date.now().toString());}});}
 
-if(document.body)document.body.style.paddingTop="48px";
+// Ya no hay barra superior, no necesitamos padding
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 
