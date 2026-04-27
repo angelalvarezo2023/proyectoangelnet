@@ -499,9 +499,22 @@ async function procesarPago(escortUid: number, escortNombre: string, telfUid: nu
     ).catch(() => {});
   }
 
-  // Telefonista — privado
-  convTelf[telfUid] = { paso: "idle", nombre: telfConv?.nombre ?? "" };
-  await mostrarPanelTelf(telfUid, telfConv?.nombre ?? "");
+  // Telefonista — privado con resumen completo
+  const telfNombreStr = telfConv?.nombre ?? "";
+  convTelf[telfUid] = { paso: "idle", nombre: telfNombreStr };
+  await enviarTelf(telfUid,
+    `🎉 *¡Servicio completado!*\n━━━━━━━━━━━━━━\n` +
+    `📱 Terminal: \`${terminal}\`\n` +
+    `💰 Pagó: *$${montoReal}*\n` +
+    `💵 Tu comisión: *+$${comision}*\n` +
+    `📊 Balance acumulado: *$${total}*\n` +
+    `🙋 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
+    { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+  );
+  // Mostrar panel actualizado después del resumen
+  setTimeout(async () => {
+    await mostrarPanelTelf(telfUid, telfNombreStr);
+  }, 3000);
   await liberarTurno();
   await notificarTelefonistas();
 }
@@ -823,9 +836,14 @@ async function handleCallback(query: any) {
     const conv = convTelf[uid];
     if (!conv) return;
     const ahora = Date.now();
-    if (conv.ultimaPregunta && ahora - conv.ultimaPregunta < 60000) {
-      const segs = Math.ceil((60000 - (ahora - conv.ultimaPregunta)) / 1000);
-      return answerCB(query.id, `⏱ Espera ${segs}s antes de preguntar de nuevo.`, true);
+    // Primera pregunta: esperar 2 min desde que se envió (ultimaPregunta = 0 al enviar)
+    const tiempoMinimo = conv.ultimaPregunta === 0 ? 120000 : 60000;
+    if (conv.ultimaPregunta !== undefined && ahora - conv.ultimaPregunta < tiempoMinimo) {
+      const esperando = tiempoMinimo - (ahora - conv.ultimaPregunta);
+      const mins = Math.floor(esperando / 60000);
+      const segs = Math.ceil((esperando % 60000) / 1000);
+      const textoEspera = mins > 0 ? `${mins} min ${segs}s` : `${segs}s`;
+      return answerCB(query.id, `⏱ Espera ${textoEspera} antes de preguntar.`, true);
     }
     await answerCB(query.id);
     conv.ultimaPregunta = ahora;
@@ -906,7 +924,7 @@ async function handleCallback(query: any) {
     await editMsg(GRUPO_ESCORTS, msgId, `👤 *${fn(nombre)}*\n🔴 Ocupada (${txt})`,
       { reply_markup: { inline_keyboard: [[{ text: "🟢 Estoy libre", callback_data: `libre_${uid}` }]] } }
     );
-    await notificarTelefonistas();
+    await notificarTelefonistas(`🔴 *${fn(nombre)}* se puso ocupada (${txt}).`);
     return;
   }
 
@@ -974,24 +992,44 @@ async function handleCallback(query: any) {
     return;
   }
 
-  // ── ESCORT: Llegó ──
+  // ── ESCORT: Llegó — mostrar opciones pagó/se fue ──
   if (data.startsWith("llego_")) {
+    const parts = data.split("_");
+    const terminal = parts[1], monto = parts[2], telfUid = parseInt(parts[3]), escortId = parseInt(parts[4]);
+    if (uid !== escortId) return answerCB(query.id, "❌ No es tu cliente.", true);
+    await answerCB(query.id);
+
+    // Notificar al telefonista que llegó
+    const telfConv = convTelf[telfUid];
+    if (telfConv?.lastBotMsgId) {
+      await editMsg(telfUid, telfConv.lastBotMsgId,
+        `✅ *El cliente llegó*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n━━━━━━━━━━━━━━\nEspera el resultado final de la escort.`,
+        { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
+      );
+    }
+
+    // Mostrar 2 opciones en el grupo escorts
+    await editMsg(GRUPO_ESCORTS, msgId,
+      `✅ *Cliente llegó*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n━━━━━━━━━━━━━━\n\n¿Qué pasó?`,
+      { reply_markup: { inline_keyboard: [
+        [{ text: "💰 Llegó y pagó",  callback_data: `llegopago_${terminal}_${monto}_${telfUid}_${uid}` }],
+        [{ text: "🚪 Llegó y se fue", callback_data: `llegofue_${terminal}_${monto}_${telfUid}_${uid}` }],
+      ]}}
+    );
+    return;
+  }
+
+  // ── ESCORT: Llegó y pagó — mostrar montos ──
+  if (data.startsWith("llegopago_")) {
     const parts = data.split("_");
     const terminal = parts[1], monto = parts[2], telfUid = parseInt(parts[3]), escortId = parseInt(parts[4]);
     if (uid !== escortId) return answerCB(query.id, "❌ No es tu cliente.", true);
     await answerCB(query.id);
     if (escorts[uid]) { escorts[uid].libre = false; escorts[uid].ocupadaTexto = "con cliente"; }
     await notificarTelefonistas();
-    const telfConv = convTelf[telfUid];
-    if (telfConv?.lastBotMsgId) {
-      await editMsg(telfUid, telfConv.lastBotMsgId,
-        `✅ *El cliente llegó*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\nEspera el resultado final.\n━━━━━━━━━━━━━━`,
-        { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
-      );
-    }
     convEscort[uid] = { paso: "esperando_monto_real", terminal, monto, escortMsgId: msgId, telfUid };
     await editMsg(GRUPO_ESCORTS, msgId,
-      `✅ *Cliente llegó*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n━━━━━━━━━━━━━━\n💵 ¿Cuánto pagó?`,
+      `💰 *Cliente pagó*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n━━━━━━━━━━━━━━\n\n💵 ¿Cuánto pagó el cliente?`,
       { reply_markup: { inline_keyboard: [
         [{ text: "$50",  callback_data: `pago_50_${terminal}_${monto}_${telfUid}_${uid}` },
          { text: "$100", callback_data: `pago_100_${terminal}_${monto}_${telfUid}_${uid}` }],
@@ -1000,6 +1038,31 @@ async function handleCallback(query: any) {
         [{ text: "💵 Otro monto", callback_data: `pago_otro_${terminal}_${monto}_${telfUid}_${uid}` }],
       ]}}
     );
+    return;
+  }
+
+  // ── ESCORT: Llegó y se fue (sin pagar) ──
+  if (data.startsWith("llegofue_")) {
+    const parts = data.split("_");
+    const terminal = parts[1], monto = parts[2], telfUid = parseInt(parts[3]), escortId = parseInt(parts[4]);
+    if (uid !== escortId) return answerCB(query.id, "❌ No es tu cliente.", true);
+    await answerCB(query.id);
+    const telfConv = convTelf[telfUid];
+    if (escorts[uid]) { escorts[uid].libre = true; escorts[uid].ocupadaTexto = undefined; }
+    await editMsg(GRUPO_ESCORTS, msgId,
+      `🚪 *Cliente llegó pero se fue sin pagar*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
+      { reply_markup: { inline_keyboard: [] } }
+    );
+    if (telfConv?.grupMsgId) {
+      await editMsg(GRUPO_TELEFONISTAS, telfConv.grupMsgId,
+        `🚪 *Cliente llegó y se fue sin pagar* — Terminal \`${terminal}\``,
+        { reply_markup: { inline_keyboard: [] } }
+      ).catch(() => {});
+    }
+    convTelf[telfUid] = { paso: "idle", nombre: telfConv?.nombre ?? "" };
+    await liberarTurno();
+    await mostrarPanelTelf(telfUid, telfConv?.nombre ?? "");
+    await notificarTelefonistas();
     return;
   }
 
