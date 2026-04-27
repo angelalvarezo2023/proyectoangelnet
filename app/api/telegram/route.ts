@@ -227,7 +227,10 @@ function textoPanelTelf(nombre: string, extra?: string): string {
 // ──────────────────────────────────────────
 
 async function mostrarPanelTelf(uid: number, nombre: string) {
-  telefonistas[uid] = nombre;
+  // Usar el nombre guardado si el que llega está vacío (tras reinicio)
+  const nombreFinal = nombre || convTelf[uid]?.nombre || telefonistas[uid] || "Telefonista";
+  telefonistas[uid] = nombreFinal;
+  nombre = nombreFinal;
   if (!convTelf[uid]) convTelf[uid] = { paso: "idle", nombre };
   else { convTelf[uid].paso = "idle"; convTelf[uid].nombre = nombre; }
 
@@ -742,8 +745,11 @@ async function handleCallback(query: any) {
   // ── TELEFONISTA: Nuevo Cliente ──
   if (data === "nuevo_cliente") {
     await answerCB(query.id);
-    if (!convTelf[uid]) convTelf[uid] = { paso: "idle", nombre };
-    telefonistas[uid] = nombre;
+    // Siempre actualizar el nombre desde Telegram (puede haberse perdido tras reinicio)
+    const nombreActual = nombre || convTelf[uid]?.nombre || telefonistas[uid] || "Telefonista";
+    telefonistas[uid] = nombreActual;
+    if (!convTelf[uid]) convTelf[uid] = { paso: "idle", nombre: nombreActual };
+    else convTelf[uid].nombre = nombreActual;
     await intentarTurno(uid);
     return;
   }
@@ -1072,7 +1078,7 @@ async function handleCallback(query: any) {
     convTelf[telfUid] = { paso: "idle", nombre: telfNombreLF };
     // Notificar al telefonista en privado
     await enviarTelf(telfUid,
-      `🚪 *El cliente llegó pero se fue sin pagar*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
+      `🚪 *El cliente se fue — no hubo servicio*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
       { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
     );
     setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombreLF); }, 3000);
@@ -1095,7 +1101,7 @@ async function handleCallback(query: any) {
     convTelf[telfUid] = { paso: "idle", nombre: telfNombreLF };
     // Notificar al telefonista en privado
     await enviarTelf(telfUid,
-      `🚪 *El cliente se fue sin llegar*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
+      `🚪 *El cliente no llegó — servicio cancelado*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
       { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
     );
     setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombreLF); }, 3000);
