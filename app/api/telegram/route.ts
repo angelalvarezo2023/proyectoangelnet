@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const TOKEN = process.env.TELEGRAM_TOKEN!;
 const API   = `https://api.telegram.org/bot${TOKEN}`;
 
-const GRUPO_ESCORTS      = -4670796638;
+const GRUPO_ESCORTS      = -1003938759901;
 const GRUPO_TELEFONISTAS = -5171466708;
 
 // ──────────────────────────────────────────
@@ -398,17 +398,33 @@ async function publicarCliente(uid: number) {
     },
   });
 
-  conv.paso       = "esperando_accion";
-  conv.grupMsgId  = gMsg?.result?.message_id;
+  conv.paso        = "esperando_accion";
+  conv.grupMsgId   = gMsg?.result?.message_id;
   conv.escortMsgId = eMsg?.result?.message_id;
 
-  await enviarTelf(uid,
+  // Editar el mensaje existente en vez de crear uno nuevo
+  const textoEsperando =
     `⏳ *Esperando escort...*\n━━━━━━━━━━━━━━\n` +
     `📱 Terminal: \`${conv.terminal}\`\n` +
     `💰 Estimado: *$${conv.monto}*${desc}\n━━━━━━━━━━━━━━\n\n` +
-    `👥 *Escorts:*\n${textoEscorts()}`,
-    { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
-  );
+    `👥 *Escorts:*\n${textoEscorts()}`;
+
+  if (conv.lastBotMsgId) {
+    await editMsg(uid, conv.lastBotMsgId, textoEsperando,
+      { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
+    ).catch(async () => {
+      // Si falla editar, enviar nuevo
+      const r = await sendMsg(uid, textoEsperando,
+        { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
+      );
+      if (r?.result?.message_id) conv.lastBotMsgId = r.result.message_id;
+    });
+  } else {
+    const r = await sendMsg(uid, textoEsperando,
+      { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar servicio", callback_data: "cancelar_telf" }]] } }
+    );
+    if (r?.result?.message_id) conv.lastBotMsgId = r.result.message_id;
+  }
 }
 
 async function escortLista(uid: number, escortNombre: string, nota?: string) {
@@ -416,20 +432,27 @@ async function escortLista(uid: number, escortNombre: string, nota?: string) {
   if (!conv) return;
   const n = nota ? `\n📝 _${nota}_` : "";
   conv.paso = "esperando_accion";
-  await enviarTelf(uid,
+  const textoLista =
     `✅ *¡${fn(escortNombre)} está lista!*\n━━━━━━━━━━━━━━\n` +
     `📱 Terminal: \`${conv.terminal}\`\n` +
-    `💰 Estimado: *$${conv.monto}*${n}\n━━━━━━━━━━━━━━\n\n¿Qué hago?`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: "✈️ Lo envié, ya va de camino", callback_data: "lo_envie" }],
-          [{ text: "🚪 Cliente se fue",            callback_data: "cliente_fue" }],
-          [{ text: "❌ Cancelar servicio",          callback_data: "cancelar_telf" }],
-        ],
-      },
-    }
-  );
+    `💰 Estimado: *$${conv.monto}*${n}\n━━━━━━━━━━━━━━\n\n¿Qué hago?`;
+  const botonesLista = {
+    inline_keyboard: [
+      [{ text: "✈️ Lo envié, ya va de camino", callback_data: "lo_envie" }],
+      [{ text: "🚪 Cliente se fue",            callback_data: "cliente_fue" }],
+      [{ text: "❌ Cancelar servicio",          callback_data: "cancelar_telf" }],
+    ],
+  };
+  if (conv.lastBotMsgId) {
+    await editMsg(uid, conv.lastBotMsgId, textoLista, { reply_markup: botonesLista })
+      .catch(async () => {
+        const r = await sendMsg(uid, textoLista, { reply_markup: botonesLista });
+        if (r?.result?.message_id) conv.lastBotMsgId = r.result.message_id;
+      });
+  } else {
+    const r = await sendMsg(uid, textoLista, { reply_markup: botonesLista });
+    if (r?.result?.message_id) conv.lastBotMsgId = r.result.message_id;
+  }
 }
 
 async function clienteEnviado(uid: number) {
@@ -536,6 +559,29 @@ async function handleMessage(msg: any) {
   const chatId: number = msg.chat.id;
   const nombre: string = msg.from?.first_name ?? "";
   if (!uid) return;
+
+  // ── Nueva escort añadida al grupo ──
+  if (msg.new_chat_member && chatId === GRUPO_ESCORTS) {
+    const newMember = msg.new_chat_member;
+    const newUid: number = newMember.id;
+    const newNombre: string = newMember.first_name ?? "";
+    if (!newMember.is_bot && !escorts[newUid]) {
+      escorts[newUid] = { uid: newUid, nombre: newNombre, libre: true };
+      // Enviar panel de estado en el grupo
+      const r = await tPost("sendMessage", {
+        chat_id: GRUPO_ESCORTS,
+        parse_mode: "Markdown",
+        text: `👤 *${fn(newNombre)}*
+✨ Actualmente estás libre. Cuando haya un cliente te avisaré.`,
+        reply_markup: {
+          inline_keyboard: [[{ text: "🔴 Ponerme Ocupada", callback_data: `ocupada_${newUid}` }]],
+        },
+      });
+      escorts[newUid].panelMsgId = r?.result?.message_id;
+      await notificarTelefonistas(`🟢 *${fn(newNombre)}* se unió como escort.`);
+    }
+    return;
+  }
 
   // ── Salida de grupos ──
   if (msg.left_chat_member) {
