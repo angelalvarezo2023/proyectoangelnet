@@ -1103,7 +1103,6 @@ async function handleCallback(query: any) {
     await editMsg(GRUPO_ESCORTS, msgId, `🚪 *Cliente se fue*\n📱 Terminal: \`${terminal}\`\n🙋 *${fn(nombre)}*`, { reply_markup: { inline_keyboard: [] } });
     // grupo telefonistas desactivado
     const telfNombreLF = telfConv?.nombre ?? "";
-    const telfNombreLF = telfConv?.nombre ?? "";
     convTelf[telfUid] = { paso: "idle", nombre: telfNombreLF };
     // Reemplazar mensaje del telefonista
     const sfMsgId = telfConv?.lastBotMsgId;
