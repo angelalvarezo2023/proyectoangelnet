@@ -446,7 +446,7 @@ async function clienteEnviado(uid: number) {
   const conv = convTelf[uid];
   if (!conv) return;
   conv.paso = "cliente_enviado";
-  conv.ultimaPregunta = 0;
+  conv.ultimaPregunta = Date.now(); // Timer empieza desde que se envía el cliente
   await enviarTelf(uid,
     `✈️ *Cliente enviado*\n━━━━━━━━━━━━━━\n` +
     `📱 Terminal: \`${conv.terminal}\`\n` +
@@ -836,17 +836,26 @@ async function handleCallback(query: any) {
     const conv = convTelf[uid];
     if (!conv) return;
     const ahora = Date.now();
-    // Primera pregunta: esperar 2 min desde que se envió (ultimaPregunta = 0 al enviar)
-    const tiempoMinimo = conv.ultimaPregunta === 0 ? 120000 : 60000;
-    if (conv.ultimaPregunta !== undefined && ahora - conv.ultimaPregunta < tiempoMinimo) {
-      const esperando = tiempoMinimo - (ahora - conv.ultimaPregunta);
+    // Esperar 2 min desde que se envió el cliente antes de primera pregunta
+    // Luego 1 min entre preguntas repetidas
+    const ESPERA_INICIAL = 120000; // 2 min desde envío
+    const ESPERA_REPEAT  = 60000;  // 1 min entre repeticiones
+    const tiempoDesdeEnvio = ahora - (conv.ultimaPregunta ?? ahora);
+    const esPrimeraPregunta = conv.ultimaPregunta !== undefined && 
+                               Date.now() - conv.ultimaPregunta < ESPERA_INICIAL + 5000 &&
+                               conv.ultimaPregunta === convTelf[uid]?.ultimaPregunta;
+
+    // Simplificado: bloquear si no han pasado 2min desde envío O 1min desde última pregunta
+    if (conv.ultimaPregunta && ahora - conv.ultimaPregunta < ESPERA_INICIAL) {
+      const esperando = ESPERA_INICIAL - (ahora - conv.ultimaPregunta);
       const mins = Math.floor(esperando / 60000);
       const segs = Math.ceil((esperando % 60000) / 1000);
-      const textoEspera = mins > 0 ? `${mins} min ${segs}s` : `${segs}s`;
-      return answerCB(query.id, `⏱ Espera ${textoEspera} antes de preguntar.`, true);
+      const textoEspera = mins > 0 ? `${mins}min ${segs}s` : `${segs}s`;
+      return answerCB(query.id, `⏱ Espera ${textoEspera} para preguntar.`, true);
     }
     await answerCB(query.id);
-    conv.ultimaPregunta = ahora;
+    // Después de la primera pregunta, el límite baja a 1 min
+    conv.ultimaPregunta = ahora - ESPERA_INICIAL + ESPERA_REPEAT;
 
     const DURACION = 180;
     const botonesEscort = {
@@ -1059,9 +1068,15 @@ async function handleCallback(query: any) {
         { reply_markup: { inline_keyboard: [] } }
       ).catch(() => {});
     }
-    convTelf[telfUid] = { paso: "idle", nombre: telfConv?.nombre ?? "" };
+    const telfNombreLF = telfConv?.nombre ?? "";
+    convTelf[telfUid] = { paso: "idle", nombre: telfNombreLF };
+    // Notificar al telefonista en privado
+    await enviarTelf(telfUid,
+      `🚪 *El cliente llegó pero se fue sin pagar*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
+      { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+    );
+    setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombreLF); }, 3000);
     await liberarTurno();
-    await mostrarPanelTelf(telfUid, telfConv?.nombre ?? "");
     await notificarTelefonistas();
     return;
   }
@@ -1076,9 +1091,15 @@ async function handleCallback(query: any) {
     if (escorts[uid]) { escorts[uid].libre = true; escorts[uid].ocupadaTexto = undefined; }
     await editMsg(GRUPO_ESCORTS, msgId, `🚪 *Cliente se fue*\n📱 Terminal: \`${terminal}\`\n🙋 *${fn(nombre)}*`, { reply_markup: { inline_keyboard: [] } });
     if (telfConv?.grupMsgId) await editMsg(GRUPO_TELEFONISTAS, telfConv.grupMsgId, `🚪 *Cliente se fue* — Terminal \`${terminal}\``, { reply_markup: { inline_keyboard: [] } }).catch(() => {});
-    convTelf[telfUid] = { paso: "idle", nombre: telfConv?.nombre ?? "" };
+    const telfNombreLF = telfConv?.nombre ?? "";
+    convTelf[telfUid] = { paso: "idle", nombre: telfNombreLF };
+    // Notificar al telefonista en privado
+    await enviarTelf(telfUid,
+      `🚪 *El cliente se fue sin llegar*\n━━━━━━━━━━━━━━\n📱 Terminal: \`${terminal}\`\n🙋 Escort: *${fn(nombre)}*\n━━━━━━━━━━━━━━`,
+      { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+    );
+    setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombreLF); }, 3000);
     await liberarTurno();
-    await mostrarPanelTelf(telfUid, telfConv?.nombre ?? "");
     await notificarTelefonistas();
     return;
   }
