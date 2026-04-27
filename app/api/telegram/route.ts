@@ -327,7 +327,12 @@ async function publicarEnEscorts(uid: number, nombre: string) {
   const gMsg = await tPost("sendMessage", {
     chat_id: GRUPO_TELEFONISTAS,
     parse_mode: "Markdown",
-    text: `📲 *${p(nombre)}* está buscando escort para el cliente \`${conv.digitos}\`...`,
+    text:
+      `📲 *${p(nombre)}* está enviando un cliente\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `🔢 Código: \`${conv.digitos}\`\n` +
+      `💰 Estimado: *$${conv.monto}*\n` +
+      `━━━━━━━━━━━━━━`,
   });
 
   // Mensaje en grupo escorts
@@ -715,10 +720,20 @@ async function procesarPago(
     }
   );
 
-  // Grupo telefonistas — solo estado general
+  // Grupo telefonistas — resumen completo del servicio
+  const telfNombreGrupo   = p(telfConv?.nombre ?? "Telefonista");
+  const escortNombreGrupo = p(escortNombre);
+  const textoGrupoTelf =
+    `🎉 *¡Servicio completado!*\n━━━━━━━━━━━━━━\n` +
+    `👤 *${telfNombreGrupo}* cerró un cliente exitosamente\n` +
+    `💰 Cantidad pagada: *$${montoReal}*\n` +
+    `💵 Balance actual: *$${total}*\n` +
+    `🙋 Atendido por: *${escortNombreGrupo}*\n` +
+    `━━━━━━━━━━━━━━\n` +
+    `¡Felicidades ${telfNombreGrupo}! 🏆`;
+
   if (telfConv?.grupMsgId) {
-    await editMsg(GRUPO_TELEFONISTAS, telfConv.grupMsgId,
-      `✅ *Servicio completado* — Código \`${digitos}\`\n💰 $${montoReal}`,
+    await editMsg(GRUPO_TELEFONISTAS, telfConv.grupMsgId, textoGrupoTelf,
       { reply_markup: { inline_keyboard: [] } }
     );
   }
@@ -934,7 +949,10 @@ async function handleCallback(query: any) {
       `👤 *${p(nombre)}*\n🟢 Libre`,
       { reply_markup: { inline_keyboard: [[{ text: "🔴 Ponerme Ocupada", callback_data: `ocupada_${uid}` }]] } }
     );
-    await notificarTelefonistas(`🔄 *Estado de escorts:*\n\n${textoEscorts()}`);
+    // Notificar a telefonistas que la escort está libre de nuevo
+    await notificarTelefonistas(
+      `🟢 *${p(nombre)} ya está libre*\n\n👥 *Estado de escorts:*\n${textoEscorts()}`
+    );
     return;
   }
 
