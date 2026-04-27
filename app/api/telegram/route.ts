@@ -620,9 +620,20 @@ async function procesarPago(
 // ACCIONES DEL TELEFONISTA (teclado real)
 // ──────────────────────────────────────────
 
-async function manejarAccionTelf(uid: number, texto: string) {
+async function manejarAccionTelf(uid: number, texto: string, msgId?: number, nombre?: string) {
+  // Si no hay conv o perdió el flowMsgId (reinicio del servidor), crear panel nuevo
+  if (!convTelf[uid] || !convTelf[uid].flowMsgId) {
+    const n = nombre ?? convTelf[uid]?.nombre ?? "Telefonista";
+    const r = await sendMsg(uid,
+      `📋 *Panel de Operaciones*\n━━━━━━━━━━━━━━\n\n👥 *Estado de escorts:*\n${textoEscorts()}\n━━━━━━━━━━━━━━\n\nUsa el botón para registrar un nuevo cliente.`,
+      { reply_markup: KB_INICIO }
+    );
+    convTelf[uid] = { paso: "idle", nombre: n, flowMsgId: r?.result?.message_id };
+    if (nombre) telefonistas[uid] = nombre;
+    // Si era "Nuevo Cliente", ya mostramos el panel actualizado — salir
+    if (texto === "📞 Nuevo Cliente") return;
+  }
   const conv = convTelf[uid];
-  if (!conv) return;
 
   // ── Cancelar en cualquier paso ──
   if (texto === "❌ Cancelar" || texto === "❌ Cancelar servicio") {
@@ -647,7 +658,7 @@ async function manejarAccionTelf(uid: number, texto: string) {
   // ── Nuevo Cliente ──
   if (texto === "📞 Nuevo Cliente") {
     if (!conv.flowMsgId) return;
-    await intentarTurno(uid, conv.nombre ?? "", conv.flowMsgId);
+    await intentarTurno(uid, conv.nombre ?? nombre ?? "", conv.flowMsgId);
     return;
   }
 
@@ -937,19 +948,19 @@ async function handleMessage(msg: any) {
 
     const conv = convTelf[uid];
 
-    // Si no hay conv o no tiene panel, ignorar silenciosamente
-    if (!conv?.flowMsgId) return;
-
-    // Botones del teclado real
+    // Botones del teclado real — pasar msgId y nombre para recuperar estado tras reinicio
     const botonesAccion = [
       "📞 Nuevo Cliente", "❌ Cancelar", "❌ Cancelar servicio",
       "❌ Salir de la cola", "✈️ Lo envié, ya va de camino",
       "🚪 Cliente se fue", "📍 ¿Llegó?",
     ];
     if (botonesAccion.includes(texto)) {
-      await manejarAccionTelf(uid, texto);
+      await manejarAccionTelf(uid, texto, msg.message_id, nombre);
       return;
     }
+
+    // Si no hay conv o no tiene panel, ignorar
+    if (!conv?.flowMsgId) return;
 
     if (conv.paso === "idle" || conv.paso === "esperando_accion" || conv.paso === "cliente_enviado") return;
 
