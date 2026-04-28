@@ -28,6 +28,7 @@ interface ConvTelf {
   paso: PasoTelf;
   nombre: string;
   lastBotMsgId?: number;
+  flowMsgIds?: number[];   // todos los msg IDs del flujo para borrar al cerrar
   terminal?: string;
   monto?: string;
   descripcion?: string;
@@ -203,11 +204,26 @@ function textoPanelTelf(nombre: string, extra?: string): string {
 
 async function enviarTelf(uid: number, texto: string, extra: object = {}): Promise<number | undefined> {
   const conv = convTelf[uid];
-  if (conv?.lastBotMsgId) await deleteMsg(uid, conv.lastBotMsgId);
   const r = await sendMsg(uid, texto, extra);
   const newId = r?.result?.message_id;
-  if (newId && convTelf[uid]) convTelf[uid].lastBotMsgId = newId;
+  if (newId && convTelf[uid]) {
+    convTelf[uid].lastBotMsgId = newId;
+    if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
+    convTelf[uid].flowMsgIds!.push(newId);
+  }
   return newId;
+}
+
+// Borrar todos los mensajes del flujo y mostrar panel limpio
+async function limpiarChat(uid: number, nombre: string) {
+  const conv = convTelf[uid];
+  if (conv?.flowMsgIds) {
+    for (const msgId of conv.flowMsgIds) {
+      await deleteMsg(uid, msgId);
+    }
+  }
+  convTelf[uid] = { paso: "idle", nombre };
+  await mostrarPanelTelf(uid, nombre);
 }
 
 // ──────────────────────────────────────────
@@ -233,13 +249,17 @@ async function notificarTelefonistas(extra?: string) {
 async function mostrarPanelTelf(uid: number, nombre: string) {
   const nombreFinal = nombre || convTelf[uid]?.nombre || telefonistas[uid] || "Telefonista";
   telefonistas[uid] = nombreFinal;
-  if (!convTelf[uid]) convTelf[uid] = { paso: "idle", nombre: nombreFinal };
-  else { convTelf[uid].paso = "idle"; convTelf[uid].nombre = nombreFinal; }
+  // Reset completo — nuevo panel limpio
+  convTelf[uid] = { paso: "idle", nombre: nombreFinal, flowMsgIds: [] };
 
-  const msgId = await enviarTelf(uid, textoPanelTelf(nombreFinal), {
+  const r = await sendMsg(uid, textoPanelTelf(nombreFinal), {
     reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] },
   });
-  if (msgId) convTelf[uid].lastBotMsgId = msgId;
+  const msgId = r?.result?.message_id;
+  if (msgId) {
+    convTelf[uid].lastBotMsgId = msgId;
+    convTelf[uid].flowMsgIds = [msgId];
+  }
 }
 
 // ──────────────────────────────────────────
@@ -333,9 +353,9 @@ async function cancelarTelf(uid: number) {
       if (escorts[conv.escortUid]) { escorts[conv.escortUid].libre = true; escorts[conv.escortUid].ocupadaTexto = undefined; }
     }
   }
-  convTelf[uid] = { paso: "idle", nombre: conv?.nombre ?? "" };
+  const nombreC = conv?.nombre ?? "";
+  await limpiarChat(uid, nombreC);
   await liberarTurno();
-  await mostrarPanelTelf(uid, conv?.nombre ?? "");
   await notificarTelefonistas();
 }
 
@@ -524,28 +544,28 @@ async function cerrarServicio(
     // Notificar telefonista con resumen
     const telfNombre = telfConv?.nombre ?? "";
     convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
-    await enviarTelf(telfUid,
+    // Limpiar todo el chat del flujo
+    await limpiarChat(telfUid, telfNombre);
+    // Enviar resumen como mensaje nuevo que queda en el historial
+    await sendMsg(telfUid,
       `🎉 *¡Servicio completado!*\n━━━━━━━━━━━━━━\n` +
       `📱 Terminal: \`${terminal}\`\n` +
       `💰 Pagó: *$${montoReal}*\n` +
       `💵 Tu comisión: *+$${comision}*\n` +
       `📊 Balance: *$${total}*\n` +
-      `🙋 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
-      { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+      `🙋 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`
     );
-    setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombre); }, 3000);
   } else {
     // Sin servicio
     const telfNombre = telfConv?.nombre ?? "";
     convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
-    await enviarTelf(telfUid,
+    await limpiarChat(telfUid, telfNombre);
+    await sendMsg(telfUid,
       `❌ *Servicio cerrado sin atender*\n━━━━━━━━━━━━━━\n` +
       `📱 Terminal: \`${terminal}\`\n` +
       (motivo ? `📋 Motivo: _${motivo}_\n` : ``) +
-      `🙋 Escort: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
-      { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+      `🙋 Escort: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`
     );
-    setTimeout(async () => { await mostrarPanelTelf(telfUid, telfNombre); }, 3000);
   }
 
   await liberarTurno();
@@ -624,7 +644,7 @@ async function handleMessage(msg: any) {
     // Si escort tiene chat activo — retransmitir mensaje al telefonista
     const telfUid = chatsActivos[uid];
     if (telfUid && convEscort[uid]?.paso === "en_chat") {
-      await deleteMsg(GRUPO_ESCORTS, msg.message_id);
+      // No borrar — los mensajes del chat quedan como historial
 
       if (msg.photo) {
         // Retransmitir foto
@@ -702,9 +722,16 @@ async function handleMessage(msg: any) {
 
   // ── Mensajes en privado del telefonista ──
   if (chatId === uid) {
-    await deleteMsg(uid, msg.message_id);
     const conv = convTelf[uid];
     if (!conv) return;
+
+    if (conv.paso === "en_chat") {
+      // Durante el chat, trackear los mensajes del usuario para borrarlos al cerrar
+      if (!conv.flowMsgIds) conv.flowMsgIds = [];
+      conv.flowMsgIds.push(msg.message_id);
+    } else {
+      await deleteMsg(uid, msg.message_id);
+    }
 
     // Si está en chat activo — retransmitir a la escort
     if (conv.paso === "en_chat" && conv.escortUid) {
