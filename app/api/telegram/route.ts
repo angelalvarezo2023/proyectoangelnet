@@ -126,13 +126,18 @@ let cacheLoaded = false;
 async function cargarDatos() {
   if (cacheLoaded) return;
   try {
-    const [esc, telf, com, hist] = await Promise.all([
-      fbGet("escorts"), fbGet("telefonistas"), fbGet("comisiones"), fbGet("historial")
+    const [esc, telf, com, hist, servs] = await Promise.all([
+      fbGet("escorts"), fbGet("telefonistas"), fbGet("comisiones"), fbGet("historial"), fbGet("serviciosActivos")
     ]);
     escortsCache     = esc  ?? {};
     telefonistasCache = telf ?? {};
     comisionesCache  = com  ?? {};
     historialCache   = hist ?? {};
+    // Restaurar servicios activos en memoria
+    const serviciosActivos = servs ?? {};
+    for (const [k, v] of Object.entries(serviciosActivos)) {
+      convEscort[parseInt(k)] = v as ConvEscort;
+    }
     // Convertir keys a números donde necesario
     const escNum: Record<number, EstadoEscort> = {};
     for (const [k, v] of Object.entries(escortsCache)) escNum[parseInt(k)] = v as EstadoEscort;
@@ -149,6 +154,10 @@ async function cargarDatos() {
 
 async function guardarEscort(uid: number) {
   await fbSet(`escorts/${uid}`, escortsCache[uid] ?? null);
+}
+async function guardarServicioActivo(escortUid: number, data: ConvEscort | null) {
+  if (data) await fbSet(`serviciosActivos/${escortUid}`, data);
+  else await fbDelete(`serviciosActivos/${escortUid}`);
 }
 async function eliminarEscort(uid: number) {
   delete escortsCache[uid];
@@ -522,6 +531,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   const ahora      = horaActual();
   delete chatsActivos[escortUid];
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = true; escortsCache[escortUid].ocupadaTexto = undefined; await guardarEscort(escortUid); }
+  await guardarServicioActivo(escortUid, null);
 
   if (montoReal !== null) {
     const comision = calcularComision(montoReal);
@@ -796,6 +806,7 @@ async function handleCallback(query: any) {
     if (!escortsCache[uid].libre) return answerCB(query.id, "❌ Ya estás atendiendo un cliente.\nPara aceptar este, primero cierra el que ya tienes.", true);
     const parts = data.split("_");
     convEscort[uid] = { paso: "esperando_nota", terminal: parts[1], monto: parts[2], escortMsgId: msgId, telfUid: parseInt(parts[3]) };
+    await guardarServicioActivo(uid, convEscort[uid]);
     await editMsg(GRUPO_ESCORTS, msgId,
       `🙋 *${fn(nombre)} tomando el cliente...*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${parts[1]}\`\n💰 Estimado: *$${parts[2]}*\n━━━━━━━━━━━━━━\n\n📝 ¿Tienes alguna nota para el telefonista?\nO toca _Sin nota_ para continuar:`,
       { reply_markup: { inline_keyboard: [[{ text: "➡️ Sin nota", callback_data: `escortnota_${uid}` }]] } }
@@ -811,10 +822,15 @@ async function handleCallback(query: any) {
 
   if (data.startsWith("atendido_")) {
     const telfUid = parseInt(data.split("_")[1]);
-    const conv = convEscort[uid];
+    let conv = convEscort[uid];
+    if (!conv) {
+      const fbConv = await fbGet(`serviciosActivos/${uid}`);
+      if (fbConv) { conv = fbConv; convEscort[uid] = conv; }
+    }
     if (!conv) return answerCB(query.id, "❌ No tienes un servicio activo.", true);
     await answerCB(query.id);
     convEscort[uid] = { ...conv, paso: "esperando_monto_real", escortMsgId: msgId, telfUid };
+    await guardarServicioActivo(uid, convEscort[uid]);
     await editMsg(GRUPO_ESCORTS, msgId,
       `✅ *¿Cuánto pagó el cliente?*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${conv.terminal}\`\n━━━━━━━━━━━━━━\n\n💡 Toca el monto o escríbelo abajo:`,
       { reply_markup: { inline_keyboard: [
@@ -827,7 +843,11 @@ async function handleCallback(query: any) {
 
   if (data.startsWith("sinservicio_")) {
     const telfUid = parseInt(data.split("_")[1]);
-    const conv = convEscort[uid];
+    let conv = convEscort[uid];
+    if (!conv) {
+      const fbConv = await fbGet(`serviciosActivos/${uid}`);
+      if (fbConv) { conv = fbConv; convEscort[uid] = conv; }
+    }
     if (!conv) return answerCB(query.id, "❌ No tienes un servicio activo.", true);
     await answerCB(query.id);
     convEscort[uid] = { ...conv, paso: "esperando_otro", escortMsgId: msgId, telfUid };
@@ -838,7 +858,12 @@ async function handleCallback(query: any) {
   if (data.startsWith("pm_") && !data.startsWith("pm_otro_")) {
     const parts = data.split("_"), montoReal = parseInt(parts[1]), escortId = parseInt(parts[2]);
     if (uid !== escortId) return answerCB(query.id, "❌ No es tu cliente.", true);
-    const conv = convEscort[uid];
+    let conv = convEscort[uid];
+    // Si no está en memoria, buscar en Firebase
+    if (!conv) {
+      const fbConv = await fbGet(`serviciosActivos/${uid}`);
+      if (fbConv) { conv = fbConv; convEscort[uid] = conv; }
+    }
     if (!conv) return answerCB(query.id, "❌ Sin servicio activo.", true);
     await answerCB(query.id); delete convEscort[uid];
     await cerrarServicio(uid, nombre, conv.telfUid!, conv.terminal!, montoReal); return;
