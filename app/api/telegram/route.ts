@@ -691,8 +691,7 @@ async function handleMessage(msg: any) {
 ${msg.caption}` : ""}`, parse_mode: "Markdown" });
         // También trackear la respuesta del bot en escorts si aplica
       } else if (texto && !tieneContacto(texto)) {
-        await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*
-${texto}`);
+        await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
       } else if (tieneContacto(texto)) {
         await deleteMsg(GRUPO_ESCORTS, msg.message_id);
         await sendMsg(GRUPO_ESCORTS, `🚫 *${fn(nombre)}*, no se permiten teléfonos ni redes sociales.`);
@@ -754,8 +753,6 @@ ${texto}`);
       `${texto_hist}\n\n` +
       `━━━━━━━━━━━━━━\n_Mostrando los últimos ${Math.min(hist.length, 20)} servicios._`
     );
-    return;
-  }
     return;
   }
 
