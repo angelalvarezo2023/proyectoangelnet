@@ -137,7 +137,13 @@ async function cargarDatos() {
     // Restaurar servicios activos en memoria
     const serviciosActivos = servs ?? {};
     for (const [k, v] of Object.entries(serviciosActivos)) {
-      convEscort[parseInt(k)] = v as ConvEscort;
+      const escUid = parseInt(k);
+      convEscort[escUid] = v as ConvEscort;
+      // Restaurar chatsActivos si había un servicio activo
+      const escConv = v as ConvEscort;
+      if (escConv.telfUid && (escConv.paso === "en_chat" || escConv.paso === "esperando_monto_real" || escConv.paso === "esperando_otro")) {
+        chatsActivos[escUid] = escConv.telfUid;
+      }
     }
     // Convertir keys a números donde necesario
     const escNum: Record<number, EstadoEscort> = {};
@@ -535,8 +541,10 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   // Inicializar chatMsgIds con el mensaje original del cliente
   if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
   if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
-  // Guardar en Firebase para sobrevivir reinicios
+  // Guardar en Firebase para sobrevivir reinicios (con chatMsgIds)
   await guardarServicioActivo(escortUid, convEscort[escortUid]);
+  // Marcar chat activo
+  chatsActivos[escortUid] = telfUid;
 
   // The editMsg on escortMsgId is already tracked
   if (escortConv.escortMsgId) {
@@ -602,12 +610,17 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
-  // Cargar de Firebase por si el servidor reinició
-  const fbServicio = convE ?? await fbGet(`serviciosActivos/${escortUid}`);
-  const msgsBorrar = fbServicio?.chatMsgIds ?? [];
+  // Cargar de Firebase por si el servidor reinició (incluye chatMsgIds)
+  let msgsBorrar: number[] = convE?.chatMsgIds ?? [];
+  if (msgsBorrar.length === 0) {
+    const fbConvE = await fbGet(`serviciosActivos/${escortUid}`);
+    msgsBorrar = fbConvE?.chatMsgIds ?? [];
+  }
   for (const mId of msgsBorrar) {
     await tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }).catch(() => {});
   }
+  // Limpiar chatMsgIds de Firebase
+  await guardarServicioActivo(escortUid, null);
 
   if (montoReal !== null) {
     const comision = calcularComision(montoReal);
@@ -721,8 +734,7 @@ async function handleMessage(msg: any) {
       if (convEscort[uid]) {
         if (!convEscort[uid].chatMsgIds) convEscort[uid].chatMsgIds = [];
         convEscort[uid].chatMsgIds!.push(msg.message_id);
-        // Actualizar en Firebase
-        await guardarServicioActivo(uid, convEscort[uid]);
+        guardarServicioActivo(uid, convEscort[uid]).catch(() => {});
       }
 
 
@@ -851,7 +863,7 @@ ${texto}`);
         if (fwdMsg?.result?.message_id && convEscort[conv.escortUid!]) {
           if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
           convEscort[conv.escortUid!].chatMsgIds!.push(fwdMsg.result.message_id);
-          await guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]);
+          guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]).catch(() => {});
         }
       } else if (tieneContacto(texto)) {
         await sendMsg(uid, `🚫 No se permiten teléfonos ni redes sociales.`);
@@ -973,6 +985,8 @@ async function handleCallback(query: any) {
     if (!conv) return answerCB(query.id, "❌ No tienes un servicio activo.", true);
     await answerCB(query.id);
     convEscort[uid] = { ...conv, paso: "esperando_monto_real", escortMsgId: msgId, telfUid };
+    if (!convEscort[uid].chatMsgIds) convEscort[uid].chatMsgIds = [];
+    if (!convEscort[uid].chatMsgIds!.includes(msgId)) convEscort[uid].chatMsgIds!.push(msgId);
     await guardarServicioActivo(uid, convEscort[uid]);
     await editMsg(GRUPO_ESCORTS, msgId,
       `✅ *¿Cuánto pagó el cliente?*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${conv.terminal}\`\n━━━━━━━━━━━━━━\n\n💡 Toca el monto o escríbelo abajo:`,
@@ -994,6 +1008,9 @@ async function handleCallback(query: any) {
     if (!conv) return answerCB(query.id, "❌ No tienes un servicio activo.", true);
     await answerCB(query.id);
     convEscort[uid] = { ...conv, escortMsgId: msgId, telfUid };
+    // Track this msg for deletion
+    if (!convEscort[uid].chatMsgIds) convEscort[uid].chatMsgIds = [];
+    if (!convEscort[uid].chatMsgIds!.includes(msgId)) convEscort[uid].chatMsgIds!.push(msgId);
     await editMsg(GRUPO_ESCORTS, msgId,
       `❌ *¿Por qué no hubo servicio?*\n━━━━━━━━━━━━━━\n📱 Dígitos: \`${conv.terminal}\`\n━━━━━━━━━━━━━━\n\nSelecciona el motivo:`,
       { reply_markup: { inline_keyboard: [
