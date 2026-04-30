@@ -87,6 +87,7 @@ interface ConvEscort {
   escortMsgId?: number;
   telfUid?: number;
   nota?: string;
+  chatMsgIds?: number[]; // todos los msgs del grupo escorts para borrar al cerrar
 }
 
 interface EstadoEscort {
@@ -178,6 +179,33 @@ async function guardarComision(uid: number, total: number) {
 async function guardarHistorial(terminal: string, data: HistorialTerminal) {
   historialCache[terminal] = data;
   await fbSet(`historial/${terminal}`, data);
+}
+
+// Historial de servicios por telefonista
+interface ServicioCompletado {
+  terminal: string;
+  monto: number;
+  escortNombre: string;
+  fecha: string;
+  hora: string;
+  tipo: "completado" | "sin_servicio";
+  motivo?: string;
+}
+const historialTelfCache: Record<number, ServicioCompletado[]> = {};
+
+async function guardarHistorialTelf(telfUid: number, servicio: ServicioCompletado) {
+  if (!historialTelfCache[telfUid]) historialTelfCache[telfUid] = [];
+  historialTelfCache[telfUid].unshift(servicio); // más reciente primero
+  // Mantener solo los últimos 50
+  if (historialTelfCache[telfUid].length > 50) historialTelfCache[telfUid] = historialTelfCache[telfUid].slice(0, 50);
+  await fbSet(`historialTelf/${telfUid}`, historialTelfCache[telfUid]);
+}
+
+async function cargarHistorialTelf(telfUid: number): Promise<ServicioCompletado[]> {
+  if (historialTelfCache[telfUid]) return historialTelfCache[telfUid];
+  const data = await fbGet(`historialTelf/${telfUid}`);
+  historialTelfCache[telfUid] = data ?? [];
+  return historialTelfCache[telfUid];
 }
 
 // ──────────────────────────────────────────
@@ -279,9 +307,11 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
 async function limpiarChat(uid: number, nombre: string) {
   const conv = convTelf[uid];
   if (conv?.flowMsgIds) {
-    for (const msgId of conv.flowMsgIds) await deleteMsg(uid, msgId);
+    for (const msgId of conv.flowMsgIds) {
+      await deleteMsg(uid, msgId);
+    }
   }
-  convTelf[uid] = { paso: "idle", nombre };
+  convTelf[uid] = { paso: "idle", nombre, flowMsgIds: [] };
   await mostrarPanelTelf(uid, nombre);
 }
 
@@ -477,6 +507,10 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   telfConv.escortUid    = escortUid;
   telfConv.escortNombre = escortNombre;
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = false; escortsCache[escortUid].ocupadaTexto = "con cliente"; await guardarEscort(escortUid); }
+  // Inicializar chatMsgIds con el mensaje original del cliente
+  if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
+  if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
+
   if (escortConv.escortMsgId) {
     await editMsg(GRUPO_ESCORTS, escortConv.escortMsgId,
       `🟡 *TIENES UN CLIENTE ACTIVO*\n━━━━━━━━━━━━━━\n` +
@@ -533,48 +567,51 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = true; escortsCache[escortUid].ocupadaTexto = undefined; await guardarEscort(escortUid); }
   await guardarServicioActivo(escortUid, null);
 
+  // Borrar todos los mensajes del chat en el grupo de escorts
+  const msgsBorrar = convE?.chatMsgIds ?? [];
+  for (const mId of msgsBorrar) {
+    await tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }).catch(() => {});
+  }
+
   if (montoReal !== null) {
     const comision = calcularComision(montoReal);
     const nuevoTotal = (comisionesCache[telfUid] ?? 0) + comision;
     await guardarComision(telfUid, nuevoTotal);
     await guardarHistorial(terminal, { veces: (historialCache[terminal]?.veces ?? 0) + 1, ultimoPago: montoReal, ultimaEscort: fn(escortNombre), ultimaFecha: fechaActual() });
+    await guardarHistorialTelf(telfUid, { terminal, monto: montoReal, escortNombre: fn(escortNombre), fecha: fechaActual(), hora: ahora, tipo: "completado" });
 
-    if (convE?.escortMsgId) {
-      await editMsg(GRUPO_ESCORTS, convE.escortMsgId,
+    // Enviar resumen limpio en grupo escorts (mensajes anteriores ya borrados)
+    await tPost("sendMessage", {
+      chat_id: GRUPO_ESCORTS,
+      parse_mode: "Markdown",
+      text:
         `✅ *¡SERVICIO COMPLETADO!*\n━━━━━━━━━━━━━━\n` +
         `🕐 Hora de cierre: *${ahora}*\n` +
-        `📱 Últimos 4 dígitos del cliente: \`${terminal}\`\n` +
-        `💰 Monto que pagó el cliente: *$${montoReal}*\n` +
-        `👤 Telefonista que lo envió: *${fn(telfNombre)}*\n` +
-        `━━━━━━━━━━━━━━\n_Toca el botón cuando el cliente se vaya._`,
-        { reply_markup: { inline_keyboard: [[{ text: "🟢 Ya terminé, estoy libre", callback_data: `yalibre_${escortUid}` }]] } }
-      ).catch(() => {});
-    }
-    convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
-    await limpiarChat(telfUid, telfNombre);
-    await sendMsg(telfUid,
-      `✅ *¡SERVICIO COMPLETADO!*\n━━━━━━━━━━━━━━\n` +
-      `🕐 Hora de cierre: *${ahora}*\n` +
-      `📱 Últimos 4 dígitos del cliente: \`${terminal}\`\n` +
-      `💰 Lo que pagó el cliente: *$${montoReal}*\n` +
+        `📱 Últimos 4 dígitos: \`${terminal}\`\n` +
+        `💰 Pagó: *$${montoReal}*\n` +
+        `👤 Telefonista: *${fn(telfNombre)}*\n` +
+        `━━━━━━━━━━━━━━\n_Toca el botón cuando termines con el cliente._`,
+      reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "🟢 Ya terminé, estoy libre", callback_data: `yalibre_${escortUid}` }]] }),
+    }).catch(() => {});
       `💵 Tu ganancia (comisión): *+$${comision}*\n` +
       `📊 Tu balance total acumulado: *$${nuevoTotal}*\n` +
       `💃 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
-      { reply_markup: { inline_keyboard: [[{ text: "🧹 Limpiar chat", callback_data: `limpiar_${telfUid}` }]] } }
+      { reply_markup: { inline_keyboard: [] } }
     );
   } else {
     const motivoTexto = motivo ?? "No especificado";
-    if (convE?.escortMsgId) {
-      await editMsg(GRUPO_ESCORTS, convE.escortMsgId,
+    await guardarHistorialTelf(telfUid, { terminal, monto: 0, escortNombre: fn(escortNombre), fecha: fechaActual(), hora: ahora, tipo: "sin_servicio", motivo: motivoTexto });
+    await tPost("sendMessage", {
+      chat_id: GRUPO_ESCORTS,
+      parse_mode: "Markdown",
+      text:
         `❌ *SERVICIO CERRADO SIN ATENDER*\n━━━━━━━━━━━━━━\n` +
         `🕐 Hora de cierre: *${ahora}*\n` +
-        `📱 Últimos 4 dígitos del cliente: \`${terminal}\`\n` +
+        `📱 Últimos 4 dígitos: \`${terminal}\`\n` +
         `💰 Lo que iba a pagar (estimado): *$${convE?.monto ?? "—"}*\n` +
-        `📋 Motivo del cierre: *${motivoTexto}*\n` +
+        `📋 Motivo: *${motivoTexto}*\n` +
         `👤 Telefonista: *${fn(telfNombre)}*\n━━━━━━━━━━━━━━\n_Ya quedas libre para el próximo cliente._`,
-        { reply_markup: { inline_keyboard: [] } }
-      ).catch(() => {});
-    }
+    }).catch(() => {});
     convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
     await limpiarChat(telfUid, telfNombre);
     await sendMsg(telfUid,
@@ -584,7 +621,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
       `💰 Lo que iba a pagar (estimado): *$${convE?.monto ?? "—"}*\n` +
       `📋 Motivo: *${motivoTexto}*\n` +
       `💃 Escort: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
-      { reply_markup: { inline_keyboard: [[{ text: "🧹 Limpiar chat", callback_data: `limpiar_${telfUid}` }]] } }
+      { reply_markup: { inline_keyboard: [] } }
     );
   }
   delete convEscort[escortUid];
@@ -638,11 +675,18 @@ async function handleMessage(msg: any) {
     if (!escortsCache[uid]) { escortsCache[uid] = { uid, nombre, libre: true }; await guardarEscort(uid); await notificarTelefonistas(`🟢 *${fn(nombre)}* se registró como chica disponible.`); }
     const telfUid = chatsActivos[uid];
     if (telfUid && convEscort[uid]?.paso === "en_chat") {
+      // Trackear mensaje de la escort para borrarlo al cerrar
+      if (convEscort[uid]?.chatMsgIds) convEscort[uid].chatMsgIds!.push(msg.message_id);
+      else if (convEscort[uid]) convEscort[uid].chatMsgIds = [msg.message_id];
+
       if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
-        await tPost("sendPhoto", { chat_id: telfUid, photo: fileId, caption: `💃 *Escort ${fn(nombre)}:*${msg.caption ? `\n${msg.caption}` : ""}`, parse_mode: "Markdown" });
+        const r = await tPost("sendPhoto", { chat_id: telfUid, photo: fileId, caption: `💃 *Escort ${fn(nombre)}:*${msg.caption ? `
+${msg.caption}` : ""}`, parse_mode: "Markdown" });
+        // También trackear la respuesta del bot en escorts si aplica
       } else if (texto && !tieneContacto(texto)) {
-        await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
+        await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*
+${texto}`);
       } else if (tieneContacto(texto)) {
         await deleteMsg(GRUPO_ESCORTS, msg.message_id);
         await sendMsg(GRUPO_ESCORTS, `🚫 *${fn(nombre)}*, no se permiten teléfonos ni redes sociales.`);
@@ -678,6 +722,50 @@ async function handleMessage(msg: any) {
     return;
   }
 
+  if (texto === "/historial" && chatId === uid) {
+    await deleteMsg(uid, msg.message_id);
+    const hist = await cargarHistorialTelf(uid);
+    if (hist.length === 0) {
+      await sendMsg(uid, `📋 *Tu historial está vacío.*
+
+Aún no has completado ningún servicio.`);
+      return;
+    }
+    const texto_hist = hist.slice(0, 20).map((s, i) => {
+      if (s.tipo === "completado") {
+        return `${i + 1}. ✅ *Completado* — ${s.fecha} ${s.hora}
+` +
+               `   📱 Dígitos: \`${s.terminal}\` | 💰 Pagó: $${s.monto}
+` +
+               `   💃 Escort: ${s.escortNombre}`;
+      } else {
+        return `${i + 1}. ❌ *Sin servicio* — ${s.fecha} ${s.hora}
+` +
+               `   📱 Dígitos: \`${s.terminal}\` | 📋 ${s.motivo ?? "—"}
+` +
+               `   💃 Escort: ${s.escortNombre}`;
+      }
+    }).join("
+
+");
+    const totalComision = comisionesCache[uid] ?? 0;
+    await sendMsg(uid,
+      `📋 *Tu historial de servicios*
+━━━━━━━━━━━━━━
+` +
+      `📊 Balance acumulado: *$${totalComision}*
+` +
+      `━━━━━━━━━━━━━━
+
+${texto_hist}
+
+` +
+      `━━━━━━━━━━━━━━
+_Mostrando los últimos ${Math.min(hist.length, 20)} servicios._`
+    );
+    return;
+  }
+
   if (texto === "/start" && chatId === uid) {
     await deleteMsg(uid, msg.message_id);
     if (await (async () => { try { const res = await fetch(`${API}/getChatMember?chat_id=${GRUPO_ESCORTS}&user_id=${uid}`); const d = await res.json(); return ["administrator","creator","member"].includes(d.result?.status); } catch { return false; } })()) { await sendMsg(uid, `👋 *Bienvenida ${fn(nombre)}.*\nTu panel está en el grupo.`); return; }
@@ -709,7 +797,13 @@ async function handleMessage(msg: any) {
         if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
         await tPost("sendPhoto", { chat_id: GRUPO_ESCORTS, photo: fileId, caption: `📞 *Telefonista ${fn(conv.nombre)}:*${msg.caption ? `\n${msg.caption}` : ""}`, parse_mode: "Markdown" });
       } else if (texto && !tieneContacto(texto)) {
-        await sendMsg(GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*\n${texto}`);
+        const fwdMsg = await sendMsg(GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*
+${texto}`);
+        // Trackear msg enviado al grupo escorts
+        if (fwdMsg?.result?.message_id && convEscort[conv.escortUid!]) {
+          if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
+          convEscort[conv.escortUid!].chatMsgIds!.push(fwdMsg.result.message_id);
+        }
       } else if (tieneContacto(texto)) {
         await sendMsg(uid, `🚫 No se permiten teléfonos ni redes sociales.`);
       }
