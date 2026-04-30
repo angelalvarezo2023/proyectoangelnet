@@ -298,6 +298,7 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
   const newId = r?.result?.message_id;
   if (newId && convTelf[uid]) {
     convTelf[uid].lastBotMsgId = newId;
+    // Trackear SIEMPRE para borrar al cerrar — incluyendo mensajes del chat
     if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
     convTelf[uid].flowMsgIds!.push(newId);
   }
@@ -472,6 +473,8 @@ async function publicarCliente(uid: number) {
   });
   conv.paso = "en_chat";
   conv.escortMsgId = eMsg?.result?.message_id;
+  // Guardar el primer msg ID para borrar rango después
+  if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
   await enviarTelf(uid,
     `⏳ *CLIENTE ENVIADO — ESPERANDO RESPUESTA*\n━━━━━━━━━━━━━━\n` +
     `✅ Últimos 4 dígitos: *${conv.terminal}*\n` +
@@ -510,7 +513,10 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   // Inicializar chatMsgIds con el mensaje original del cliente
   if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
   if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
+  // Guardar en Firebase para sobrevivir reinicios
+  await guardarServicioActivo(escortUid, convEscort[escortUid]);
 
+  // The editMsg on escortMsgId is already tracked
   if (escortConv.escortMsgId) {
     await editMsg(GRUPO_ESCORTS, escortConv.escortMsgId,
       `🟡 *TIENES UN CLIENTE ACTIVO*\n━━━━━━━━━━━━━━\n` +
@@ -518,23 +524,29 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
       `💰 El cliente pagará aproximadamente: *$${escortConv.monto}*\n` +
       (escortConv.nota ? `📝 Nota del telefonista: _${escortConv.nota}_\n` : ``) +
       `━━━━━━━━━━━━━━\n\n` +
-      `💬 *Puedes escribir o enviar fotos aquí.*\nTus mensajes le llegarán al telefonista directamente.\n\n` +
+      `💬 *ESTÁS EN CHAT DIRECTO CON EL TELEFONISTA*\n\n` +
+      `⚡ Todo lo que escribas aquí le llegará a él al instante.\n` +
+      `⚡ Todo lo que él escriba te llegará a ti aquí.\n\n` +
+      `📸 También puedes enviar fotos.\n\n` +
       `━━━━━━━━━━━━━━\n` +
-      `⬇️ *Cuando el cliente termine, usa los botones de abajo:*\n\n` +
-      `✅ *Marcar como atendido* → Si el cliente pagó\n` +
-      `❌ *Cerrar sin servicio* → Si el cliente se fue sin pagar o algo salió mal`,
+      `⬇️ *Cuando termines con el cliente usa los botones:*\n\n` +
+      `✅ *Marcar como atendido* → El cliente pagó\n` +
+      `❌ *Cerrar sin servicio* → El cliente se fue sin pagar`,
       { reply_markup: tecladoChatEscort(telfUid) }
     );
   }
   await enviarTelf(telfUid,
-    `✅ *¡UNA CHICA ACEPTÓ EL CLIENTE!*\n━━━━━━━━━━━━━━\n` +
-    `💃 *${fn(escortNombre)}* tomó el cliente\n` +
+    `✅ *¡${fn(escortNombre).toUpperCase()} ACEPTÓ EL CLIENTE!*\n` +
+    `━━━━━━━━━━━━━━\n` +
     `📱 Últimos 4 dígitos: *${telfConv.terminal}*\n` +
     `💰 Monto estimado: *$${telfConv.monto}*\n` +
     `━━━━━━━━━━━━━━\n\n` +
-    `💬 *CHAT ABIERTO CON ${fn(escortNombre).toUpperCase()}*\n\n` +
-    `Puedes escribirle o enviarle fotos directamente aquí.\nElla recibirá tus mensajes al instante.\n\n` +
-    `💡 _Cuando el servicio termine, ella lo cerrará y recibirás un resumen._`,
+    `💬 *ESTÁS EN CHAT DIRECTO CON ${fn(escortNombre).toUpperCase()}*\n\n` +
+    `⚡ *Todo lo que escribas aquí le llegará a ella al instante.*\n` +
+    `⚡ *Todo lo que ella escriba te llegará a ti aquí.*\n\n` +
+    `📸 También puedes enviar fotos.\n\n` +
+    `━━━━━━━━━━━━━━\n` +
+    `💡 _Escribe tu mensaje abajo para comenzar la conversación._`,
     { reply_markup: tecladoChatTelf(escortUid) }
   );
   convEscort[escortUid].paso = "en_chat";
@@ -682,16 +694,28 @@ async function handleMessage(msg: any) {
     const telfUid = chatsActivos[uid];
     if (telfUid && convEscort[uid]?.paso === "en_chat") {
       // Trackear mensaje de la escort para borrarlo al cerrar
-      if (convEscort[uid]?.chatMsgIds) convEscort[uid].chatMsgIds!.push(msg.message_id);
-      else if (convEscort[uid]) convEscort[uid].chatMsgIds = [msg.message_id];
+      if (convEscort[uid]) {
+        if (!convEscort[uid].chatMsgIds) convEscort[uid].chatMsgIds = [];
+        convEscort[uid].chatMsgIds!.push(msg.message_id);
+        // Actualizar en Firebase
+        await guardarServicioActivo(uid, convEscort[uid]);
+      }
+
 
       if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
-        const r = await tPost("sendPhoto", { chat_id: telfUid, photo: fileId, caption: `💃 *Escort ${fn(nombre)}:*${msg.caption ? `
-${msg.caption}` : ""}`, parse_mode: "Markdown" });
-        // También trackear la respuesta del bot en escorts si aplica
+        const photoR = await tPost("sendPhoto", { chat_id: telfUid, photo: fileId, caption: `💃 *Escort ${fn(nombre)}:*${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
+        if (photoR?.result?.message_id && convTelf[telfUid]) {
+          if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
+          convTelf[telfUid].flowMsgIds!.push(photoR.result.message_id);
+        }
       } else if (texto && !tieneContacto(texto)) {
-        await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
+        const escMsg = await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
+        // Trackear en el chat del telefonista para borrar al cerrar
+        if (escMsg?.result?.message_id && convTelf[telfUid]) {
+          if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
+          convTelf[telfUid].flowMsgIds!.push(escMsg.result.message_id);
+        }
       } else if (tieneContacto(texto)) {
         await deleteMsg(GRUPO_ESCORTS, msg.message_id);
         await sendMsg(GRUPO_ESCORTS, `🚫 *${fn(nombre)}*, no se permiten teléfonos ni redes sociales.`);
@@ -778,9 +802,16 @@ ${msg.caption}` : ""}`, parse_mode: "Markdown" });
   }
 
   if (chatId === uid) {
-    await deleteMsg(uid, msg.message_id);
     const conv = convTelf[uid];
     if (!conv) return;
+    // Solo borrar mensajes del usuario si NO está en chat activo
+    if (conv.paso !== "en_chat") {
+      await deleteMsg(uid, msg.message_id);
+    } else {
+      // Durante chat: trackear mensaje del telf para borrar al cerrar
+      if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
+      convTelf[uid].flowMsgIds!.push(msg.message_id);
+    }
     if (conv.paso === "en_chat" && conv.escortUid) {
       if (msg.photo) {
         const fileId = msg.photo[msg.photo.length - 1].file_id;
@@ -793,6 +824,7 @@ ${texto}`);
         if (fwdMsg?.result?.message_id && convEscort[conv.escortUid!]) {
           if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
           convEscort[conv.escortUid!].chatMsgIds!.push(fwdMsg.result.message_id);
+          await guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]);
         }
       } else if (tieneContacto(texto)) {
         await sendMsg(uid, `🚫 No se permiten teléfonos ni redes sociales.`);
