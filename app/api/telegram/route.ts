@@ -593,10 +593,16 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `━━━━━━━━━━━━━━\n_Toca el botón cuando termines con el cliente._`,
       reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "🟢 Ya terminé, estoy libre", callback_data: `yalibre_${escortUid}` }]] }),
     }).catch(() => {});
-      `💵 Tu ganancia (comisión): *+$${comision}*\n` +
-      `📊 Tu balance total acumulado: *$${nuevoTotal}*\n` +
-      `💃 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
-      { reply_markup: { inline_keyboard: [] } }
+    convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
+    await limpiarChat(telfUid, telfNombre);
+    await sendMsg(telfUid,
+      `✅ *¡SERVICIO COMPLETADO!*\n━━━━━━━━━━━━━━\n` +
+      `🕐 Hora de cierre: *${ahora}*\n` +
+      `📱 Últimos 4 dígitos: \`${terminal}\`\n` +
+      `💰 Lo que pagó el cliente: *$${montoReal}*\n` +
+      `💵 Tu ganancia: *+$${comision}*\n` +
+      `📊 Tu balance total: *$${nuevoTotal}*\n` +
+      `💃 Atendido por: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`
     );
   } else {
     const motivoTexto = motivo ?? "No especificado";
