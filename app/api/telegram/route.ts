@@ -732,43 +732,30 @@ ${texto}`);
     await deleteMsg(uid, msg.message_id);
     const hist = await cargarHistorialTelf(uid);
     if (hist.length === 0) {
-      await sendMsg(uid, `📋 *Tu historial está vacío.*
-
-Aún no has completado ningún servicio.`);
+      await sendMsg(uid, `📋 *Tu historial está vacío.*\n\nAún no has completado ningún servicio.`);
       return;
     }
     const texto_hist = hist.slice(0, 20).map((s, i) => {
       if (s.tipo === "completado") {
-        return `${i + 1}. ✅ *Completado* — ${s.fecha} ${s.hora}
-` +
-               `   📱 Dígitos: \`${s.terminal}\` | 💰 Pagó: $${s.monto}
-` +
+        return `${i + 1}. ✅ *Completado* — ${s.fecha} ${s.hora}\n` +
+               `   📱 Dígitos: \`${s.terminal}\` | 💰 Pagó: $${s.monto}\n` +
                `   💃 Escort: ${s.escortNombre}`;
       } else {
-        return `${i + 1}. ❌ *Sin servicio* — ${s.fecha} ${s.hora}
-` +
-               `   📱 Dígitos: \`${s.terminal}\` | 📋 ${s.motivo ?? "—"}
-` +
+        return `${i + 1}. ❌ *Sin servicio* — ${s.fecha} ${s.hora}\n` +
+               `   📱 Dígitos: \`${s.terminal}\` | 📋 ${s.motivo ?? "—"}\n` +
                `   💃 Escort: ${s.escortNombre}`;
       }
-    }).join("
-
-");
+    }).join("\n\n");
     const totalComision = comisionesCache[uid] ?? 0;
     await sendMsg(uid,
-      `📋 *Tu historial de servicios*
-━━━━━━━━━━━━━━
-` +
-      `📊 Balance acumulado: *$${totalComision}*
-` +
-      `━━━━━━━━━━━━━━
-
-${texto_hist}
-
-` +
-      `━━━━━━━━━━━━━━
-_Mostrando los últimos ${Math.min(hist.length, 20)} servicios._`
+      `📋 *Tu historial de servicios*\n━━━━━━━━━━━━━━\n` +
+      `📊 Balance acumulado: *$${totalComision}*\n` +
+      `━━━━━━━━━━━━━━\n\n` +
+      `${texto_hist}\n\n` +
+      `━━━━━━━━━━━━━━\n_Mostrando los últimos ${Math.min(hist.length, 20)} servicios._`
     );
+    return;
+  }
     return;
   }
 
