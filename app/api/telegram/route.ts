@@ -322,16 +322,16 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
 
 async function limpiarChat(uid: number, nombre: string) {
   const conv = convTelf[uid];
-  // Cargar IDs de Firebase por si el servidor reinició
-  let idsABorrar = conv?.flowMsgIds ?? [];
-  if (idsABorrar.length === 0) {
-    idsABorrar = await cargarFlowMsgIds(uid);
-  }
+  // Siempre cargar de Firebase Y combinar con memoria local
+  const idsFirebase = await cargarFlowMsgIds(uid);
+  const idsMemoria  = conv?.flowMsgIds ?? [];
+  // Unir ambas listas eliminando duplicados
+  const todosIds = [...new Set([...idsMemoria, ...idsFirebase])];
   // Borrar todos los mensajes
-  for (const msgId of idsABorrar) {
+  for (const msgId of todosIds) {
     await deleteMsg(uid, msgId);
   }
-  // Limpiar de Firebase
+  // Limpiar de Firebase y memoria
   await eliminarFlowMsgIds(uid);
   convTelf[uid] = { paso: "idle", nombre, flowMsgIds: [] };
   await mostrarPanelTelf(uid, nombre);
@@ -436,6 +436,7 @@ async function cancelarTelf(uid: number) {
     if (convEscort[conv.escortUid]) delete convEscort[conv.escortUid];
   }
   const nombre = conv?.nombre ?? "";
+  // limpiarChat necesita acceso a flowMsgIds — no resetear antes
   await limpiarChat(uid, nombre);
   await liberarTurno();
   await notificarTelefonistas();
@@ -601,7 +602,9 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
-  const msgsBorrar = convE?.chatMsgIds ?? [];
+  // Cargar de Firebase por si el servidor reinició
+  const fbServicio = convE ?? await fbGet(`serviciosActivos/${escortUid}`);
+  const msgsBorrar = fbServicio?.chatMsgIds ?? [];
   for (const mId of msgsBorrar) {
     await tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }).catch(() => {});
   }
@@ -626,7 +629,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `━━━━━━━━━━━━━━\n_Toca el botón cuando termines con el cliente._`,
       reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "🟢 Ya terminé, estoy libre", callback_data: `yalibre_${escortUid}` }]] }),
     }).catch(() => {});
-    convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
+    // NO resetear convTelf antes — limpiarChat necesita los flowMsgIds
     await limpiarChat(telfUid, telfNombre);
     await sendMsg(telfUid,
       `✅ *¡SERVICIO COMPLETADO!*\n━━━━━━━━━━━━━━\n` +
@@ -651,7 +654,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `📋 Motivo: *${motivoTexto}*\n` +
         `👤 Telefonista: *${fn(telfNombre)}*\n━━━━━━━━━━━━━━\n_Ya quedas libre para el próximo cliente._`,
     }).catch(() => {});
-    convTelf[telfUid] = { paso: "idle", nombre: telfNombre };
+    // NO resetear convTelf antes — limpiarChat necesita los flowMsgIds
     await limpiarChat(telfUid, telfNombre);
     await sendMsg(telfUid,
       `❌ *SERVICIO CERRADO SIN ATENDER*\n━━━━━━━━━━━━━━\n` +
