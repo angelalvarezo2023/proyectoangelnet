@@ -168,12 +168,19 @@ async function guardarServicioActivo(escortUid: number, data: ConvEscort | null)
 }
 
 async function guardarFlowMsgIds(telfUid: number, ids: number[]) {
-  await fbSet(`flowMsgIds/${telfUid}`, ids);
+  if (ids.length === 0) return;
+  // Store min and max to delete full range
+  const min = Math.min(...ids);
+  const max = Math.max(...ids);
+  await fbSet(`flowMsgIds/${telfUid}`, { min, max, ids });
 }
 
 async function cargarFlowMsgIds(telfUid: number): Promise<number[]> {
   const data = await fbGet(`flowMsgIds/${telfUid}`);
-  return data ?? [];
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.ids) return data.ids;
+  return [];
 }
 
 async function eliminarFlowMsgIds(telfUid: number) {
@@ -328,16 +335,14 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
 
 async function limpiarChat(uid: number, nombre: string) {
   const conv = convTelf[uid];
-  // Siempre cargar de Firebase Y combinar con memoria local
+  // Combinar IDs de memoria y Firebase
   const idsFirebase = await cargarFlowMsgIds(uid);
   const idsMemoria  = conv?.flowMsgIds ?? [];
-  // Unir ambas listas eliminando duplicados
-  const todosIds = [...new Set([...idsMemoria, ...idsFirebase])];
-  // Borrar todos los mensajes
-  for (const msgId of todosIds) {
-    await deleteMsg(uid, msgId);
-  }
-  // Limpiar de Firebase y memoria
+  const todosIds    = [...new Set([...idsMemoria, ...idsFirebase])].sort((a, b) => a - b);
+  // Borrar todos los mensajes del bot y del usuario
+  const promesas = todosIds.map(msgId => deleteMsg(uid, msgId));
+  await Promise.allSettled(promesas);
+  // Limpiar Firebase
   await eliminarFlowMsgIds(uid);
   convTelf[uid] = { paso: "idle", nombre, flowMsgIds: [] };
   await mostrarPanelTelf(uid, nombre);
@@ -610,16 +615,16 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
-  // Cargar de Firebase por si el servidor reinició (incluye chatMsgIds)
-  let msgsBorrar: number[] = convE?.chatMsgIds ?? [];
-  if (msgsBorrar.length === 0) {
-    const fbConvE = await fbGet(`serviciosActivos/${escortUid}`);
-    msgsBorrar = fbConvE?.chatMsgIds ?? [];
-  }
-  for (const mId of msgsBorrar) {
-    await tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }).catch(() => {});
-  }
-  // Limpiar chatMsgIds de Firebase
+  // Siempre cargar de Firebase (más confiable) Y combinar con memoria
+  const fbConvE    = await fbGet(`serviciosActivos/${escortUid}`);
+  const idsMemE    = convE?.chatMsgIds ?? [];
+  const idsFbE     = fbConvE?.chatMsgIds ?? [];
+  const msgsBorrar = [...new Set([...idsMemE, ...idsFbE])];
+  // Borrar en paralelo
+  await Promise.allSettled(
+    msgsBorrar.map((mId: number) => tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }))
+  );
+  // Limpiar de Firebase
   await guardarServicioActivo(escortUid, null);
 
   if (montoReal !== null) {
@@ -941,12 +946,7 @@ async function handleCallback(query: any) {
     await sendMsg(uid, msgs[paso] ?? msgs["idle"]); return;
   }
 
-  if (data.startsWith("limpiar_")) {
-    const ownerId = parseInt(data.split("_")[1]);
-    if (uid !== ownerId) return answerCB(query.id, "❌ No es tu chat.", true);
-    await answerCB(query.id, "🧹 Limpiando...");
-    await deleteMsg(uid, msgId); return;
-  }
+  // limpiar removed
 
   if (data.startsWith("limpiar_escort_")) {
     const ownerId = parseInt(data.split("_")[2]);
@@ -1126,7 +1126,7 @@ async function handleCallback(query: any) {
     await guardarEscort(uid);
     await editMsg(GRUPO_ESCORTS, msgId,
       `👤 *${fn(nombre)}*\n✨ Estás libre. Te avisaré cuando haya un cliente.`,
-      { reply_markup: { inline_keyboard: [[{ text: "🔴 Ponerme Ocupada", callback_data: `ocupada_${uid}` }], [{ text: "🧹 Limpiar mi chat", callback_data: `limpiar_escort_${uid}` }]] } }
+      { reply_markup: { inline_keyboard: [[{ text: "🔴 Ponerme Ocupada", callback_data: `ocupada_${uid}` }]] } }
     );
     await notificarTelefonistas(`🟢 *${fn(nombre)}* terminó y está libre.`); return;
   }
