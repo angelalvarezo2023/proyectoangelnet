@@ -160,6 +160,19 @@ async function guardarServicioActivo(escortUid: number, data: ConvEscort | null)
   if (data) await fbSet(`serviciosActivos/${escortUid}`, data);
   else await fbDelete(`serviciosActivos/${escortUid}`);
 }
+
+async function guardarFlowMsgIds(telfUid: number, ids: number[]) {
+  await fbSet(`flowMsgIds/${telfUid}`, ids);
+}
+
+async function cargarFlowMsgIds(telfUid: number): Promise<number[]> {
+  const data = await fbGet(`flowMsgIds/${telfUid}`);
+  return data ?? [];
+}
+
+async function eliminarFlowMsgIds(telfUid: number) {
+  await fbDelete(`flowMsgIds/${telfUid}`);
+}
 async function eliminarEscort(uid: number) {
   delete escortsCache[uid];
   await fbDelete(`escorts/${uid}`);
@@ -301,17 +314,25 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
     // Trackear SIEMPRE para borrar al cerrar — incluyendo mensajes del chat
     if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
     convTelf[uid].flowMsgIds!.push(newId);
+    // Guardar en Firebase para sobrevivir reinicios
+    guardarFlowMsgIds(uid, convTelf[uid].flowMsgIds!).catch(() => {});
   }
   return newId;
 }
 
 async function limpiarChat(uid: number, nombre: string) {
   const conv = convTelf[uid];
-  if (conv?.flowMsgIds) {
-    for (const msgId of conv.flowMsgIds) {
-      await deleteMsg(uid, msgId);
-    }
+  // Cargar IDs de Firebase por si el servidor reinició
+  let idsABorrar = conv?.flowMsgIds ?? [];
+  if (idsABorrar.length === 0) {
+    idsABorrar = await cargarFlowMsgIds(uid);
   }
+  // Borrar todos los mensajes
+  for (const msgId of idsABorrar) {
+    await deleteMsg(uid, msgId);
+  }
+  // Limpiar de Firebase
+  await eliminarFlowMsgIds(uid);
   convTelf[uid] = { paso: "idle", nombre, flowMsgIds: [] };
   await mostrarPanelTelf(uid, nombre);
 }
@@ -708,6 +729,7 @@ async function handleMessage(msg: any) {
         if (photoR?.result?.message_id && convTelf[telfUid]) {
           if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
           convTelf[telfUid].flowMsgIds!.push(photoR.result.message_id);
+          guardarFlowMsgIds(telfUid, convTelf[telfUid].flowMsgIds!).catch(() => {});
         }
       } else if (texto && !tieneContacto(texto)) {
         const escMsg = await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
@@ -715,6 +737,7 @@ async function handleMessage(msg: any) {
         if (escMsg?.result?.message_id && convTelf[telfUid]) {
           if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
           convTelf[telfUid].flowMsgIds!.push(escMsg.result.message_id);
+          guardarFlowMsgIds(telfUid, convTelf[telfUid].flowMsgIds!).catch(() => {});
         }
       } else if (tieneContacto(texto)) {
         await deleteMsg(GRUPO_ESCORTS, msg.message_id);
@@ -811,6 +834,7 @@ async function handleMessage(msg: any) {
       // Durante chat: trackear mensaje del telf para borrar al cerrar
       if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
       convTelf[uid].flowMsgIds!.push(msg.message_id);
+      guardarFlowMsgIds(uid, convTelf[uid].flowMsgIds!).catch(() => {});
     }
     if (conv.paso === "en_chat" && conv.escortUid) {
       if (msg.photo) {
@@ -966,8 +990,41 @@ async function handleCallback(query: any) {
     }
     if (!conv) return answerCB(query.id, "❌ No tienes un servicio activo.", true);
     await answerCB(query.id);
-    convEscort[uid] = { ...conv, paso: "esperando_otro", escortMsgId: msgId, telfUid };
-    await editMsg(GRUPO_ESCORTS, msgId, `❌ *¿Por qué no hubo servicio?*\n━━━━━━━━━━━━━━\nEscribe el motivo en el grupo:\n\n💡 _Ejemplo: "El cliente se fue", "No quiso el precio", etc._`, { reply_markup: { inline_keyboard: [] } });
+    convEscort[uid] = { ...conv, escortMsgId: msgId, telfUid };
+    await editMsg(GRUPO_ESCORTS, msgId,
+      `❌ *¿Por qué no hubo servicio?*\n━━━━━━━━━━━━━━\n📱 Dígitos: \`${conv.terminal}\`\n━━━━━━━━━━━━━━\n\nSelecciona el motivo:`,
+      { reply_markup: { inline_keyboard: [
+        [{ text: "🚪 El cliente se fue", callback_data: `motivo_sefue_${uid}` }],
+        [{ text: "📝 Otro motivo",       callback_data: `motivo_otro_${uid}` }],
+      ]}}
+    );
+    return;
+  }
+
+  // ── Motivo: se fue ──
+  if (data.startsWith("motivo_sefue_")) {
+    const ownerId = parseInt(data.split("_")[2]);
+    if (uid !== ownerId) return answerCB(query.id, "❌ No es tu cliente.", true);
+    const conv = convEscort[uid];
+    if (!conv) return answerCB(query.id, "❌ Sin servicio activo.", true);
+    await answerCB(query.id);
+    delete convEscort[uid];
+    await cerrarServicio(uid, nombre, conv.telfUid!, conv.terminal!, null, "El cliente se fue");
+    return;
+  }
+
+  // ── Motivo: otro (pide texto) ──
+  if (data.startsWith("motivo_otro_")) {
+    const ownerId = parseInt(data.split("_")[2]);
+    if (uid !== ownerId) return answerCB(query.id, "❌ No es tu cliente.", true);
+    const conv = convEscort[uid];
+    if (!conv) return answerCB(query.id, "❌ Sin servicio activo.", true);
+    await answerCB(query.id);
+    convEscort[uid] = { ...conv, paso: "esperando_otro" };
+    await editMsg(GRUPO_ESCORTS, msgId,
+      `📝 *Escribe el motivo en el grupo:*\n━━━━━━━━━━━━━━\n💡 _Ejemplo: "No quiso el precio", "Era para otra", etc._`,
+      { reply_markup: { inline_keyboard: [] } }
+    );
     return;
   }
 
