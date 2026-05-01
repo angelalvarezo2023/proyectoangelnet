@@ -64,8 +64,8 @@ async function fbDelete(path: string): Promise<void> {
 // TIPOS
 // ──────────────────────────────────────────
 
-type PasoTelf  = "idle" | "esperando_terminal" | "esperando_monto" | "esperando_descripcion" | "en_chat";
-type PasoEscort = "esperando_nota" | "esperando_tiempo_custom" | "esperando_monto_real" | "esperando_otro" | "en_chat";
+type PasoTelf  = "idle" | "esperando_terminal" | "en_chat";
+type PasoEscort = "esperando_tiempo_custom" | "esperando_monto_real" | "esperando_otro" | "en_chat";
 
 interface ConvTelf {
   paso: PasoTelf;
@@ -73,12 +73,12 @@ interface ConvTelf {
   lastBotMsgId?: number;
   flowMsgIds?: number[];
   terminal?: string;
-  monto?: string;
-  descripcion?: string;
+  terminal?: string;
   escortMsgId?: number;
   escortUid?: number;
   escortNombre?: string;
 }
+
 
 interface ConvEscort {
   paso: PasoEscort;
@@ -255,6 +255,28 @@ async function answerCB(id: string, text?: string, alert = false) {
   return tPost("answerCallbackQuery", { callback_query_id: id, ...(text ? { text, show_alert: alert } : {}) });
 }
 
+// Forward any media type from one chat to another
+async function forwardMedia(msg: any, toChatId: number, senderLabel: string): Promise<number | undefined> {
+  let r: any = null;
+  if (msg.photo) {
+    const fileId = msg.photo[msg.photo.length - 1].file_id;
+    r = await tPost("sendPhoto", { chat_id: toChatId, photo: fileId, caption: `${senderLabel}${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
+  } else if (msg.voice) {
+    r = await tPost("sendVoice", { chat_id: toChatId, voice: msg.voice.file_id, caption: senderLabel, parse_mode: "Markdown" });
+  } else if (msg.video) {
+    r = await tPost("sendVideo", { chat_id: toChatId, video: msg.video.file_id, caption: `${senderLabel}${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
+  } else if (msg.audio) {
+    r = await tPost("sendAudio", { chat_id: toChatId, audio: msg.audio.file_id, caption: `${senderLabel}${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
+  } else if (msg.document) {
+    r = await tPost("sendDocument", { chat_id: toChatId, document: msg.document.file_id, caption: `${senderLabel}${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
+  } else if (msg.video_note) {
+    r = await tPost("sendVideoNote", { chat_id: toChatId, video_note: msg.video_note.file_id });
+  } else if (msg.sticker) {
+    r = await tPost("sendSticker", { chat_id: toChatId, sticker: msg.sticker.file_id });
+  }
+  return r?.result?.message_id;
+}
+
 function tieneContacto(txt: string): boolean {
   return [/\b\d[\d\s\-().]{6,}\d\b/, /@[a-zA-Z0-9_.]+/, /\b(whatsapp|telegram|instagram|facebook|tiktok|snapchat|twitter|ig|wa|fb)\b/i, /\b(t\.me|wa\.me|bit\.ly)\b/i, /\d{3}[\s\-]?\d{3}[\s\-]?\d{4}/].some(p => p.test(txt));
 }
@@ -427,12 +449,11 @@ async function iniciarFlujo(uid: number) {
   conv.paso = "esperando_terminal";
   const cola = textoCola();
   await enviarTelf(uid,
-    `📞 *REGISTRAR NUEVO CLIENTE*\n━━━━━━━━━━━━━━\n` +
+    `📞 *TIENES UN CLIENTE*\n━━━━━━━━━━━━━━\n` +
     (cola ? `${cola}\n━━━━━━━━━━━━━━\n` : ``) +
-    `\n*Paso 1 de 3*\n\n` +
-    `✏️ Escribe los *últimos 4 dígitos* del número del cliente:\n\n` +
-    `💡 _Ejemplo: si el número es 809-555-*1234*, escribe_ *1234*`,
-    { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar registro", callback_data: "cancelar_telf" }]] } }
+    `\n✏️ Escribe los *últimos 4 dígitos* del número del cliente:\n\n` +
+    `💡 _Ejemplo: si el número termina en 1234, escribe_ *1234*`,
+    { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
   );
 }
 
@@ -493,30 +514,27 @@ async function pasoDescripcion(uid: number) {
 async function publicarCliente(uid: number) {
   const conv = convTelf[uid];
   if (!conv) return;
-  const desc = conv.descripcion ? `\n📝 _${conv.descripcion}_` : "";
+  const info = infoTerminal(conv.terminal!);
   const eMsg = await tPost("sendMessage", {
     chat_id: GRUPO_ESCORTS, parse_mode: "Markdown",
     text:
-      `🔔 *NUEVO CLIENTE DISPONIBLE*\n━━━━━━━━━━━━━━\n` +
-      `📱 Últimos 4 dígitos del cliente: \`${conv.terminal}\`\n` +
-      `💰 El cliente pagará aproximadamente: *$${conv.monto}*${desc}\n` +
-      `📲 Enviado por: *${fn(conv.nombre)}*\n━━━━━━━━━━━━━━\n` +
-      `👆 Toca el botón si estás disponible para atenderlo`,
-    reply_markup: { inline_keyboard: [[{ text: "🙋 Acepto este cliente", callback_data: `acepto_${conv.terminal}_${conv.monto}_${uid}` }]] },
+      `🔔 *${fn(conv.nombre).toUpperCase()} TIENE UN CLIENTE*\n━━━━━━━━━━━━━━\n` +
+      `📱 Últimos 4 dígitos: \`${conv.terminal}\`${info}\n` +
+      `━━━━━━━━━━━━━━\n\n` +
+      `¿Deseas aceptarlo?\n\n` +
+      `💡 _Desde que toques el botón estarás hablando en línea con ${fn(conv.nombre)} directamente._`,
+    reply_markup: { inline_keyboard: [[{ text: "✅ Sí, acepto el cliente", callback_data: `acepto_${conv.terminal}_${uid}` }]] },
   });
   conv.paso = "en_chat";
   conv.escortMsgId = eMsg?.result?.message_id;
-  // Guardar el primer msg ID para borrar rango después
   if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
   await enviarTelf(uid,
-    `⏳ *CLIENTE ENVIADO — ESPERANDO RESPUESTA*\n━━━━━━━━━━━━━━\n` +
-    `✅ Últimos 4 dígitos: *${conv.terminal}*\n` +
-    `✅ Monto estimado: *$${conv.monto}*${desc}\n` +
+    `⏳ *ESPERANDO QUE UNA CHICA ACEPTE*\n━━━━━━━━━━━━━━\n` +
+    `📱 Últimos 4 dígitos: *${conv.terminal}*\n` +
     `━━━━━━━━━━━━━━\n\n` +
-    `📍 *Estado actual:* Esperando que una chica acepte...\n\n` +
-    `👥 *Chicas disponibles ahora:*\n${textoEscorts()}\n\n` +
-    `💡 _Cuando una chica acepte, te avisaremos aquí mismo._`,
-    { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar y volver al inicio", callback_data: "cancelar_telf" }]] } }
+    `👥 *Chicas disponibles:*\n${textoEscorts()}\n\n` +
+    `💡 _Cuando una chica acepte, estarán en chat directo._`,
+    { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
   );
 }
 
@@ -571,17 +589,16 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
     );
   }
   await enviarTelf(telfUid,
-    `✅ *¡${fn(escortNombre).toUpperCase()} ACEPTÓ EL CLIENTE!*\n` +
+    `✅ *¡${fn(escortNombre).toUpperCase()} ACEPTÓ TU CLIENTE!*\n` +
     `━━━━━━━━━━━━━━\n` +
     `📱 Últimos 4 dígitos: *${telfConv.terminal}*\n` +
-    `💰 Monto estimado: *$${telfConv.monto}*\n` +
     `━━━━━━━━━━━━━━\n\n` +
-    `💬 *ESTÁS EN CHAT DIRECTO CON ${fn(escortNombre).toUpperCase()}*\n\n` +
-    `⚡ *Todo lo que escribas aquí le llegará a ella al instante.*\n` +
-    `⚡ *Todo lo que ella escriba te llegará a ti aquí.*\n\n` +
-    `📸 También puedes enviar fotos.\n\n` +
+    `💬 *ESTÁS EN CHAT EN LÍNEA CON ${fn(escortNombre).toUpperCase()}*\n\n` +
+    `⚡ Todo lo que escribas aquí le llegará a ella al instante.\n` +
+    `⚡ Todo lo que ella escriba te llegará a ti aquí.\n\n` +
+    `📸 Puedes enviar fotos, notas de voz y videos.\n\n` +
     `━━━━━━━━━━━━━━\n` +
-    `💡 _Escribe tu mensaje abajo para comenzar la conversación._`,
+    `💡 _Escribe tu mensaje abajo para comenzar._`,
     { reply_markup: tecladoChatTelf(escortUid) }
   );
   convEscort[escortUid].paso = "en_chat";
@@ -594,7 +611,17 @@ async function confirmarEscort(escortUid: number, escortNombre: string) {
   if (!conv?.telfUid) return;
   if (conv.escortMsgId) {
     await editMsg(GRUPO_ESCORTS, conv.escortMsgId,
-      `💬 *Chat activo con telefonista*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${conv.terminal}\`\n💰 Estimado: *$${conv.monto}*\n━━━━━━━━━━━━━━\nEscribe aquí para hablar con el telefonista:`,
+      `✅ *${fn(escortNombre)} aceptó el cliente*\n━━━━━━━━━━━━━━\n` +
+      `📱 Últimos 4 dígitos: \`${conv.terminal}\`\n` +
+      `━━━━━━━━━━━━━━\n\n` +
+      `💬 *CHAT EN LÍNEA ABIERTO*\n\n` +
+      `⚡ Todo lo que escribas aquí le llegará al telefonista al instante.\n` +
+      `⚡ Todo lo que él escriba te llegará a ti aquí.\n\n` +
+      `📸 También puedes enviar fotos, notas de voz y videos.\n` +
+      `━━━━━━━━━━━━━━\n` +
+      `⬇️ *Cuando termines con el cliente:*\n` +
+      `✅ *Marcar como atendido* → El cliente pagó\n` +
+      `❌ *Cerrar sin servicio* → El cliente se fue sin pagar`,
       { reply_markup: tecladoChatEscort(conv.telfUid) }
     );
   }
@@ -668,7 +695,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `❌ *SERVICIO CERRADO SIN ATENDER*\n━━━━━━━━━━━━━━\n` +
         `🕐 Hora de cierre: *${ahora}*\n` +
         `📱 Últimos 4 dígitos: \`${terminal}\`\n` +
-        `💰 Lo que iba a pagar (estimado): *$${convE?.monto ?? "—"}*\n` +
+  
         `📋 Motivo: *${motivoTexto}*\n` +
         `👤 Telefonista: *${fn(telfNombre)}*\n━━━━━━━━━━━━━━\n_Ya quedas libre para el próximo cliente._`,
     }).catch(() => {});
@@ -678,7 +705,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
       `❌ *SERVICIO CERRADO SIN ATENDER*\n━━━━━━━━━━━━━━\n` +
       `🕐 Hora de cierre: *${ahora}*\n` +
       `📱 Últimos 4 dígitos del cliente: \`${terminal}\`\n` +
-      `💰 Lo que iba a pagar (estimado): *$${convE?.monto ?? "—"}*\n` +
+
       `📋 Motivo: *${motivoTexto}*\n` +
       `💃 Escort: *${fn(escortNombre)}*\n━━━━━━━━━━━━━━`,
       { reply_markup: { inline_keyboard: [] } }
@@ -743,17 +770,16 @@ async function handleMessage(msg: any) {
       }
 
 
-      if (msg.photo) {
-        const fileId = msg.photo[msg.photo.length - 1].file_id;
-        const photoR = await tPost("sendPhoto", { chat_id: telfUid, photo: fileId, caption: `💃 *Escort ${fn(nombre)}:*${msg.caption ? "\n" + msg.caption : ""}`, parse_mode: "Markdown" });
-        if (photoR?.result?.message_id && convTelf[telfUid]) {
+      const hasMedia = msg.photo || msg.voice || msg.video || msg.audio || msg.document || msg.video_note || msg.sticker;
+      if (hasMedia) {
+        const fwdId = await forwardMedia(msg, telfUid, `💃 *Escort ${fn(nombre)}:*`);
+        if (fwdId && convTelf[telfUid]) {
           if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
-          convTelf[telfUid].flowMsgIds!.push(photoR.result.message_id);
+          convTelf[telfUid].flowMsgIds!.push(fwdId);
           guardarFlowMsgIds(telfUid, convTelf[telfUid].flowMsgIds!).catch(() => {});
         }
       } else if (texto && !tieneContacto(texto)) {
         const escMsg = await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
-        // Trackear en el chat del telefonista para borrar al cerrar
         if (escMsg?.result?.message_id && convTelf[telfUid]) {
           if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
           convTelf[telfUid].flowMsgIds!.push(escMsg.result.message_id);
@@ -857,14 +883,16 @@ async function handleMessage(msg: any) {
       guardarFlowMsgIds(uid, convTelf[uid].flowMsgIds!).catch(() => {});
     }
     if (conv.paso === "en_chat" && conv.escortUid) {
-      if (msg.photo) {
-        const fileId = msg.photo[msg.photo.length - 1].file_id;
-        if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
-        await tPost("sendPhoto", { chat_id: GRUPO_ESCORTS, photo: fileId, caption: `📞 *Telefonista ${fn(conv.nombre)}:*${msg.caption ? `\n${msg.caption}` : ""}`, parse_mode: "Markdown" });
+      const hasMedia = msg.photo || msg.voice || msg.video || msg.audio || msg.document || msg.video_note || msg.sticker;
+      if (hasMedia) {
+        const fwdId = await forwardMedia(msg, GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*`);
+        if (fwdId && convEscort[conv.escortUid!]) {
+          if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
+          convEscort[conv.escortUid!].chatMsgIds!.push(fwdId);
+          guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]).catch(() => {});
+        }
       } else if (texto && !tieneContacto(texto)) {
-        const fwdMsg = await sendMsg(GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*
-${texto}`);
-        // Trackear msg enviado al grupo escorts
+        const fwdMsg = await sendMsg(GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*\n${texto}`);
         if (fwdMsg?.result?.message_id && convEscort[conv.escortUid!]) {
           if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
           convEscort[conv.escortUid!].chatMsgIds!.push(fwdMsg.result.message_id);
@@ -877,18 +905,17 @@ ${texto}`);
     }
     if (conv.paso === "idle" || conv.paso === "en_chat") return;
     if (conv.paso === "esperando_terminal") {
-      if (!/^\d{4}$/.test(texto)) { await enviarTelf(uid, `⚠️ *Ese número no es válido.*\n\nDebes escribir exactamente *4 dígitos*.\n💡 _Ejemplo: si el número termina en 1234, escribe_ *1234*\n\nIntenta de nuevo:`, { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar registro", callback_data: "cancelar_telf" }]] } }); return; }
-      conv.terminal = texto; await pasoMonto(uid); return;
+      if (!/^\d{4}$/.test(texto)) {
+        await enviarTelf(uid, `⚠️ *Ese número no es válido.*\n\nDebes escribir exactamente *4 dígitos*.\n💡 _Ejemplo: si el número termina en 1234, escribe_ *1234*\n\nIntenta de nuevo:`,
+          { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
+        );
+        return;
+      }
+      conv.terminal = texto;
+      await publicarCliente(uid);
+      return;
     }
-    if (conv.paso === "esperando_monto") {
-      const ml = texto.replace("$", "");
-      if (!/^\d+(\.\d+)?$/.test(ml)) { await enviarTelf(uid, `⚠️ *Ese monto no es válido.*\n\nEscribe solo el número, sin letras.\n💡 _Ejemplo: escribe_ *100* _(no "$100")_\n\nIntenta de nuevo:`, { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar registro", callback_data: "cancelar_telf" }]] } }); return; }
-      conv.monto = ml; await pasoDescripcion(uid); return;
-    }
-    if (conv.paso === "esperando_descripcion") {
-      if (tieneContacto(texto)) { await enviarTelf(uid, `🚫 *Mensaje bloqueado.*\n\nNo puedes escribir números de teléfono, redes sociales ni links.\n💡 _Escribe solo una descripción del cliente._`, { reply_markup: { inline_keyboard: [[{ text: "➡️ Sin nota, continuar", callback_data: "sin_nota_telf" }], [{ text: "❌ Cancelar registro", callback_data: "cancelar_telf" }]] } }); return; }
-      conv.descripcion = texto; await publicarCliente(uid); return;
-    }
+
   }
 }
 
@@ -923,15 +950,7 @@ async function handleCallback(query: any) {
     await mostrarPanelTelf(uid, nombre); return;
   }
 
-  if (data.startsWith("m_")) {
-    await answerCB(query.id);
-    const monto = data.replace("m_", "");
-    const conv  = convTelf[uid];
-    if (conv?.paso === "esperando_monto") { conv.monto = monto; await pasoDescripcion(uid); }
-    return;
-  }
-
-  if (data === "sin_nota_telf") { await answerCB(query.id); await publicarCliente(uid); return; }
+  // monto buttons removed - single step flow
 
   if (data === "ayuda") {
     await answerCB(query.id);
@@ -959,21 +978,17 @@ async function handleCallback(query: any) {
   if (data.startsWith("acepto_")) {
     if (!escortsCache[uid]) return answerCB(query.id, "❌ No estás registrada.", true);
     if (!escortsCache[uid].libre) return answerCB(query.id, "❌ Ya estás atendiendo un cliente.\nPara aceptar este, primero cierra el que ya tienes.", true);
-    const parts = data.split("_");
-    convEscort[uid] = { paso: "esperando_nota", terminal: parts[1], monto: parts[2], escortMsgId: msgId, telfUid: parseInt(parts[3]) };
+    const parts   = data.split("_");
+    const terminal = parts[1];
+    const telfUid  = parseInt(parts[2]);
+    // Abrir chat directamente sin pedir nota
+    convEscort[uid] = { paso: "en_chat", terminal, monto: "—", escortMsgId: msgId, telfUid, chatMsgIds: [msgId] };
     await guardarServicioActivo(uid, convEscort[uid]);
-    await editMsg(GRUPO_ESCORTS, msgId,
-      `🙋 *${fn(nombre)} tomando el cliente...*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${parts[1]}\`\n💰 Estimado: *$${parts[2]}*\n━━━━━━━━━━━━━━\n\n📝 ¿Tienes alguna nota para el telefonista?\nO toca _Sin nota_ para continuar:`,
-      { reply_markup: { inline_keyboard: [[{ text: "➡️ Sin nota", callback_data: `escortnota_${uid}` }]] } }
-    );
-    return answerCB(query.id, "✅ Escribe tu nota o toca 'Sin nota'.");
+    await answerCB(query.id, "✅ ¡Cliente aceptado! Ya estás en chat.");
+    await confirmarEscort(uid, nombre);
+    return;
   }
 
-  if (data.startsWith("escortnota_")) {
-    const ownerId = parseInt(data.split("_")[1]);
-    if (uid !== ownerId) return answerCB(query.id, "❌ No es tu cliente.", true);
-    await answerCB(query.id); await confirmarEscort(uid, nombre); return;
-  }
 
   if (data.startsWith("atendido_")) {
     const telfUid = parseInt(data.split("_")[1]);
