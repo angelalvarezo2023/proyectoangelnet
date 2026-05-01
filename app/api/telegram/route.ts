@@ -383,8 +383,19 @@ async function notificarTelefonistas(extra?: string) {
   for (const uid of Object.keys(telefonistasCache).map(Number)) {
     const conv = convTelf[uid];
     if (!conv || conv.paso !== "idle") continue;
-    if (conv.lastBotMsgId) {
-      await editMsg(uid, conv.lastBotMsgId, textoPanelTelf(conv.nombre, extra), {
+    if (extra) {
+      // Enviar mensaje nuevo para notificaciones importantes (ocupada/libre)
+      await sendMsg(uid,
+        `🔔 *Actualización de estado*
+━━━━━━━━━━━━━━
+${extra}
+
+👥 *Estado actual:*
+${textoEscorts()}`
+      ).catch(() => {});
+    } else if (conv.lastBotMsgId) {
+      // Solo actualizar el panel silenciosamente
+      await editMsg(uid, conv.lastBotMsgId, textoPanelTelf(conv.nombre), {
         reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }], [{ text: "❓ Ayuda / ¿Cómo funciona?", callback_data: "ayuda" }]] },
       }).catch(() => {});
     }
@@ -606,13 +617,14 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   const telfConv   = convTelf[telfUid];
   const escortConv = convEscort[escortUid];
   if (!telfConv || !escortConv) return;
+  // Marcar chat activo PRIMERO antes de cualquier otra cosa
   chatsActivos[escortUid] = telfUid;
   telfConv.escortUid    = escortUid;
   telfConv.escortNombre = escortNombre;
+  telfConv.paso         = "en_chat";
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = false; escortsCache[escortUid].ocupadaTexto = "con cliente"; await guardarEscort(escortUid); }
-  // Guardar en Firebase y marcar chat activo
+  // Guardar en Firebase
   await guardarServicioActivo(escortUid, convEscort[escortUid]);
-  chatsActivos[escortUid] = telfUid;
 
   // The editMsg on escortMsgId is already tracked
   if (escortConv.escortMsgId) {
@@ -670,6 +682,7 @@ async function confirmarEscort(escortUid: number, escortNombre: string) {
       { reply_markup: tecladoChatEscort(conv.telfUid) }
     );
   }
+  convEscort[escortUid].paso = "en_chat";
   await abrirChat(escortUid, escortNombre, conv.telfUid);
 }
 
@@ -958,7 +971,8 @@ async function handleMessage(msg: any) {
         );
         return;
       }
-      conv.terminal = texto;
+      convTelf[uid].terminal = texto;
+      convTelf[uid].paso = "en_chat"; // prevent double-send
       await publicarCliente(uid);
       return;
     }
@@ -1030,6 +1044,8 @@ async function handleCallback(query: any) {
     const telfUid  = parseInt(parts[2]);
     // Abrir chat directamente sin pedir nota
     convEscort[uid] = { paso: "en_chat", terminal, monto: "—", escortMsgId: msgId, telfUid };
+    // chatsActivos se setea en abrirChat, pero lo ponemos aquí también para evitar race condition
+    chatsActivos[uid] = telfUid;
     await guardarServicioActivo(uid, convEscort[uid]);
     await answerCB(query.id, "✅ ¡Cliente aceptado! Ya estás en chat.");
     await confirmarEscort(uid, nombre);
