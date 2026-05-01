@@ -255,6 +255,43 @@ async function answerCB(id: string, text?: string, alert = false) {
   return tPost("answerCallbackQuery", { callback_query_id: id, ...(text ? { text, show_alert: alert } : {}) });
 }
 
+// Lock/unlock escorts group
+async function cerrarGrupoEscorts() {
+  await tPost("setChatPermissions", {
+    chat_id: GRUPO_ESCORTS,
+    permissions: {
+      can_send_messages: false,
+      can_send_audios: false,
+      can_send_documents: false,
+      can_send_photos: false,
+      can_send_videos: false,
+      can_send_video_notes: false,
+      can_send_voice_notes: false,
+      can_send_polls: false,
+      can_send_other_messages: false,
+      can_add_web_page_previews: false,
+    }
+  });
+}
+
+async function abrirGrupoEscorts() {
+  await tPost("setChatPermissions", {
+    chat_id: GRUPO_ESCORTS,
+    permissions: {
+      can_send_messages: true,
+      can_send_audios: true,
+      can_send_documents: true,
+      can_send_photos: true,
+      can_send_videos: true,
+      can_send_video_notes: true,
+      can_send_voice_notes: true,
+      can_send_polls: false,
+      can_send_other_messages: true,
+      can_add_web_page_previews: false,
+    }
+  });
+}
+
 // Forward any media type from one chat to another
 async function forwardMedia(msg: any, toChatId: number, senderLabel: string): Promise<number | undefined> {
   let r: any = null;
@@ -466,6 +503,8 @@ async function cancelarTelf(uid: number) {
     delete chatsActivos[conv.escortUid];
     if (escortsCache[conv.escortUid]) { escortsCache[conv.escortUid].libre = true; escortsCache[conv.escortUid].ocupadaTexto = undefined; await guardarEscort(conv.escortUid); }
     if (convEscort[conv.escortUid]) delete convEscort[conv.escortUid];
+    // Cerrar el grupo
+    await cerrarGrupoEscorts();
   }
   const nombre = conv?.nombre ?? "";
   // limpiarChat necesita acceso a flowMsgIds — no resetear antes
@@ -561,6 +600,8 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   telfConv.escortUid    = escortUid;
   telfConv.escortNombre = escortNombre;
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = false; escortsCache[escortUid].ocupadaTexto = "con cliente"; await guardarEscort(escortUid); }
+  // Abrir el grupo para que la escort pueda escribir
+  await abrirGrupoEscorts();
   // Inicializar chatMsgIds con el mensaje original del cliente
   if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
   if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
@@ -639,6 +680,8 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   const ahora      = horaActual();
   delete chatsActivos[escortUid];
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = true; escortsCache[escortUid].ocupadaTexto = undefined; await guardarEscort(escortUid); }
+  // Cerrar el grupo — ya no se necesita escribir
+  await cerrarGrupoEscorts();
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
@@ -756,7 +799,7 @@ async function handleMessage(msg: any) {
     return;
   }
 
-  if (texto === "/panel" && chatId === GRUPO_ESCORTS) { await deleteMsg(GRUPO_ESCORTS, msg.message_id); await publicarPanelEscorts(); return; }
+  if (texto === "/panel" && chatId === GRUPO_ESCORTS) { await deleteMsg(GRUPO_ESCORTS, msg.message_id); await cerrarGrupoEscorts(); await publicarPanelEscorts(); return; }
 
   if (chatId === GRUPO_ESCORTS) {
     if (!escortsCache[uid]) { escortsCache[uid] = { uid, nombre, libre: true }; await guardarEscort(uid); await notificarTelefonistas(`🟢 *${fn(nombre)}* se registró como chica disponible.`); }
@@ -1006,8 +1049,7 @@ async function handleCallback(query: any) {
     await editMsg(GRUPO_ESCORTS, msgId,
       `✅ *¿Cuánto pagó el cliente?*\n━━━━━━━━━━━━━━\n📱 Últimos 4 dígitos: \`${conv.terminal}\`\n━━━━━━━━━━━━━━\n\n💡 Toca el monto o escríbelo abajo:`,
       { reply_markup: { inline_keyboard: [
-        [{ text: "$50", callback_data: `pm_50_${uid}` }, { text: "$100", callback_data: `pm_100_${uid}` }],
-        [{ text: "$150", callback_data: `pm_150_${uid}` }, { text: "$200", callback_data: `pm_200_${uid}` }],
+        [{ text: "$100", callback_data: `pm_100_${uid}` }, { text: "$150", callback_data: `pm_150_${uid}` }, { text: "$200", callback_data: `pm_200_${uid}` }],
         [{ text: "💵 Otro monto — escríbelo abajo", callback_data: `pm_otro_${uid}` }],
       ]}}
     ); return;
