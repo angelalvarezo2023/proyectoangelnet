@@ -567,6 +567,10 @@ async function publicarCliente(uid: number) {
   conv.paso = "en_chat";
   conv.escortMsgId = eMsg?.result?.message_id;
   if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
+  // Guardar firstEscortMsgId para borrar rango completo al cerrar
+  if (eMsg?.result?.message_id) {
+    await fbSet(`firstEscortMsg/${uid}`, eMsg.result.message_id);
+  }
   await enviarTelf(uid,
     `⏳ *ESPERANDO QUE UNA CHICA ACEPTE*\n━━━━━━━━━━━━━━\n` +
     `📱 Últimos 4 dígitos: *${conv.terminal}*\n` +
@@ -682,17 +686,30 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
-  // Siempre cargar de Firebase (más confiable) Y combinar con memoria
+  // Cargar de Firebase Y memoria, combinar
   const fbConvE    = await fbGet(`serviciosActivos/${escortUid}`);
   const idsMemE    = convE?.chatMsgIds ?? [];
   const idsFbE     = fbConvE?.chatMsgIds ?? [];
-  const msgsBorrar = [...new Set([...idsMemE, ...idsFbE])];
-  // Borrar en paralelo
-  await Promise.allSettled(
-    msgsBorrar.map((mId: number) => tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }))
-  );
+  const baseIds    = [...new Set([...idsMemE, ...idsFbE])].sort((a, b) => a - b);
+  
+  // Cargar el primer mensaje del bot (cuando publicó el cliente)
+  const telfUidForFirst = convE?.telfUid ?? fbConvE?.telfUid;
+  const firstBotMsg = telfUidForFirst ? await fbGet(`firstEscortMsg/${telfUidForFirst}`) : null;
+
+  // Calcular rango: desde el primer mensaje del bot hasta el último conocido
+  let firstId = firstBotMsg ?? (baseIds.length > 0 ? baseIds[0] : null);
+  const lastId  = baseIds.length > 0 ? baseIds[baseIds.length - 1] : (firstId ?? null);
+
+  if (firstId && lastId) {
+    const rangeIds: number[] = [];
+    for (let i = firstId; i <= (lastId as number) + 15; i++) rangeIds.push(i);
+    await Promise.allSettled(
+      rangeIds.map((mId: number) => tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }))
+    );
+  }
   // Limpiar de Firebase
   await guardarServicioActivo(escortUid, null);
+  if (telfUidForFirst) await fbDelete(`firstEscortMsg/${telfUidForFirst}`);
 
   if (montoReal !== null) {
     const comision = calcularComision(montoReal);
