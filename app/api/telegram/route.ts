@@ -505,9 +505,7 @@ async function cancelarTelf(uid: number) {
     delete chatsActivos[conv.escortUid];
     if (escortsCache[conv.escortUid]) { escortsCache[conv.escortUid].libre = true; escortsCache[conv.escortUid].ocupadaTexto = undefined; await guardarEscort(conv.escortUid); }
     if (convEscort[conv.escortUid]) delete convEscort[conv.escortUid];
-    // Cerrar el grupo
-    await cerrarGrupoEscorts();
-  }
+      }
   const nombre = conv?.nombre ?? "";
   // limpiarChat necesita acceso a flowMsgIds — no resetear antes
   await limpiarChat(uid, nombre);
@@ -602,8 +600,6 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   telfConv.escortUid    = escortUid;
   telfConv.escortNombre = escortNombre;
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = false; escortsCache[escortUid].ocupadaTexto = "con cliente"; await guardarEscort(escortUid); }
-  // Abrir el grupo para que la escort pueda escribir
-  await abrirGrupoEscorts();
   // Inicializar chatMsgIds con el mensaje original del cliente
   if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
   if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
@@ -683,7 +679,6 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   delete chatsActivos[escortUid];
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = true; escortsCache[escortUid].ocupadaTexto = undefined; await guardarEscort(escortUid); }
   // Cerrar el grupo — ya no se necesita escribir
-  await cerrarGrupoEscorts();
   await guardarServicioActivo(escortUid, null);
 
   // Borrar todos los mensajes del chat en el grupo de escorts
@@ -801,11 +796,29 @@ async function handleMessage(msg: any) {
     return;
   }
 
-  if (texto === "/panel" && chatId === GRUPO_ESCORTS) { await deleteMsg(GRUPO_ESCORTS, msg.message_id); await cerrarGrupoEscorts(); await publicarPanelEscorts(); return; }
+  if (texto === "/panel" && chatId === GRUPO_ESCORTS) { await deleteMsg(GRUPO_ESCORTS, msg.message_id); await publicarPanelEscorts(); return; }
 
   if (chatId === GRUPO_ESCORTS) {
     if (!escortsCache[uid]) { escortsCache[uid] = { uid, nombre, libre: true }; await guardarEscort(uid); await notificarTelefonistas(`🟢 *${fn(nombre)}* se registró como chica disponible.`); }
     const telfUid = chatsActivos[uid];
+    // Si no hay chat activo y no es un flujo del bot, borrar el mensaje y avisar
+    const convE = convEscort[uid];
+    const enFlujo = convE && ["esperando_tiempo_custom","esperando_monto_real","esperando_otro"].includes(convE.paso);
+    if (!telfUid && !enFlujo && msg.text && !msg.text.startsWith("/")) {
+      await deleteMsg(GRUPO_ESCORTS, msg.message_id);
+      await tPost("sendMessage", {
+        chat_id: GRUPO_ESCORTS,
+        parse_mode: "Markdown",
+        text: `⚠️ *${fn(nombre)}*, ahora mismo no tienes un cliente activo.
+
+💡 _Espera a que el bot te avise cuando haya un cliente para ti. No es necesario escribir aquí._`,
+      }).then(async (r: any) => {
+        if (r?.result?.message_id) {
+          setTimeout(() => deleteMsg(GRUPO_ESCORTS, r.result.message_id), 5000);
+        }
+      });
+      return;
+    }
     if (telfUid && convEscort[uid]?.paso === "en_chat") {
       // Trackear mensaje de la escort para borrarlo al cerrar
       if (convEscort[uid]) {
