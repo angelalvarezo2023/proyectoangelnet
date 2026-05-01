@@ -71,7 +71,6 @@ interface ConvTelf {
   paso: PasoTelf;
   nombre: string;
   lastBotMsgId?: number;
-  flowMsgIds?: number[];
   terminal?: string;
   terminal?: string;
   escortMsgId?: number;
@@ -87,7 +86,7 @@ interface ConvEscort {
   escortMsgId?: number;
   telfUid?: number;
   nota?: string;
-  chatMsgIds?: number[]; // todos los msgs del grupo escorts para borrar al cerrar
+
 }
 
 interface EstadoEscort {
@@ -167,25 +166,7 @@ async function guardarServicioActivo(escortUid: number, data: ConvEscort | null)
   else await fbDelete(`serviciosActivos/${escortUid}`);
 }
 
-async function guardarFlowMsgIds(telfUid: number, ids: number[]) {
-  if (ids.length === 0) return;
-  // Store min and max to delete full range
-  const min = Math.min(...ids);
-  const max = Math.max(...ids);
-  await fbSet(`flowMsgIds/${telfUid}`, { min, max, ids });
-}
 
-async function cargarFlowMsgIds(telfUid: number): Promise<number[]> {
-  const data = await fbGet(`flowMsgIds/${telfUid}`);
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (data.ids) return data.ids;
-  return [];
-}
-
-async function eliminarFlowMsgIds(telfUid: number) {
-  await fbDelete(`flowMsgIds/${telfUid}`);
-}
 async function eliminarEscort(uid: number) {
   delete escortsCache[uid];
   await fbDelete(`escorts/${uid}`);
@@ -386,26 +367,15 @@ async function enviarTelf(uid: number, texto: string, extra: object = {}): Promi
   if (newId && convTelf[uid]) {
     convTelf[uid].lastBotMsgId = newId;
     // Trackear SIEMPRE para borrar al cerrar — incluyendo mensajes del chat
-    if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
-    convTelf[uid].flowMsgIds!.push(newId);
+
     // Guardar en Firebase para sobrevivir reinicios
-    guardarFlowMsgIds(uid, convTelf[uid].flowMsgIds!).catch(() => {});
+
   }
   return newId;
 }
 
 async function limpiarChat(uid: number, nombre: string) {
-  const conv = convTelf[uid];
-  // Combinar IDs de memoria y Firebase
-  const idsFirebase = await cargarFlowMsgIds(uid);
-  const idsMemoria  = conv?.flowMsgIds ?? [];
-  const todosIds    = [...new Set([...idsMemoria, ...idsFirebase])].sort((a, b) => a - b);
-  // Borrar todos los mensajes del bot y del usuario
-  const promesas = todosIds.map(msgId => deleteMsg(uid, msgId));
-  await Promise.allSettled(promesas);
-  // Limpiar Firebase
-  await eliminarFlowMsgIds(uid);
-  convTelf[uid] = { paso: "idle", nombre, flowMsgIds: [] };
+  convTelf[uid] = { paso: "idle", nombre };
   await mostrarPanelTelf(uid, nombre);
 }
 
@@ -424,12 +394,12 @@ async function notificarTelefonistas(extra?: string) {
 async function mostrarPanelTelf(uid: number, nombre: string) {
   const nombreFinal = nombre || convTelf[uid]?.nombre || telefonistasCache[uid] || "Telefonista";
   await guardarTelefonista(uid, nombreFinal);
-  convTelf[uid] = { paso: "idle", nombre: nombreFinal, flowMsgIds: [] };
+  convTelf[uid] = { paso: "idle", nombre: nombreFinal };
   const r = await sendMsg(uid, textoPanelTelf(nombreFinal), {
     reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }], [{ text: "❓ Ayuda / ¿Cómo funciona?", callback_data: "ayuda" }]] },
   });
   const msgId = r?.result?.message_id;
-  if (msgId) { convTelf[uid].lastBotMsgId = msgId; convTelf[uid].flowMsgIds = [msgId]; }
+  if (msgId) convTelf[uid].lastBotMsgId = msgId;
 }
 
 // ──────────────────────────────────────────
@@ -437,46 +407,69 @@ async function mostrarPanelTelf(uid: number, nombre: string) {
 // ──────────────────────────────────────────
 
 async function intentarTurno(uid: number) {
-  if (colaActiva === null || colaActiva === uid) {
-    colaActiva = uid; await iniciarFlujo(uid);
+  const conv = convTelf[uid];
+  if (!conv) return;
+  const hayServicioActivo = Object.keys(chatsActivos).length > 0;
+  if (!hayServicioActivo && (colaActiva === null || colaActiva === uid)) {
+    colaActiva = uid;
+    await iniciarFlujo(uid);
   } else {
+    // Hay servicio activo — pedir dígitos ya y poner en cola
     if (!colaEspera.includes(uid)) colaEspera.push(uid);
+    if (colaActiva === null) colaActiva = uid;
     const pos = colaEspera.indexOf(uid) + 1;
+    conv.paso = "esperando_terminal";
     await enviarTelf(uid,
-      `⏳ *HAY UN REGISTRO EN CURSO*\n━━━━━━━━━━━━━━\n${textoCola()}\n━━━━━━━━━━━━━━\n\nEstás en la posición *#${pos}*.\n💡 _Te avisaremos aquí cuando sea tu turno._`,
-      { reply_markup: { inline_keyboard: [[{ text: "❌ Salir de la cola", callback_data: "salir_cola" }]] } }
+      `⏳ *HAY UN SERVICIO EN CURSO*\n━━━━━━━━━━━━━━\n\n` +
+      `Estás en la posición *#${pos}* de la cola.\n` +
+      `Tu cliente será enviado automáticamente cuando termine el servicio actual.\n\n` +
+      `✏️ Escribe ya los *últimos 4 dígitos* de tu cliente para tenerlo listo:`,
+      { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
     );
+    // Notificar a la escort que hay clientes esperando
+    await notificarEscortsCola();
   }
 }
+
 
 async function liberarTurno() {
   colaActiva = null;
   if (colaEspera.length === 0) return;
-  if (colaEspera.length > 1) {
-    const proximo = colaEspera[0];
-    const convP   = convTelf[proximo];
-    if (convP?.lastBotMsgId) {
-      await editMsg(proximo, convP.lastBotMsgId,
-        `⏰ *¡PREPÁRATE, CASI ES TU TURNO!*\n━━━━━━━━━━━━━━\n${textoCola()}\n━━━━━━━━━━━━━━\n\nSerás el siguiente en *30 segundos*. ¡Alistate!`,
-        { reply_markup: { inline_keyboard: [] } }
-      ).catch(() => {});
-    }
-    await new Promise(r => setTimeout(r, 30000));
-  }
+
   const siguiente = colaEspera.shift()!;
   colaActiva = siguiente;
-  await iniciarFlujo(siguiente);
+  const conv = convTelf[siguiente];
+
+  // Notificar al siguiente que es su turno
+  await enviarTelf(siguiente,
+    `✅ *¡ES TU TURNO!*\n━━━━━━━━━━━━━━\n` +
+    `Tu solicitud está siendo enviada ahora mismo...`,
+    { reply_markup: { inline_keyboard: [] } }
+  );
+
+  // Publicar cliente automáticamente si tiene terminal guardada
+  if (conv?.terminal) {
+    await publicarCliente(siguiente);
+  } else {
+    await enviarTelf(siguiente,
+      `✅ *¡ES TU TURNO!*\n━━━━━━━━━━━━━━\nPuedes registrar tu cliente ahora.`,
+      { reply_markup: { inline_keyboard: [[{ text: "📞 Nuevo Cliente", callback_data: "nuevo_cliente" }]] } }
+    );
+  }
+
+  // Actualizar posición de los demás en cola
   for (let i = 0; i < colaEspera.length; i++) {
     const u = colaEspera[i];
     const c = convTelf[u];
     if (c?.lastBotMsgId) {
       await editMsg(u, c.lastBotMsgId,
-        `⏳ *HAY UN REGISTRO EN CURSO*\n━━━━━━━━━━━━━━\n${textoCola()}\n━━━━━━━━━━━━━━\n\nAhora estás en la posición *#${i + 1}*.`,
-        { reply_markup: { inline_keyboard: [[{ text: "❌ Salir de la cola", callback_data: "salir_cola" }]] } }
+        `⏳ *HAY UN SERVICIO EN CURSO*\n━━━━━━━━━━━━━━\nAhora estás en la posición *#${i + 1}* de la cola.\nTe avisaremos cuando sea tu turno.`,
+        { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
       ).catch(() => {});
     }
   }
 }
+
 
 // ──────────────────────────────────────────
 // FLUJO TELEFONISTA
@@ -507,7 +500,6 @@ async function cancelarTelf(uid: number) {
     if (convEscort[conv.escortUid]) delete convEscort[conv.escortUid];
       }
   const nombre = conv?.nombre ?? "";
-  // limpiarChat necesita acceso a flowMsgIds — no resetear antes
   await limpiarChat(uid, nombre);
   await liberarTurno();
   await notificarTelefonistas();
@@ -553,6 +545,23 @@ async function pasoDescripcion(uid: number) {
 async function publicarCliente(uid: number) {
   const conv = convTelf[uid];
   if (!conv) return;
+
+  // Si hay otro servicio activo (alguien en chat), poner en cola
+  const hayServicioActivo = Object.keys(chatsActivos).length > 0;
+  if (hayServicioActivo && colaActiva !== uid) {
+    if (!colaEspera.includes(uid)) colaEspera.push(uid);
+    const pos = colaEspera.indexOf(uid) + 1;
+    await enviarTelf(uid,
+      `⏳ *HAY UN SERVICIO EN CURSO*\n━━━━━━━━━━━━━━\n` +
+      `Estás en la posición *#${pos}* de la cola.\n\n` +
+      `En cuanto termine el servicio actual, tu solicitud será enviada automáticamente.`,
+      { reply_markup: { inline_keyboard: [[{ text: "❌ Cancelar", callback_data: "cancelar_telf" }]] } }
+    );
+    // Notificar a la escort que hay clientes esperando
+    await notificarEscortsCola();
+    return;
+  }
+
   const info = infoTerminal(conv.terminal!);
   const eMsg = await tPost("sendMessage", {
     chat_id: GRUPO_ESCORTS, parse_mode: "Markdown",
@@ -566,11 +575,8 @@ async function publicarCliente(uid: number) {
   });
   conv.paso = "en_chat";
   conv.escortMsgId = eMsg?.result?.message_id;
-  if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
-  // Guardar firstEscortMsgId para borrar rango completo al cerrar
-  if (eMsg?.result?.message_id) {
-    await fbSet(`firstEscortMsg/${uid}`, eMsg.result.message_id);
-  }
+
+
   await enviarTelf(uid,
     `⏳ *ESPERANDO QUE UNA CHICA ACEPTE*\n━━━━━━━━━━━━━━\n` +
     `📱 Últimos 4 dígitos: *${conv.terminal}*\n` +
@@ -604,12 +610,8 @@ async function abrirChat(escortUid: number, escortNombre: string, telfUid: numbe
   telfConv.escortUid    = escortUid;
   telfConv.escortNombre = escortNombre;
   if (escortsCache[escortUid]) { escortsCache[escortUid].libre = false; escortsCache[escortUid].ocupadaTexto = "con cliente"; await guardarEscort(escortUid); }
-  // Inicializar chatMsgIds con el mensaje original del cliente
-  if (!convEscort[escortUid].chatMsgIds) convEscort[escortUid].chatMsgIds = [];
-  if (escortConv.escortMsgId) convEscort[escortUid].chatMsgIds!.push(escortConv.escortMsgId);
-  // Guardar en Firebase para sobrevivir reinicios (con chatMsgIds)
+  // Guardar en Firebase y marcar chat activo
   await guardarServicioActivo(escortUid, convEscort[escortUid]);
-  // Marcar chat activo
   chatsActivos[escortUid] = telfUid;
 
   // The editMsg on escortMsgId is already tracked
@@ -685,31 +687,8 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
   // Cerrar el grupo — ya no se necesita escribir
   await guardarServicioActivo(escortUid, null);
 
-  // Borrar todos los mensajes del chat en el grupo de escorts
-  // Cargar de Firebase Y memoria, combinar
-  const fbConvE    = await fbGet(`serviciosActivos/${escortUid}`);
-  const idsMemE    = convE?.chatMsgIds ?? [];
-  const idsFbE     = fbConvE?.chatMsgIds ?? [];
-  const baseIds    = [...new Set([...idsMemE, ...idsFbE])].sort((a, b) => a - b);
-  
-  // Cargar el primer mensaje del bot (cuando publicó el cliente)
-  const telfUidForFirst = convE?.telfUid ?? fbConvE?.telfUid;
-  const firstBotMsg = telfUidForFirst ? await fbGet(`firstEscortMsg/${telfUidForFirst}`) : null;
-
-  // Calcular rango: desde el primer mensaje del bot hasta el último conocido
-  let firstId = firstBotMsg ?? (baseIds.length > 0 ? baseIds[0] : null);
-  const lastId  = baseIds.length > 0 ? baseIds[baseIds.length - 1] : (firstId ?? null);
-
-  if (firstId && lastId) {
-    const rangeIds: number[] = [];
-    for (let i = firstId; i <= (lastId as number) + 15; i++) rangeIds.push(i);
-    await Promise.allSettled(
-      rangeIds.map((mId: number) => tPost("deleteMessage", { chat_id: GRUPO_ESCORTS, message_id: mId }))
-    );
-  }
-  // Limpiar de Firebase
+  // Limpiar servicio de Firebase
   await guardarServicioActivo(escortUid, null);
-  if (telfUidForFirst) await fbDelete(`firstEscortMsg/${telfUidForFirst}`);
 
   if (montoReal !== null) {
     const comision = calcularComision(montoReal);
@@ -731,8 +710,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `━━━━━━━━━━━━━━\n_Toca el botón cuando termines con el cliente._`,
       reply_markup: JSON.stringify({ inline_keyboard: [[{ text: "🟢 Ya terminé, estoy libre", callback_data: `yalibre_${escortUid}` }]] }),
     }).catch(() => {});
-    // NO resetear convTelf antes — limpiarChat necesita los flowMsgIds
-    await limpiarChat(telfUid, telfNombre);
+      await limpiarChat(telfUid, telfNombre);
     await sendMsg(telfUid,
       `✅ *¡SERVICIO COMPLETADO!*\n━━━━━━━━━━━━━━\n` +
       `🕐 Hora de cierre: *${ahora}*\n` +
@@ -756,8 +734,7 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
         `📋 Motivo: *${motivoTexto}*\n` +
         `👤 Telefonista: *${fn(telfNombre)}*\n━━━━━━━━━━━━━━\n_Ya quedas libre para el próximo cliente._`,
     }).catch(() => {});
-    // NO resetear convTelf antes — limpiarChat necesita los flowMsgIds
-    await limpiarChat(telfUid, telfNombre);
+      await limpiarChat(telfUid, telfNombre);
     await sendMsg(telfUid,
       `❌ *SERVICIO CERRADO SIN ATENDER*\n━━━━━━━━━━━━━━\n` +
       `🕐 Hora de cierre: *${ahora}*\n` +
@@ -776,6 +753,16 @@ async function cerrarServicio(escortUid: number, escortNombre: string, telfUid: 
 // ──────────────────────────────────────────
 // PANEL ESCORTS
 // ──────────────────────────────────────────
+
+async function notificarEscortsCola() {
+  const enCola = colaEspera.length;
+  if (enCola === 0) return;
+  const texto =
+    `⚡ *¡Hay ${enCola} cliente${enCola > 1 ? "s" : ""} esperando en cola!*\n━━━━━━━━━━━━━━\n\n` +
+    `Termina con el cliente actual lo antes posible.\n` +
+    `En cuanto estés libre, la siguiente solicitud llegará automáticamente.`;
+  await tPost("sendMessage", { chat_id: GRUPO_ESCORTS, text: texto, parse_mode: "Markdown" });
+}
 
 async function publicarPanelEscorts() {
   const lista = Object.values(escortsCache);
@@ -838,27 +825,20 @@ async function handleMessage(msg: any) {
     }
     if (telfUid && convEscort[uid]?.paso === "en_chat") {
       // Trackear mensaje de la escort para borrarlo al cerrar
-      if (convEscort[uid]) {
-        if (!convEscort[uid].chatMsgIds) convEscort[uid].chatMsgIds = [];
-        convEscort[uid].chatMsgIds!.push(msg.message_id);
-        guardarServicioActivo(uid, convEscort[uid]).catch(() => {});
-      }
+
 
 
       const hasMedia = msg.photo || msg.voice || msg.video || msg.audio || msg.document || msg.video_note || msg.sticker;
       if (hasMedia) {
         const fwdId = await forwardMedia(msg, telfUid, `💃 *Escort ${fn(nombre)}:*`);
         if (fwdId && convTelf[telfUid]) {
-          if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
-          convTelf[telfUid].flowMsgIds!.push(fwdId);
-          guardarFlowMsgIds(telfUid, convTelf[telfUid].flowMsgIds!).catch(() => {});
+
         }
       } else if (texto && !tieneContacto(texto)) {
         const escMsg = await sendMsg(telfUid, `💃 *Escort ${fn(nombre)}:*\n${texto}`);
         if (escMsg?.result?.message_id && convTelf[telfUid]) {
           if (!convTelf[telfUid].flowMsgIds) convTelf[telfUid].flowMsgIds = [];
           convTelf[telfUid].flowMsgIds!.push(escMsg.result.message_id);
-          guardarFlowMsgIds(telfUid, convTelf[telfUid].flowMsgIds!).catch(() => {});
         }
       } else if (tieneContacto(texto)) {
         await deleteMsg(GRUPO_ESCORTS, msg.message_id);
@@ -953,26 +933,18 @@ async function handleMessage(msg: any) {
       await deleteMsg(uid, msg.message_id);
     } else {
       // Durante chat: trackear mensaje del telf para borrar al cerrar
-      if (!convTelf[uid].flowMsgIds) convTelf[uid].flowMsgIds = [];
+    
       convTelf[uid].flowMsgIds!.push(msg.message_id);
-      guardarFlowMsgIds(uid, convTelf[uid].flowMsgIds!).catch(() => {});
+  
     }
     if (conv.paso === "en_chat" && conv.escortUid) {
       const hasMedia = msg.photo || msg.voice || msg.video || msg.audio || msg.document || msg.video_note || msg.sticker;
       if (hasMedia) {
         const fwdId = await forwardMedia(msg, GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*`);
-        if (fwdId && convEscort[conv.escortUid!]) {
-          if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
-          convEscort[conv.escortUid!].chatMsgIds!.push(fwdId);
-          guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]).catch(() => {});
-        }
+
       } else if (texto && !tieneContacto(texto)) {
         const fwdMsg = await sendMsg(GRUPO_ESCORTS, `📞 *Telefonista ${fn(conv.nombre)}:*\n${texto}`);
-        if (fwdMsg?.result?.message_id && convEscort[conv.escortUid!]) {
-          if (!convEscort[conv.escortUid!].chatMsgIds) convEscort[conv.escortUid!].chatMsgIds = [];
-          convEscort[conv.escortUid!].chatMsgIds!.push(fwdMsg.result.message_id);
-          guardarServicioActivo(conv.escortUid!, convEscort[conv.escortUid!]).catch(() => {});
-        }
+
       } else if (tieneContacto(texto)) {
         await sendMsg(uid, `🚫 No se permiten teléfonos ni redes sociales.`);
       }
@@ -1057,7 +1029,7 @@ async function handleCallback(query: any) {
     const terminal = parts[1];
     const telfUid  = parseInt(parts[2]);
     // Abrir chat directamente sin pedir nota
-    convEscort[uid] = { paso: "en_chat", terminal, monto: "—", escortMsgId: msgId, telfUid, chatMsgIds: [msgId] };
+    convEscort[uid] = { paso: "en_chat", terminal, monto: "—", escortMsgId: msgId, telfUid };
     await guardarServicioActivo(uid, convEscort[uid]);
     await answerCB(query.id, "✅ ¡Cliente aceptado! Ya estás en chat.");
     await confirmarEscort(uid, nombre);
