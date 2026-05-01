@@ -257,6 +257,8 @@ async function answerCB(id: string, text?: string, alert = false) {
 
 // Lock/unlock escorts group
 async function cerrarGrupoEscorts() {
+  // Solo cerrar si NO hay ningún chat activo
+  if (Object.keys(chatsActivos).length > 0) return;
   await tPost("setChatPermissions", {
     chat_id: GRUPO_ESCORTS,
     permissions: {
