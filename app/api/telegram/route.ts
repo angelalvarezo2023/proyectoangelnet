@@ -178,7 +178,7 @@ async function handleMessage(msg: any) {
     await tPost("deleteMessage", { chat_id: chatId, message_id: msg.message_id });
     // Generar ID único para la sala
     const roomId = `tunel-${Math.random().toString(36).substring(2, 9)}`;
-    const enlace = `https://meet.jit.si/${roomId}`;
+    const enlace = `https://jitsi.riot.im/${roomId}`;
     const texto  =
       `🎥 *Video verificación*\n━━━━━━━━━━━━━━\n\n` +
       `🔗 *Enlace de la sala:*\n${enlace}\n\n` +
