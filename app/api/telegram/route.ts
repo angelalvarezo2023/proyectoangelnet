@@ -173,6 +173,31 @@ async function handleMessage(msg: any) {
   // Ignorar entradas/salidas del grupo
   if (msg.new_chat_members || msg.left_chat_member) return;
 
+  // Comando /video — solo para telefonistas
+  if (msg.text === "/video" && chatId === GRUPO_B) {
+    await tPost("deleteMessage", { chat_id: chatId, message_id: msg.message_id });
+    // Generar ID único para la sala
+    const roomId = `tunel-${Math.random().toString(36).substring(2, 9)}`;
+    const enlace = `https://meet.jit.si/${roomId}`;
+    const texto  =
+      `🎥 *Video verificación*\n━━━━━━━━━━━━━━\n\n` +
+      `🔗 *Enlace de la sala:*\n${enlace}\n\n` +
+      `💡 _Envía este enlace al cliente y dile a la modelo que lo abra también._\n` +
+      `⏱ _La sala se cierra sola cuando todos salgan._`;
+    // Enviar a telefonistas
+    await tPost("sendMessage", { chat_id: GRUPO_B, text: texto, parse_mode: "Markdown" });
+    // Enviar a escorts también para que entren
+    await tPost("sendMessage", {
+      chat_id: GRUPO_A,
+      text:
+        `🎥 *Video verificación solicitada*\n━━━━━━━━━━━━━━\n\n` +
+        `🔗 *Abre este enlace en tu navegador:*\n${enlace}\n\n` +
+        `💡 _Abre Chrome o Safari, pega el enlace y permite el acceso a tu cámara._`,
+      parse_mode: "Markdown",
+    });
+    return;
+  }
+
   // Puente: Grupo A → Grupo B
   if (chatId === GRUPO_A) {
     const textoA = msg.text || msg.caption || "";
