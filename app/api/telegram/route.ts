@@ -184,17 +184,8 @@ async function handleMessage(msg: any) {
       `🔗 *Enlace de la sala:*\n${enlace}\n\n` +
       `💡 _Envía este enlace al cliente y dile a la modelo que lo abra también._\n` +
       `⏱ _La sala se cierra sola cuando todos salgan._`;
-    // Enviar a telefonistas
+    // Enviar solo al grupo de telefonistas
     await tPost("sendMessage", { chat_id: GRUPO_B, text: texto, parse_mode: "Markdown" });
-    // Enviar a escorts también para que entren
-    await tPost("sendMessage", {
-      chat_id: GRUPO_A,
-      text:
-        `🎥 *Video verificación solicitada*\n━━━━━━━━━━━━━━\n\n` +
-        `🔗 *Abre este enlace en tu navegador:*\n${enlace}\n\n` +
-        `💡 _Abre Chrome o Safari, pega el enlace y permite el acceso a tu cámara._`,
-      parse_mode: "Markdown",
-    });
     return;
   }
 
