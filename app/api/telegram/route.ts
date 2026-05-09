@@ -179,13 +179,30 @@ async function handleMessage(msg: any) {
     // Generar ID único para la sala
     const roomId = `tunel-${Math.random().toString(36).substring(2, 9)}`;
     const enlace = `https://jitsi.riot.im/${roomId}`;
-    const texto  =
-      `🎥 *Video verificación*\n━━━━━━━━━━━━━━\n\n` +
+    const advertencia =
+      `\n\n⚠️ *AVISO DE SEGURIDAD*\n` +
+      `🔴 Esta sesión está siendo *monitoreada*.\n` +
+      `🚫 Cualquier intento de compartir número de teléfono, redes sociales o información personal resultará en *expulsión inmediata* del grupo.`;
+
+    const texto =
+      `🎥 *Video Verificación*\n━━━━━━━━━━━━━━\n\n` +
       `🔗 *Enlace de la sala:*\n${enlace}\n\n` +
-      `💡 _Envía este enlace al cliente y dile a la modelo que lo abra también._\n` +
-      `⏱ _La sala se cierra sola cuando todos salgan._`;
-    // Enviar solo al grupo de telefonistas
+      `💡 _Envía este enlace al cliente y dile a la modelo que lo abra._\n` +
+      `⏱ _La sala se cierra sola cuando todos salgan._` +
+      advertencia;
+
+    // Enviar a telefonistas
     await tPost("sendMessage", { chat_id: GRUPO_B, text: texto, parse_mode: "Markdown" });
+    // Enviar a escorts
+    await tPost("sendMessage", {
+      chat_id: GRUPO_A,
+      parse_mode: "Markdown",
+      text:
+        `🎥 *Video Verificación*\n━━━━━━━━━━━━━━\n\n` +
+        `🔗 *Enlace de la sala:*\n${enlace}\n\n` +
+        `💡 _Abre el enlace en Chrome o Safari y permite acceso a tu cámara._` +
+        advertencia,
+    });
     return;
   }
 
