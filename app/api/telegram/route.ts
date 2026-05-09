@@ -24,18 +24,42 @@ function fn(nombre: string): string {
   return (nombre ?? "").split(" ")[0];
 }
 
+// Registro de infracciones por usuario
+const infracciones: Record<number, number> = {};
+
+function tieneContacto(texto: string): boolean {
+  return [
+    /\d[\d\s\-().]{6,}\d/,          // números de teléfono
+    /\+\d{1,3}[\s\-]?\d{6,}/,           // teléfonos con código de país
+    /\d{3}[\s\-]?\d{3}[\s\-]?\d{4}/,    // formato xxx-xxx-xxxx
+    /@[a-zA-Z0-9_.]{2,}/,               // usuarios @
+    /(whatsapp|telegram|instagram|facebook|tiktok|snapchat|twitter|youtube|ig|wa|fb|tt)/i,
+    /(t\.me|wa\.me|bit\.ly|instagram\.com|facebook\.com)/i,
+  ].some(p => p.test(texto));
+}
+
+async function banear(chatId: number, uid: number) {
+  await tPost("banChatMember", { chat_id: chatId, user_id: uid });
+}
+
+async function expulsar(chatId: number, uid: number) {
+  await tPost("banChatMember", { chat_id: chatId, user_id: uid });
+  // Desbanear inmediatamente para que pueda volver a unirse si el admin lo permite
+  await tPost("unbanChatMember", { chat_id: chatId, user_id: uid });
+}
+
 // ──────────────────────────────────────────
 // REENVIAR MENSAJE AL OTRO GRUPO
 // ──────────────────────────────────────────
 
-async function reenviar(msg: any, destino: number) {
+async function reenviar(msg: any, destino: number, tag: string) {
   const nombre  = fn(msg.from?.first_name ?? "");
+  const label   = `${tag} | ${nombre}:`;
   const caption = msg.caption ? `\n${msg.caption}` : "";
-
   if (msg.text) {
     await tPost("sendMessage", {
       chat_id: destino,
-      text: `*${nombre}:*\n${msg.text}`,
+      text: `*${label}*\n${msg.text}`,
       parse_mode: "Markdown",
     });
   } else if (msg.photo) {
@@ -43,35 +67,35 @@ async function reenviar(msg: any, destino: number) {
     await tPost("sendPhoto", {
       chat_id: destino,
       photo: fileId,
-      caption: `*${nombre}:*${caption}`,
+      caption: `*${label}*${caption}`,
       parse_mode: "Markdown",
     });
   } else if (msg.voice) {
     await tPost("sendVoice", {
       chat_id: destino,
       voice: msg.voice.file_id,
-      caption: `*${nombre}:*`,
+      caption: `*${label}*`,
       parse_mode: "Markdown",
     });
   } else if (msg.video) {
     await tPost("sendVideo", {
       chat_id: destino,
       video: msg.video.file_id,
-      caption: `*${nombre}:*${caption}`,
+      caption: `*${label}*${caption}`,
       parse_mode: "Markdown",
     });
   } else if (msg.audio) {
     await tPost("sendAudio", {
       chat_id: destino,
       audio: msg.audio.file_id,
-      caption: `*${nombre}:*${caption}`,
+      caption: `*${label}*${caption}`,
       parse_mode: "Markdown",
     });
   } else if (msg.document) {
     await tPost("sendDocument", {
       chat_id: destino,
       document: msg.document.file_id,
-      caption: `*${nombre}:*${caption}`,
+      caption: `*${label}*${caption}`,
       parse_mode: "Markdown",
     });
   } else if (msg.video_note) {
@@ -88,12 +112,59 @@ async function reenviar(msg: any, destino: number) {
 }
 
 // ──────────────────────────────────────────
+// MANEJO DE INFRACCIONES
+// ──────────────────────────────────────────
+
+async function manejarInfraccion(msg: any, chatId: number, uid: number, nombre: string) {
+  // Borrar el mensaje
+  await tPost("deleteMessage", { chat_id: chatId, message_id: msg.message_id });
+
+  infracciones[uid] = (infracciones[uid] ?? 0) + 1;
+  const count = infracciones[uid];
+
+  if (count === 1) {
+    // Primera vez — advertencia
+    const aviso = await tPost("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "Markdown",
+      text:
+        `⚠️ *${fn(nombre)}*, tu mensaje fue eliminado.\n\n` +
+        `🚫 *Está prohibido compartir:*\n` +
+        `• Números de teléfono\n` +
+        `• Redes sociales (Instagram, WhatsApp, etc.)\n` +
+        `• Links o usuarios (@)\n\n` +
+        `⚠️ *Si lo vuelves a intentar, serás expulsado del grupo.*`,
+    });
+    // Borrar el aviso después de 10 segundos
+    setTimeout(() => {
+      tPost("deleteMessage", { chat_id: chatId, message_id: aviso.result?.message_id }).catch(() => {});
+    }, 10000);
+  } else {
+    // Segunda vez — expulsar
+    await expulsar(chatId, uid);
+    const aviso = await tPost("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "Markdown",
+      text:
+        `🚫 *${fn(nombre)}* fue expulsado por intentar compartir información de contacto por segunda vez.`,
+    });
+    // Borrar el aviso después de 10 segundos
+    setTimeout(() => {
+      tPost("deleteMessage", { chat_id: chatId, message_id: aviso.result?.message_id }).catch(() => {});
+    }, 10000);
+    // Resetear infracciones
+    delete infracciones[uid];
+  }
+}
+
+// ──────────────────────────────────────────
 // MANEJADOR DE MENSAJES
 // ──────────────────────────────────────────
 
 async function handleMessage(msg: any) {
   const chatId: number = msg.chat?.id;
   const uid: number    = msg.from?.id;
+  const nombre: string = msg.from?.first_name ?? "";
   if (!chatId || !uid) return;
 
   // Ignorar mensajes del propio bot
@@ -104,13 +175,23 @@ async function handleMessage(msg: any) {
 
   // Puente: Grupo A → Grupo B
   if (chatId === GRUPO_A) {
-    await reenviar(msg, GRUPO_B);
+    const textoA = msg.text || msg.caption || "";
+    if (tieneContacto(textoA)) {
+      await manejarInfraccion(msg, chatId, uid, nombre);
+      return;
+    }
+    await reenviar(msg, GRUPO_B, "🌹 Modelo");
     return;
   }
 
   // Puente: Grupo B → Grupo A
   if (chatId === GRUPO_B) {
-    await reenviar(msg, GRUPO_A);
+    const textoB = msg.text || msg.caption || "";
+    if (tieneContacto(textoB)) {
+      await manejarInfraccion(msg, chatId, uid, nombre);
+      return;
+    }
+    await reenviar(msg, GRUPO_A, "📞 Telefonista");
     return;
   }
 }
