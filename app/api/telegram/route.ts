@@ -170,8 +170,33 @@ async function handleMessage(msg: any) {
   // Ignorar mensajes del propio bot
   if (msg.from?.is_bot) return;
 
-  // Ignorar entradas/salidas del grupo
-  if (msg.new_chat_members || msg.left_chat_member) return;
+  // Cuando el bot es añadido a un grupo, enviar el ID
+  if (msg.new_chat_members) {
+    const botFueAgregado = msg.new_chat_members.some((m: any) => m.is_bot && m.username === (process.env.BOT_USERNAME ?? ""));
+    if (botFueAgregado || msg.new_chat_members.some((m: any) => m.is_bot)) {
+      await tPost("sendMessage", {
+        chat_id: chatId,
+        parse_mode: "Markdown",
+        text:
+          `✅ *Bot agregado correctamente*\n━━━━━━━━━━━━━━\n\n` +
+          `📋 *ID de este grupo:*\n\`${chatId}\`\n\n` +
+          `💡 _Copia este ID y envíaselo al administrador para configurar el puente._`,
+      });
+    }
+    return;
+  }
+  if (msg.left_chat_member) return;
+
+  // Comando /id — dice el ID del grupo actual
+  if (msg.text === "/id") {
+    await tPost("sendMessage", {
+      chat_id: chatId,
+      parse_mode: "Markdown",
+      text: `📋 *ID de este grupo:*
+\`${chatId}\``,
+    });
+    return;
+  }
 
   // Comando /video — solo para telefonistas
   if (msg.text === "/video" && chatId === GRUPO_B) {
