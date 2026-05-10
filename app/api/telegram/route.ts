@@ -3,9 +3,13 @@ import { NextRequest, NextResponse } from "next/server";
 const TOKEN = process.env.TELEGRAM_TOKEN!;
 const API   = `https://api.telegram.org/bot${TOKEN}`;
 
-// Los dos grupos que se comunican
-const GRUPO_A = -1003938759901; // Grupo escorts
-const GRUPO_B = -5171466708;   // Grupo telefonistas
+// Par 1
+const GRUPO_A = -1003938759901; // Grupo escorts 1
+const GRUPO_B = -5171466708;    // Grupo telefonistas 1
+
+// Par 2
+const GRUPO_C = -5175401059;    // Grupo escorts 2
+const GRUPO_D = -5214284822;    // Grupo telefonistas 2
 
 // ──────────────────────────────────────────
 // HELPERS
@@ -199,7 +203,8 @@ async function handleMessage(msg: any) {
   }
 
   // Comando /video — solo para telefonistas
-  if (msg.text === "/video" && chatId === GRUPO_B) {
+  if (msg.text === "/video" && (chatId === GRUPO_B || chatId === GRUPO_D)) {
+    const destinoEscorts = chatId === GRUPO_B ? GRUPO_A : GRUPO_C;
     await tPost("deleteMessage", { chat_id: chatId, message_id: msg.message_id });
     // Generar ID único para la sala
     const roomId = `tunel-${Math.random().toString(36).substring(2, 9)}`;
@@ -217,10 +222,10 @@ async function handleMessage(msg: any) {
       advertencia;
 
     // Enviar a telefonistas
-    await tPost("sendMessage", { chat_id: GRUPO_B, text: texto, parse_mode: "Markdown" });
+    await tPost("sendMessage", { chat_id: chatId, text: texto, parse_mode: "Markdown" });
     // Enviar a escorts
     await tPost("sendMessage", {
-      chat_id: GRUPO_A,
+      chat_id: destinoEscorts,
       parse_mode: "Markdown",
       text:
         `🎥 *Video Verificación*\n━━━━━━━━━━━━━━\n\n` +
@@ -234,10 +239,7 @@ async function handleMessage(msg: any) {
   // Puente: Grupo A → Grupo B
   if (chatId === GRUPO_A) {
     const textoA = msg.text || msg.caption || "";
-    if (tieneContacto(textoA)) {
-      await manejarInfraccion(msg, chatId, uid, nombre);
-      return;
-    }
+    if (tieneContacto(textoA)) { await manejarInfraccion(msg, chatId, uid, nombre); return; }
     await reenviar(msg, GRUPO_B, "🌹 Modelo");
     return;
   }
@@ -245,11 +247,24 @@ async function handleMessage(msg: any) {
   // Puente: Grupo B → Grupo A
   if (chatId === GRUPO_B) {
     const textoB = msg.text || msg.caption || "";
-    if (tieneContacto(textoB)) {
-      await manejarInfraccion(msg, chatId, uid, nombre);
-      return;
-    }
+    if (tieneContacto(textoB)) { await manejarInfraccion(msg, chatId, uid, nombre); return; }
     await reenviar(msg, GRUPO_A, "📞 Telefonista");
+    return;
+  }
+
+  // Puente: Grupo C → Grupo D
+  if (chatId === GRUPO_C) {
+    const textoC = msg.text || msg.caption || "";
+    if (tieneContacto(textoC)) { await manejarInfraccion(msg, chatId, uid, nombre); return; }
+    await reenviar(msg, GRUPO_D, "🌹 Modelo");
+    return;
+  }
+
+  // Puente: Grupo D → Grupo C
+  if (chatId === GRUPO_D) {
+    const textoD = msg.text || msg.caption || "";
+    if (tieneContacto(textoD)) { await manejarInfraccion(msg, chatId, uid, nombre); return; }
+    await reenviar(msg, GRUPO_C, "📞 Telefonista");
     return;
   }
 }
