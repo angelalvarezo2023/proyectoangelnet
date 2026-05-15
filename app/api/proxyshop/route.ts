@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // ─────────────────────────────────────────
-//  CONFIG — pon estas variables en .env
+//  CONFIG
 // ─────────────────────────────────────────
-const TOKEN = process.env.PROXY_BOT_TOKEN!;
+const TOKEN = "8798842692:AAHzSInpAEcNxsDkf8_FkJTPGNPjD3qdu-Q";
 const API = `https://api.telegram.org/bot${TOKEN}`;
-const PROXY6_KEY = process.env.PROXY6_API_KEY!;
+const PROXY6_KEY = "c5008743d3-dfb41a5904-d007bb3002";
 const PROXY6_API = `https://px6.link/api/${PROXY6_KEY}`;
 
 // ─────────────────────────────────────────
@@ -14,7 +14,6 @@ const PROXY6_API = `https://px6.link/api/${PROXY6_KEY}`;
 type Session = {
   step: "idle" | "country" | "type" | "qty" | "days" | "confirm";
   country?: string;
-  proxyType?: "4" | "6"; // IPv4 = 4, IPv6 = 6
   version?: "4" | "6";
   qty?: number;
   days?: number;
@@ -22,7 +21,7 @@ type Session = {
   currency?: string;
 };
 
-// Sesiones en memoria (para producción usa Redis o una DB)
+// Sesiones en memoria
 const sessions: Record<number, Session> = {};
 
 // Países populares disponibles en Proxy6
@@ -54,11 +53,7 @@ async function tPost(method: string, body: object): Promise<any> {
   return res.json();
 }
 
-async function sendMessage(
-  chatId: number,
-  text: string,
-  extra: object = {}
-): Promise<void> {
+async function sendMessage(chatId: number, text: string, extra: object = {}): Promise<void> {
   await tPost("sendMessage", {
     chat_id: chatId,
     text,
@@ -99,10 +94,10 @@ async function handleStart(chatId: number, firstName: string) {
       `Soy tu bot de compra de proxies privados. Aquí puedes adquirir proxies IPv4 e IPv6 de alta calidad en segundos.\n\n` +
       `Usa los botones para comenzar:`,
     {
-      reply_markup: buildKeyboard([
-        ["🛒 Comprar Proxies"],
-        ["💰 Mi Balance", "ℹ️ Ayuda"],
-      ]),
+      reply_markup: buildKeyboard(
+        [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
+        false
+      ),
     }
   );
 }
@@ -114,11 +109,9 @@ async function handleBuyStart(chatId: number) {
   for (let i = 0; i < countryKeys.length; i += 2) {
     rows.push(countryKeys.slice(i, i + 2));
   }
-  await sendMessage(
-    chatId,
-    `🌍 <b>Paso 1/4 — Elige el país de los proxies:</b>`,
-    { reply_markup: buildKeyboard(rows) }
-  );
+  await sendMessage(chatId, `🌍 <b>Paso 1/4 — Elige el país de los proxies:</b>`, {
+    reply_markup: buildKeyboard(rows),
+  });
 }
 
 async function handleCountrySelected(chatId: number, countryLabel: string) {
@@ -163,12 +156,9 @@ async function handleQtySelected(chatId: number, qtyStr: string) {
   sessions[chatId] = { ...sessions[chatId], step: "days", qty };
   await sendMessage(
     chatId,
-    `✅ Cantidad: <b>${qty} proxies</b>\n\n` +
-      `📅 <b>Paso 4/4 — ¿Por cuántos días?</b>`,
+    `✅ Cantidad: <b>${qty} proxies</b>\n\n` + `📅 <b>Paso 4/4 — ¿Por cuántos días?</b>`,
     {
-      reply_markup: buildKeyboard([
-        PERIODS.map((d) => `${d} días`),
-      ]),
+      reply_markup: buildKeyboard([PERIODS.map((d) => `${d} días`)]),
     }
   );
 }
@@ -185,7 +175,6 @@ async function handleDaysSelected(chatId: number, daysStr: string) {
     return;
   }
 
-  // Consultar precio a Proxy6
   await sendMessage(chatId, "⏳ Calculando precio...");
 
   try {
@@ -204,13 +193,7 @@ async function handleDaysSelected(chatId: number, daysStr: string) {
     const price = priceData.price;
     const currency = priceData.currency;
 
-    sessions[chatId] = {
-      ...session,
-      step: "confirm",
-      days,
-      price,
-      currency,
-    };
+    sessions[chatId] = { ...session, step: "confirm", days, price, currency };
 
     const countryLabel =
       Object.entries(COUNTRIES).find(([, v]) => v === session.country)?.[0] || session.country;
@@ -223,7 +206,7 @@ async function handleDaysSelected(chatId: number, daysStr: string) {
         `📦 Cantidad: <b>${session.qty} proxies</b>\n` +
         `📅 Período: <b>${days} días</b>\n` +
         `💵 Precio total: <b>${price} ${currency}</b>\n\n` +
-        `⚠️ El pago se deducirá de tu saldo en Proxy6.\n\n` +
+        `⚠️ El pago se deducirá del saldo en Proxy6.\n\n` +
         `¿Confirmas la compra?`,
       { reply_markup: buildKeyboard([["✅ Confirmar compra", "❌ Cancelar"]]) }
     );
@@ -284,9 +267,7 @@ async function handleConfirmPurchase(chatId: number) {
     // Formatear proxies entregados
     const proxyList = Object.values(buyData.list) as any[];
     let proxyText = "";
-
     for (const proxy of proxyList) {
-      // Formato: host:port:user:pass
       proxyText += `<code>${proxy.host}:${proxy.port}:${proxy.user}:${proxy.pass}</code>\n`;
     }
 
@@ -311,18 +292,17 @@ async function handleConfirmPurchase(chatId: number) {
         `💵 Total pagado: <b>${session.price} ${session.currency}</b>\n\n` +
         `🔐 <b>Tus proxies (host:puerto:usuario:contraseña):</b>\n\n` +
         proxyText +
-        `\n📌 Formato soportado: HTTP/HTTPS`
+        `\n📌 Protocolo: HTTP/HTTPS`
     );
 
     // Resetear sesión
     sessions[chatId] = { step: "idle" };
 
-    // Menú principal de nuevo
     await sendMessage(chatId, `¿Deseas comprar más proxies?`, {
-      reply_markup: buildKeyboard([
-        ["🛒 Comprar Proxies"],
-        ["💰 Mi Balance", "ℹ️ Ayuda"],
-      ]),
+      reply_markup: buildKeyboard(
+        [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
+        false
+      ),
     });
   } catch (err) {
     await sendMessage(chatId, "❌ Error interno al procesar la compra. Intenta de nuevo.");
@@ -340,8 +320,7 @@ async function handleBalance(chatId: number) {
     await sendMessage(
       chatId,
       `💰 <b>Balance en Proxy6:</b>\n\n` +
-        `<b>${data.balance} ${data.currency}</b>\n\n` +
-        `<i>Este es el balance de la cuenta de Proxy6 asociada.</i>`
+        `<b>${data.balance} ${data.currency}</b>`
     );
   } catch {
     await sendMessage(chatId, "❌ Error de conexión con Proxy6.");
@@ -356,10 +335,9 @@ async function handleHelp(chatId: number) {
       `2. Elige tu país, tipo (IPv4/IPv6), cantidad y período\n` +
       `3. Revisa el precio y confirma\n` +
       `4. ¡Recibes tus proxies al instante!\n\n` +
-      `<b>Formatos entregados:</b>\n` +
+      `<b>Formato entregado:</b>\n` +
       `<code>host:puerto:usuario:contraseña</code>\n\n` +
-      `<b>Protocolos:</b> HTTP / HTTPS\n\n` +
-      `¿Tienes problemas? Contacta al administrador.`
+      `<b>Protocolos:</b> HTTP / HTTPS`
   );
 }
 
@@ -372,19 +350,15 @@ export async function POST(req: NextRequest) {
     const message = body.message;
     const callbackQuery = body.callback_query;
 
-    // ── Manejo de mensajes de texto ──
+    // ── Mensajes de texto ──
     if (message) {
       const chatId: number = message.chat.id;
       const text: string = message.text || "";
       const firstName: string = message.from?.first_name || "Usuario";
       const session = sessions[chatId] || { step: "idle" };
 
-      if (text === "/start" || text === "🛒 Comprar Proxies" && session.step === "idle") {
-        if (text === "/start") {
-          await handleStart(chatId, firstName);
-        } else {
-          await handleBuyStart(chatId);
-        }
+      if (text === "/start") {
+        await handleStart(chatId, firstName);
       } else if (text === "🛒 Comprar Proxies") {
         await handleBuyStart(chatId);
       } else if (text === "💰 Mi Balance") {
@@ -392,30 +366,28 @@ export async function POST(req: NextRequest) {
       } else if (text === "ℹ️ Ayuda") {
         await handleHelp(chatId);
       } else {
-        // Mensajes inesperados
         await sendMessage(
           chatId,
-          `Por favor usa los botones del menú para navegar.\nEscribe /start si necesitas reiniciar.`
+          `Usa los botones del menú para navegar.\nEscribe /start si necesitas reiniciar.`
         );
       }
     }
 
-    // ── Manejo de botones inline ──
+    // ── Botones inline ──
     if (callbackQuery) {
       const chatId: number = callbackQuery.message.chat.id;
       const data: string = callbackQuery.data;
       const session = sessions[chatId] || { step: "idle" };
 
-      // Responder al callback para quitar el "reloj" en Telegram
       await tPost("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 
       if (data === "❌ Cancelar") {
         sessions[chatId] = { step: "idle" };
         await sendMessage(chatId, "❌ Compra cancelada.", {
-          reply_markup: buildKeyboard([
-            ["🛒 Comprar Proxies"],
-            ["💰 Mi Balance", "ℹ️ Ayuda"],
-          ]),
+          reply_markup: buildKeyboard(
+            [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
+            false
+          ),
         });
         return NextResponse.json({ ok: true });
       }
@@ -464,7 +436,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET para registrar el webhook (visita esta URL una vez desde el navegador)
+// ─────────────────────────────────────────
+//  GET — registrar / verificar webhook
+// ─────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
@@ -472,7 +446,7 @@ export async function GET(req: NextRequest) {
   if (action === "setWebhook") {
     const webhookUrl = searchParams.get("url");
     if (!webhookUrl) {
-      return NextResponse.json({ error: "Falta ?url=https://tu-dominio.vercel.app/api/proxy" });
+      return NextResponse.json({ error: "Falta ?url=https://tu-dominio.vercel.app/api/proxyshop" });
     }
     const res = await fetch(`${API}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
     const data = await res.json();
@@ -486,11 +460,11 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
-    bot: "Proxy Sales Bot",
+    bot: "ProxyShop Bot",
     status: "running",
     instructions: {
-      setWebhook: "GET /api/proxy?action=setWebhook&url=https://tu-dominio.vercel.app/api/proxy",
-      getWebhook: "GET /api/proxy?action=getWebhook",
+      setWebhook: "GET /api/proxyshop?action=setWebhook&url=https://tu-dominio.vercel.app/api/proxyshop",
+      getWebhook: "GET /api/proxyshop?action=getWebhook",
     },
   });
 }
