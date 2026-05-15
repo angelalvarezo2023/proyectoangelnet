@@ -74,6 +74,114 @@ const orders: Record<string, Order> = {};
 const proxyPool: ProxyEntry[] = [];
 const clientProxies: Record<number, ClientProxy[]> = {};
 
+// ─── ESTADISTICAS ──────────────────────────────────────
+type StatEntry = {
+  orderId: string;
+  chatId: number;
+  firstName: string;
+  username?: string;
+  qty: number;
+  metodoPago: string;
+  monto: string;
+  tipo: OrderType;
+  fecha: Date;
+};
+
+const statsVentas: StatEntry[] = [];
+
+function registrarStat(order: Order) {
+  const metodoKey = Object.entries(METODOS_PAGO).find(
+    ([, v]) => v.nombre === order.metodoPago
+  )?.[0] || "banreservas";
+  const monto = getPrecioMonto(metodoKey, order.qty);
+  statsVentas.push({
+    orderId: order.orderId,
+    chatId: order.chatId,
+    firstName: order.firstName,
+    username: order.username,
+    qty: order.qty,
+    metodoPago: order.metodoPago,
+    monto,
+    tipo: order.tipo,
+    fecha: new Date(),
+  });
+}
+
+function getStatsMes(): string {
+  const ahora = new Date();
+  const mes = ahora.getMonth();
+  const anio = ahora.getFullYear();
+
+  const delMes = statsVentas.filter((s) => {
+    return s.fecha.getMonth() === mes && s.fecha.getFullYear() === anio;
+  });
+
+  const ventas = delMes.filter((s) => s.tipo === "compra");
+  const renovaciones = delMes.filter((s) => s.tipo === "renovacion");
+
+  const totalIPsVendidas = ventas.reduce((acc, s) => acc + s.qty, 0);
+
+  // Ingresos por método
+  const ingresosPorMetodo: Record<string, number> = {};
+  for (const s of delMes) {
+    const montoNum = parseFloat(s.monto.replace(/[^0-9.]/g, "")) || 0;
+    ingresosPorMetodo[s.metodoPago] = (ingresosPorMetodo[s.metodoPago] || 0) + montoNum;
+  }
+
+  const mesesNombres = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+    "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+  let txt =
+    `📊 <b>Estadisticas de ${mesesNombres[mes]} ${anio}</b>
+` +
+    `━━━━━━━━━━━━━━
+
+` +
+    `🛒 <b>Ventas:</b> ${ventas.length} pedido(s) — ${totalIPsVendidas} IP(s)
+` +
+    `🔄 <b>Renovaciones:</b> ${renovaciones.length}
+
+`;
+
+  if (Object.keys(ingresosPorMetodo).length > 0) {
+    txt += `💵 <b>Ingresos estimados:</b>
+`;
+    for (const [metodo, total] of Object.entries(ingresosPorMetodo)) {
+      txt += `  • ${metodo}: <b>${total.toLocaleString()}</b>
+`;
+    }
+    txt += `
+`;
+  }
+
+  if (ventas.length > 0) {
+    txt += `📋 <b>Ultimas ventas:</b>
+`;
+    for (const s of ventas.slice(-5).reverse()) {
+      const user = s.username ? `@${s.username}` : s.firstName;
+      txt += `  • ${user} — ${s.qty} IP(s) — ${s.metodoPago}
+`;
+    }
+  }
+
+  if (renovaciones.length > 0) {
+    txt += `
+🔄 <b>Ultimas renovaciones:</b>
+`;
+    for (const s of renovaciones.slice(-5).reverse()) {
+      const user = s.username ? `@${s.username}` : s.firstName;
+      txt += `  • ${user} — ${s.metodoPago}
+`;
+    }
+  }
+
+  if (delMes.length === 0) {
+    txt += `No hay actividad registrada este mes aun.`;
+  }
+
+  return txt;
+}
+
 // ─── HELPERS ───────────────────────────────────────────
 async function tPost(method: string, body: object): Promise<any> {
   const res = await fetch(`${API}/${method}`, {
@@ -301,7 +409,7 @@ function generarFacturaTexto(order: Order, proxies: string[]): string {
     `━━━━━━━━━━━━━━━━━━━━\n\n` +
     proxiesFormateados + `\n\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📌 Protocolo: HTTPS / SOCKS5 ✓\n` +
+    `📌 Protocolo: HTTPS ✓\n` +
     `✅ <b>Pago Confirmado</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `💡 <i>Guarda este mensaje como comprobante.</i>\n` +
@@ -375,6 +483,7 @@ async function deliverProxies(order: Order, proxies: string[]) {
   const factura = generarFacturaTexto(order, proxies);
   await sendMessage(order.chatId, factura, { reply_markup: mainMenu() });
   registrarProxiesCliente(order.chatId, proxies, 30);
+  registrarStat(order);
   orders[order.orderId].proxies = proxies;
   orders[order.orderId].status = "completed";
   setSession(order.chatId, { step: "idle" });
@@ -432,6 +541,7 @@ async function confirmRenovacion(order: Order, adminChatId: number) {
     { reply_markup: mainMenu() }
   );
 
+  registrarStat(order);
   orders[order.orderId].status = "completed";
   setSession(order.chatId, { step: "idle" });
   await sendMessage(adminChatId, `✅ Renovacion ${order.orderId} completada y cliente notificado.`);
@@ -716,6 +826,7 @@ async function handleManualRenovado(text: string, adminChatId: number) {
     `━━━━━━━━━━━━━━━━━━━━`,
     { reply_markup: mainMenu() }
   );
+  registrarStat(order);
   orders[orderId].status = "completed";
   setSession(order.chatId, { step: "idle" });
   await sendMessage(adminChatId, `✅ Cliente notificado.`);
@@ -793,6 +904,7 @@ export async function POST(req: NextRequest) {
       }
 
       // Comandos admin
+      if (isAdmin && text === "/stats") { await sendMessage(chatId, getStatsMes()); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/entregar")) { await handleManualDeliver(text, chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/renovado"))  { await handleManualRenovado(text, chatId);  return NextResponse.json({ ok: true }); }
       if (isAdmin && text === "/lista") {
