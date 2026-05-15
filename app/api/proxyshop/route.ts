@@ -38,6 +38,23 @@ const METODOS_PAGO = {
   },
 };
 
+// ─── CACHÉ EN MEMORIA ─────────────────────────────────
+// Evita consultas innecesarias a Firebase en cada request
+let poolCache: { hostPort: string; full: string; addedAt: number }[] | null = null;
+let poolCacheTime = 0;
+const POOL_CACHE_TTL = 60 * 1000; // 1 minuto
+
+async function getPoolCached() {
+  if (poolCache && Date.now() - poolCacheTime < POOL_CACHE_TTL) return poolCache;
+  poolCache = await getPool();
+  poolCacheTime = Date.now();
+  return poolCache;
+}
+
+function invalidatePoolCache() {
+  poolCache = null;
+}
+
 type Session = {
   step: "idle" | "qty" | "payment" | "waiting_receipt" | "renew_input" | "renew_payment";
   qty?: number;
@@ -179,6 +196,7 @@ async function agregarProxy(input: string, adminChatId: number) {
 
   // Guardar inmediatamente — user:pass se buscan en Proxy6 al momento de entregar
   await addToPool({ hostPort, full: hostPort, addedAt: Date.now() });
+  invalidatePoolCache();
   const poolActualizado = await getPool();
   const lista = poolActualizado.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n");
 
@@ -198,6 +216,7 @@ async function handleLimpiarIP(input: string, adminChatId: number) {
     return;
   }
   await removeFromPool(hostPort);
+  invalidatePoolCache();
   const pool = await getPool();
   await sendMessage(adminChatId,
     `✅ <code>${hostPort}</code> eliminada.\n📦 Disponibles ahora: <b>${pool.length}</b>`
@@ -378,7 +397,7 @@ async function handleStart(chatId: number, firstName: string) {
 
 async function handleBuyStart(chatId: number) {
   setSession(chatId, { step: "qty" });
-  const pool = await getPool();
+  const pool = await getPoolCached();
   const stock = pool.length;
 
   const opciones = [1, 3, 5, 10, 20, 50];
@@ -490,7 +509,7 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
   if (order.status === "completed") { await sendMessage(adminChatId, `⚠️ Ya fue entregado.`); return; }
   if (order.tipo === "renovacion") { await confirmRenovacion(order, adminChatId); return; }
 
-  const pool = await getPool();
+  const pool = await getPoolCached();
 
   if (pool.length < order.qty) {
     await sendMessage(adminChatId,
@@ -677,7 +696,7 @@ export async function POST(req: NextRequest) {
       if (isAdmin && text === "/stats")             { await handleStats(chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/limpiar"))   { await handleLimpiarIP(text, chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text === "/lista")             {
-        const pool = await getPool();
+        const pool = await getPoolCached();
         if (pool.length === 0) { await sendMessage(chatId, `📋 La lista esta vacia.`); }
         else { await sendMessage(chatId, `📋 <b>IPs disponibles (${pool.length}):</b>\n\n${pool.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n")}`); }
         return NextResponse.json({ ok: true });
