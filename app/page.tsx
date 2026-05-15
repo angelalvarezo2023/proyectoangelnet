@@ -1,251 +1,281 @@
 "use client";
+import { useEffect, useState } from "react";
 
-import { Suspense, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { LoginForm } from "@/components/LoginForm";
-import { UnifiedAdmin } from "@/components/UnifiedAdmin";
-import { ControlPanel } from "@/components/control-panel";
-import { ProxyPanel } from "@/components/proxy-panel";
-import { ChatGrupal } from "@/components/ui/chat-grupal";
-import { SERVICES, CONTACT } from "@/lib/firebase";
-import { Navigation } from "@/components/navigation";
-import { ServiceCard } from "@/components/service-card";
-import { FlameIcon, CheckIcon } from "@/components/icons";
-import Loading from "./loading";
-import { useState } from "react";
+export default function Home() {
+  const [count, setCount] = useState(3);
 
-type View = "home" | "anuncios" | "admin" | "chat";
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCount((c) => {
+        if (c <= 1) {
+          clearInterval(interval);
+          window.location.href = "https://t.me/AngelVercelRentBot";
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
-function HomeContent() {
-  const { user, userData, signOut } = useAuth();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  
-  const currentView = (searchParams.get("view") as View) || "home";
-  
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [showProxyPanel, setShowProxyPanel] = useState(false);
-
-  const handleViewChange = (newView: View) => {
-    if (newView === "admin") {
-      if (!user) {
-        setShowAdminLogin(true);
-        return;
-      }
-    }
-    
-    if (newView === "home") {
-      router.push("/");
-    } else {
-      router.push(`/?view=${newView}`);
-    }
-    
-    setShowAdminLogin(false);
-  };
-
-  const handleLoginSuccess = () => {
-    setShowAdminLogin(false);
-    router.push("/?view=admin");
-  };
-
-  // 🎯 SI ESTÁ EN ADMIN, RENDERIZAR SOLO EL PANEL (PANTALLA COMPLETA)
-  if (currentView === "admin") {
-    return (
-      <ProtectedRoute requireAdmin={true}>
-        <UnifiedAdmin 
-          isOpen={true}
-          onClose={() => router.push("/")}
-        />
-      </ProtectedRoute>
-    );
-  }
-
-  // RESTO DE VISTAS (con Navigation y main container normal)
   return (
-    <div className="min-h-screen bg-background">
-      <Navigation 
-        currentView={currentView} 
-        onViewChange={handleViewChange}
-        userName={userData?.name}
-        isAdmin={userData?.isAdmin}
-        onLogout={user ? signOut : undefined}
-      />
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');
 
-      <main className="mx-auto max-w-7xl px-4 py-8">
-        {/* Home View */}
-        {currentView === "home" && (
-          <div className="space-y-12">
-            {/* Hero Section */}
-            <section className="relative overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-card via-card to-secondary/50 p-8 md:p-12">
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(var(--primary)/.1)_0%,transparent_50%)]" />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_80%,rgba(var(--accent)/.1)_0%,transparent_50%)]" />
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-              <div className="relative">
-                <div className="mx-auto max-w-3xl text-center">
-                  <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-4 py-1.5 text-sm text-primary">
-                    <FlameIcon className="h-4 w-4" />
-                    <span>Servicio #1 en el Mercado</span>
-                  </div>
+        :root {
+          --bg: #09090f;
+          --card: #111118;
+          --red: #c41e3a;
+          --red-glow: rgba(196, 30, 58, 0.25);
+          --gold: #d4af5f;
+          --white: #f0f0f5;
+          --muted: #6b6b80;
+          --border: rgba(255,255,255,0.07);
+        }
 
-                  <h1 className="mb-4 text-balance text-4xl font-bold tracking-tight text-foreground md:text-5xl lg:text-6xl">
-                    Megapersonals{" "}
-                    <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">Premium</span>
-                  </h1>
+        html, body { height: 100%; background: var(--bg); }
 
-                  <p className="mb-8 text-pretty text-lg text-muted-foreground md:text-xl">
-                    Servicios profesionales de alta calidad. Proxies, cuentas verificadas y soporte 24/7.
-                  </p>
+        .page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'DM Sans', sans-serif;
+          position: relative;
+          overflow: hidden;
+        }
 
-                  <div className="flex flex-wrap items-center justify-center gap-6">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20">
-                        <CheckIcon className="h-3.5 w-3.5 text-accent" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">Entrega Inmediata</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20">
-                        <CheckIcon className="h-3.5 w-3.5 text-accent" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">Soporte 24/7</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-accent/20">
-                        <CheckIcon className="h-3.5 w-3.5 text-accent" />
-                      </div>
-                      <span className="text-sm text-muted-foreground">Garantía Incluida</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
+        /* Grid de fondo */
+        .page::before {
+          content: '';
+          position: fixed;
+          inset: 0;
+          background-image:
+            linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+          background-size: 48px 48px;
+          pointer-events: none;
+        }
 
-            {/* Services Grid */}
-            <section>
-              <div className="mb-8">
-                <h2 className="mb-2 text-2xl font-bold text-foreground">Nuestros Servicios</h2>
-                <p className="text-muted-foreground">Selecciona el servicio que mejor se adapte a tus necesidades</p>
-              </div>
+        /* Glow rojo esquina superior izquierda */
+        .glow-tl {
+          position: fixed;
+          top: -120px;
+          left: -120px;
+          width: 480px;
+          height: 480px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(196,30,58,0.18) 0%, transparent 70%);
+          pointer-events: none;
+        }
 
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {SERVICES.map((service) => (
-                  <ServiceCard 
-                    key={service.id} 
-                    service={service}
-                    onProxyClick={service.id === "proxy" ? () => setShowProxyPanel(true) : undefined}
-                  />
-                ))}
-              </div>
-            </section>
+        /* Glow dorado esquina inferior derecha */
+        .glow-br {
+          position: fixed;
+          bottom: -100px;
+          right: -100px;
+          width: 380px;
+          height: 380px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(212,175,95,0.10) 0%, transparent 70%);
+          pointer-events: none;
+        }
 
-            {/* Contact Section */}
-            <section className="rounded-2xl border border-border bg-card p-8 text-center">
-              <h3 className="mb-2 text-xl font-semibold text-foreground">¿Tienes preguntas?</h3>
-              <p className="mb-6 text-muted-foreground">Contáctanos y te ayudaremos con lo que necesites</p>
-              <div className="flex flex-wrap items-center justify-center gap-6 text-sm">
-                <a
-                  href={`https://wa.me/${CONTACT.whatsapp}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 rounded-xl bg-accent/10 px-4 py-2 text-accent transition-colors hover:bg-accent/20"
-                >
-                  <span>WhatsApp: +1 {CONTACT.whatsapp}</span>
-                </a>
-                <a
-                  href={`mailto:${CONTACT.email}`}
-                  className="flex items-center gap-2 rounded-xl bg-primary/10 px-4 py-2 text-primary transition-colors hover:bg-primary/20"
-                >
-                  <span>{CONTACT.email}</span>
-                </a>
-              </div>
-            </section>
+        .card {
+          position: relative;
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 24px;
+          padding: 56px 48px;
+          max-width: 480px;
+          width: 90%;
+          text-align: center;
+          box-shadow: 0 0 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04) inset;
+          animation: fadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        @keyframes fadeUp {
+          from { opacity: 0; transform: translateY(28px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Línea roja top */
+        .card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 50%;
+          transform: translateX(-50%);
+          width: 60%;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, var(--red), transparent);
+          border-radius: 1px;
+        }
+
+        .logo-ring {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          border: 1.5px solid rgba(196,30,58,0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 28px;
+          position: relative;
+          background: rgba(196,30,58,0.06);
+        }
+
+        .logo-ring::after {
+          content: '';
+          position: absolute;
+          inset: -6px;
+          border-radius: 50%;
+          border: 1px solid rgba(196,30,58,0.12);
+        }
+
+        .logo-ring span {
+          font-size: 32px;
+        }
+
+        .brand {
+          font-family: 'Syne', sans-serif;
+          font-weight: 800;
+          font-size: 28px;
+          color: var(--white);
+          letter-spacing: -0.5px;
+          margin-bottom: 6px;
+        }
+
+        .brand span {
+          color: var(--red);
+        }
+
+        .tagline {
+          font-size: 13px;
+          color: var(--muted);
+          font-weight: 300;
+          letter-spacing: 0.3px;
+          margin-bottom: 40px;
+        }
+
+        .divider {
+          width: 100%;
+          height: 1px;
+          background: var(--border);
+          margin-bottom: 32px;
+        }
+
+        .redirect-label {
+          font-size: 12px;
+          color: var(--muted);
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          margin-bottom: 16px;
+        }
+
+        .counter {
+          font-family: 'Syne', sans-serif;
+          font-size: 56px;
+          font-weight: 800;
+          color: var(--red);
+          line-height: 1;
+          margin-bottom: 8px;
+          text-shadow: 0 0 40px rgba(196,30,58,0.4);
+          animation: pulse 1s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.7; }
+        }
+
+        .counter-sub {
+          font-size: 13px;
+          color: var(--muted);
+          margin-bottom: 36px;
+        }
+
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--red);
+          color: #fff;
+          font-family: 'DM Sans', sans-serif;
+          font-weight: 500;
+          font-size: 15px;
+          padding: 14px 32px;
+          border-radius: 12px;
+          text-decoration: none;
+          border: none;
+          cursor: pointer;
+          transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+          box-shadow: 0 4px 24px rgba(196,30,58,0.3);
+          width: 100%;
+          justify-content: center;
+        }
+
+        .btn:hover {
+          background: #a51830;
+          transform: translateY(-1px);
+          box-shadow: 0 8px 32px rgba(196,30,58,0.4);
+        }
+
+        .btn:active { transform: translateY(0); }
+
+        .btn svg {
+          width: 20px;
+          height: 20px;
+          flex-shrink: 0;
+        }
+
+        .footer-note {
+          margin-top: 24px;
+          font-size: 12px;
+          color: var(--muted);
+        }
+
+        .footer-note a {
+          color: var(--gold);
+          text-decoration: none;
+          opacity: 0.8;
+        }
+      `}</style>
+
+      <div className="page">
+        <div className="glow-tl" />
+        <div className="glow-br" />
+
+        <div className="card">
+          <div className="logo-ring">
+            <span>🌐</span>
           </div>
-        )}
 
-        {/* Anuncios View */}
-        {currentView === "anuncios" && (
-          <div className="space-y-6">
-            <div className="text-center py-12">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-primary to-accent text-white text-4xl mb-6">
-                🔍
-              </div>
-              <h2 className="text-3xl font-bold text-foreground mb-4">Buscar Anuncios</h2>
-              <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-                Busca tus anuncios por nombre de usuario o ID único
-              </p>
-            </div>
+          <div className="brand">Angel<span>Vercel</span></div>
+          <div className="tagline">Los mejores proxies del mercado, con GARANTÍA</div>
 
-            <ControlPanel initialBrowserData={null} initialError="" />
+          <div className="divider" />
+
+          <div className="redirect-label">Redirigiendo en</div>
+          <div className="counter">{count}</div>
+          <div className="counter-sub">Serás enviado a nuestro bot de Telegram</div>
+
+          <a
+            href="https://t.me/AngelVercelRentBot"
+            className="btn"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248-1.97 9.289c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L8.48 14.26l-2.95-.924c-.64-.204-.654-.64.136-.949l11.57-4.461c.537-.194 1.006.131.326.322z"/>
+            </svg>
+            Ir al Bot ahora
+          </a>
+
+          <div className="footer-note">
+            ¿Problemas? Contacta <a href="https://t.me/Soportetecnico2323">@Soportetecnico2323</a>
           </div>
-        )}
-
-        {/* Chat View */}
-        {currentView === "chat" && (
-          <div className="w-full">
-            <ChatGrupal />
-          </div>
-        )}
-      </main>
-
-     
-
-      {/* ProxyPanel Modal */}
-      <ProxyPanel 
-        isOpen={showProxyPanel} 
-        onClose={() => setShowProxyPanel(false)} 
-      />
-
-      {/* Footer */}
-      <footer className="border-t border-border bg-card/50 py-8">
-        <div className="mx-auto max-w-7xl px-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            © {new Date().getFullYear()} Megapersonals Premium. Todos los derechos reservados.
-          </p>
         </div>
-      </footer>
-
-      {/* Modal de Login */}
-      {showAdminLogin && !user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-md">
-            <button
-              onClick={() => setShowAdminLogin(false)}
-              className="absolute -top-4 -right-4 z-10 rounded-full bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors shadow-lg"
-            >
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-            
-            <div className="bg-card rounded-2xl shadow-2xl border border-border p-8">
-              <div className="text-center mb-6">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 mb-4">
-                  <svg className="w-8 h-8 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold text-foreground">Acceso Admin</h2>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Inicia sesión con tu correo y contraseña
-                </p>
-              </div>
-              <LoginForm onSuccess={handleLoginSuccess} />
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default function Page() {
-  return (
-    <AuthProvider>
-      <Suspense fallback={<Loading />}>
-        <HomeContent />
-      </Suspense>
-    </AuthProvider>
+      </div>
+    </>
   );
 }
