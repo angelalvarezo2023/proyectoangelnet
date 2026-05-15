@@ -404,6 +404,7 @@ async function deliverProxies(order: Order, proxies: string[]) {
   registrarProxiesCliente(order.chatId, proxies, 30);
   orders[order.orderId].proxies = proxies;
   orders[order.orderId].status = "completed";
+  setSession(order.chatId, { step: "idle" });
 }
 
 // ─── RENOVACION ────────────────────────────────────────
@@ -459,6 +460,7 @@ async function confirmRenovacion(order: Order, adminChatId: number) {
   );
 
   orders[order.orderId].status = "completed";
+  setSession(order.chatId, { step: "idle" });
   await sendMessage(adminChatId, `✅ Renovacion ${order.orderId} completada y cliente notificado.`);
 }
 
@@ -481,15 +483,7 @@ async function handleBuyStart(chatId: number) {
   setSession(chatId, { step: "qty" });
   const stock = proxyPool.length;
 
-  if (stock === 0) {
-    await sendMessage(chatId,
-      `😔 <b>Sin IPs disponibles ahora mismo.</b>\n\nEscribenos: @Soportetecnico2323`,
-      { reply_markup: mainMenu() }
-    );
-    return;
-  }
-
-  const opciones = [1, 3, 5, 10, 20, 50].filter((n) => n <= stock);
+  const opciones = [1, 3, 5, 10, 20, 50];
   const rows: { text: string; data: string }[][] = [];
   for (let i = 0; i < opciones.length; i += 3) {
     rows.push(opciones.slice(i, i + 3).map((n) => ({
@@ -498,8 +492,12 @@ async function handleBuyStart(chatId: number) {
     })));
   }
 
+  const stockMsg = stock === 0
+    ? `⚠️ <b>No hay IPs disponibles ahora mismo.</b>\nPuedes hacer tu pedido y te las enviamos en menos de 30 minutos.\n\n`
+    : `🛒 <b>IPs disponibles: ${stock}</b>\n\n`;
+
   await sendMessage(chatId,
-    `🛒 <b>IPs disponibles: ${stock}</b>\n\n¿Cuantas necesitas?`,
+    stockMsg + `¿Cuantas necesitas?`,
     { reply_markup: inlineBtn(rows) }
   );
 }
@@ -556,7 +554,6 @@ async function handlePaymentSelected(
     `📸 Envia una foto del comprobante de pago.\n` +
     `⏳ Te respondemos en menos de <b>30 minutos</b>.`
   );
-  await notifyAdmin(order);
 }
 
 async function handleRenewStart(chatId: number) {
@@ -747,6 +744,7 @@ async function handleManualRenovado(text: string, adminChatId: number) {
     { reply_markup: mainMenu() }
   );
   orders[orderId].status = "completed";
+  setSession(order.chatId, { step: "idle" });
   await sendMessage(adminChatId, `✅ Cliente notificado.`);
 }
 
@@ -788,6 +786,7 @@ export async function POST(req: NextRequest) {
           await sendMessage(chatId,
             `📸 <b>Comprobante recibido.</b>\n\nPedido <code>${session.orderId}</code> en revision.\n⏳ En menos de <b>30 minutos</b> te confirmamos.`
           );
+          await notifyAdmin(order);
           await notifyAdminReceipt(order, fileId);
         }
         return NextResponse.json({ ok: true });
@@ -803,6 +802,7 @@ export async function POST(req: NextRequest) {
           await sendMessage(chatId,
             `📝 <b>Referencia recibida.</b>\n\nPedido <code>${session.orderId}</code> en revision.\n⏳ En menos de <b>30 minutos</b> te confirmamos.`
           );
+          await notifyAdmin(order);
           await notifyAdminReceipt(order, undefined, text);
         }
         return NextResponse.json({ ok: true });
