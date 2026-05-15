@@ -8,7 +8,6 @@ const PROXY6_API = `https://px6.link/api/${PROXY6_KEY}`;
 const ADMIN_ID = 1466412206;
 const DIAS_RENOVACION = 30;
 const DIAS_AVISO_EXPIRACION = 3;
-const SESSION_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutos
 
 const PRECIO_DOP = 1000;
 const PRECIO_USD = 18;
@@ -67,7 +66,6 @@ type Session = {
   metodoPago?: string;
   orderId?: string;
   proxyRenovar?: string;
-  lastActivity: number; // timestamp ultimo mensaje
 };
 
 // ─── ESTADO GLOBAL ─────────────────────────────────────
@@ -136,43 +134,17 @@ function inlineBtn(rows: { text: string; data: string }[][]) {
 
 // ─── SESIONES CON TIMEOUT ──────────────────────────────
 function getSession(chatId: number): Session {
-  const s = sessions[chatId];
-  if (!s) return { step: "idle", lastActivity: Date.now() };
-
-  const inactivo = Date.now() - s.lastActivity;
-  if (inactivo > SESSION_TIMEOUT_MS && s.step !== "idle") {
-    // Sesión expirada — resetear
-    sessions[chatId] = { step: "idle", lastActivity: Date.now() };
-    return sessions[chatId];
-  }
-  return s;
+  return sessions[chatId] || { step: "idle" };
 }
 
 function setSession(chatId: number, data: Partial<Session>) {
   sessions[chatId] = {
     ...(sessions[chatId] || { step: "idle" }),
     ...data,
-    lastActivity: Date.now(),
   };
 }
 
-async function checkAndNotifySessionExpired(chatId: number, firstName: string): Promise<boolean> {
-  const s = sessions[chatId];
-  if (!s) return false;
 
-  const inactivo = Date.now() - s.lastActivity;
-  if (inactivo > SESSION_TIMEOUT_MS && s.step !== "idle") {
-    sessions[chatId] = { step: "idle", lastActivity: Date.now() };
-    await sendMessage(
-      chatId,
-      `⏰ <b>Tu sesion expiro por inactividad.</b>\n\n` +
-        `Aqui tienes el menu principal, ${firstName} 👇`,
-      { reply_markup: mainMenu() }
-    );
-    return true;
-  }
-  return false;
-}
 
 // ─── POOL DE IPs ───────────────────────────────────────
 async function fetchProxyData(hostPort: string): Promise<string | null> {
@@ -766,15 +738,6 @@ export async function POST(req: NextRequest) {
       const username: string | undefined = message.from?.username;
       const isAdmin = chatId === ADMIN_ID;
 
-      // Verificar sesion expirada (excepto /start y admin)
-      if (!isAdmin && text !== "/start") {
-        const expirada = await checkAndNotifySessionExpired(chatId, firstName);
-        if (expirada && text !== "🛒 Comprar IPs" && text !== "🔄 Renovar IP" &&
-            text !== "📋 Mis IPs" && text !== "ℹ️ Ayuda") {
-          return NextResponse.json({ ok: true });
-        }
-      }
-
       const session = getSession(chatId);
 
       // Comprobante foto
@@ -849,6 +812,10 @@ export async function POST(req: NextRequest) {
       else if (text === "📋 Mis IPs")     await handleMisIPs(chatId);
       else if (text === "ℹ️ Ayuda")       await handleHelp(chatId);
       else if (text === "🧾 Comprar Cuentas") await sendMessage(chatId, `🧾 <b>Comprar Cuentas</b>\n\n⏳ <i>Esta opcion estara disponible proximamente.</i>\n\nEstate atento a las novedades 👀`, { reply_markup: mainMenu() });
+      else if (!isAdmin && session.step === "idle" && text && !text.startsWith("/")) {
+        // Texto inesperado en estado idle — mostrar menú
+        await sendMessage(chatId, `Usa los botones del menu 👇`, { reply_markup: mainMenu() });
+      }
     }
 
     if (callbackQuery) {
