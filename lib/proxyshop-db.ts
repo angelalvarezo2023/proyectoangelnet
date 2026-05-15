@@ -1,6 +1,5 @@
-    // lib/proxyshop-db.ts
-// Capa de persistencia Firebase para el bot ProxyShop
-// Usa la misma instancia de Firebase del proyecto
+// lib/proxyshop-db.ts
+// Usa la misma instancia de Firestore que ya tienes en firebase.ts
 
 import { db } from "./firebase";
 import {
@@ -14,15 +13,13 @@ import {
   addDoc,
   query,
   where,
-  orderBy,
-  Timestamp,
 } from "firebase/firestore";
 
 // ─── COLECCIONES ───────────────────────────────────────
-const COL_POOL        = "proxyshop_pool";        // IPs disponibles para vender
-const COL_ORDERS      = "proxyshop_orders";      // Órdenes
-const COL_CLIENT_IPS  = "proxyshop_client_ips";  // IPs vendidas a clientes
-const COL_STATS       = "proxyshop_stats";       // Estadísticas de ventas
+const COL_POOL       = "proxyshop_pool";
+const COL_ORDERS     = "proxyshop_orders";
+const COL_CLIENT_IPS = "proxyshop_client_ips";
+const COL_STATS      = "proxyshop_stats";
 
 // ─── TIPOS ─────────────────────────────────────────────
 export type ProxyEntry = {
@@ -55,7 +52,7 @@ export type ClientProxy = {
   chatId: number;
   full: string;
   orderId: string;
-  fechaExpira: number; // unix timestamp
+  fechaExpira: number;
   avisado: boolean;
 };
 
@@ -69,7 +66,7 @@ export type StatEntry = {
   metodoPago: string;
   monto: string;
   tipo: OrderType;
-  fecha: number; // unix timestamp
+  fecha: number;
 };
 
 // ─── POOL DE IPs ───────────────────────────────────────
@@ -108,7 +105,11 @@ export async function getOrder(orderId: string): Promise<Order | null> {
   return snap.data() as Order;
 }
 
-export async function updateOrderStatus(orderId: string, status: OrderStatus, proxies?: string[]): Promise<void> {
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  proxies?: string[]
+): Promise<void> {
   const data: any = { status };
   if (proxies) data.proxies = proxies;
   await updateDoc(doc(db, COL_ORDERS, orderId), data);
@@ -121,8 +122,7 @@ export async function getClientProxies(chatId: number): Promise<ClientProxy[]> {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ClientProxy));
 }
 
-export async function saveClientProxy(cp: Omit<ClientProxy, "id">): Promise<void> {
-  // Si ya existe una con el mismo hostPort para este cliente, actualizarla
+export async function saveClientProxy(cp: ClientProxy): Promise<void> {
   const hostPort = cp.full.split(":").slice(0, 2).join(":");
   const existing = await getClientProxies(cp.chatId);
   const found = existing.find((p) => p.full.startsWith(hostPort));
@@ -132,7 +132,8 @@ export async function saveClientProxy(cp: Omit<ClientProxy, "id">): Promise<void
       avisado: false,
     });
   } else {
-    await addDoc(collection(db, COL_CLIENT_IPS), cp);
+    const { id: _id, ...data } = cp;
+    await addDoc(collection(db, COL_CLIENT_IPS), data);
   }
 }
 
@@ -140,7 +141,6 @@ export async function markAvisado(id: string): Promise<void> {
   await updateDoc(doc(db, COL_CLIENT_IPS, id), { avisado: true });
 }
 
-// Obtener todas las IPs que necesitan aviso de expiración
 export async function getProxiesParaAvisar(diasAntes: number): Promise<ClientProxy[]> {
   const now = Date.now();
   const limite = now + diasAntes * 24 * 60 * 60 * 1000;
