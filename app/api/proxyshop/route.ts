@@ -120,6 +120,7 @@ function mainMenu() {
     keyboard: [
       [{ text: "🛒 Comprar IPs" }, { text: "🔄 Renovar IP" }],
       [{ text: "📋 Mis IPs" }, { text: "ℹ️ Ayuda" }],
+      [{ text: "🧾 Comprar Cuentas" }],
     ],
     resize_keyboard: true,
   };
@@ -847,6 +848,7 @@ export async function POST(req: NextRequest) {
       else if (text === "🔄 Renovar IP")  await handleRenewStart(chatId);
       else if (text === "📋 Mis IPs")     await handleMisIPs(chatId);
       else if (text === "ℹ️ Ayuda")       await handleHelp(chatId);
+      else if (text === "🧾 Comprar Cuentas") await sendMessage(chatId, `🧾 <b>Comprar Cuentas</b>\n\n⏳ <i>Esta opcion estara disponible proximamente.</i>\n\nEstate atento a las novedades 👀`, { reply_markup: mainMenu() });
     }
 
     if (callbackQuery) {
