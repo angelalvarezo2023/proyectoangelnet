@@ -168,7 +168,7 @@ function generarFacturaTexto(order: Order, proxies: string[]): string {
 // ─── PROXY6 ────────────────────────────────────────────
 async function getProxiesDisponibles(): Promise<any[]> {
   try {
-    const data = await proxy6Get(`getproxy?state=active&descr=${encodeURIComponent(COMENTARIO_VENTA)}`);
+    const data = await proxy6Get("getproxy?state=active&limit=1000");
     if (data.status !== "yes") return [];
     const allProxies = Object.values(data.list) as any[];
     return allProxies.filter((p: any) => {
