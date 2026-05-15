@@ -632,9 +632,16 @@ async function handleStats(adminChatId: number) {
 }
 
 // ─── ROUTE HANDLER ─────────────────────────────────────
+// Solo revisar expiraciones cada 30 minutos
+let lastCheck = 0;
+const CHECK_INTERVAL = 30 * 60 * 1000;
+
 export async function POST(req: NextRequest) {
   try {
-    await checkExpiraciones();
+    if (Date.now() - lastCheck > CHECK_INTERVAL) {
+      lastCheck = Date.now();
+      checkExpiraciones().catch(console.error); // sin await — no bloquea
+    }
 
     const body = await req.json();
     const message = body.message;
