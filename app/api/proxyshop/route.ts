@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getPool, addToPool, removeFromPoolMany,
+  getPool, addToPool, removeFromPoolMany, removeFromPool,
   saveOrder, getOrder, updateOrderStatus,
   getClientProxies, saveClientProxy, markAvisado, getProxiesParaAvisar,
   saveStat, getStatsMes,
@@ -38,7 +38,6 @@ const METODOS_PAGO = {
   },
 };
 
-// Sesiones en memoria (no necesitan persistir — se resetean con cada conversación)
 type Session = {
   step: "idle" | "qty" | "payment" | "waiting_receipt" | "renew_input" | "renew_payment";
   qty?: number;
@@ -46,7 +45,12 @@ type Session = {
   orderId?: string;
   proxyRenovar?: string;
 };
+
 const sessions: Record<number, Session> = {};
+
+// Solo revisar expiraciones cada 30 minutos
+let lastCheck = 0;
+const CHECK_INTERVAL = 30 * 60 * 1000;
 
 // ─── HELPERS ───────────────────────────────────────────
 async function tPost(method: string, body: object): Promise<any> {
@@ -114,7 +118,7 @@ function setSession(chatId: number, data: Partial<Session>) {
   sessions[chatId] = { ...(sessions[chatId] || { step: "idle" }), ...data };
 }
 
-// ─── AVISOS DE EXPIRACIÓN ──────────────────────────────
+// ─── AVISOS DE EXPIRACION ──────────────────────────────
 async function checkExpiraciones() {
   try {
     const proxies = await getProxiesParaAvisar(DIAS_AVISO_EXPIRACION);
@@ -139,7 +143,7 @@ async function checkExpiraciones() {
   }
 }
 
-// ─── POOL DE IPs ───────────────────────────────────────
+// ─── PROXY6 ────────────────────────────────────────────
 async function fetchProxyData(hostPort: string): Promise<string | null> {
   try {
     const [host, port] = hostPort.split(":");
@@ -154,6 +158,7 @@ async function fetchProxyData(hostPort: string): Promise<string | null> {
   } catch { return null; }
 }
 
+// Agrega IP inmediatamente sin consultar Proxy6
 async function agregarProxy(input: string, adminChatId: number) {
   const parts = input.trim().split(":");
 
@@ -172,8 +177,7 @@ async function agregarProxy(input: string, adminChatId: number) {
     return;
   }
 
-  // Guardar inmediatamente con hostPort como placeholder
-  // Los datos completos se obtienen de Proxy6 al momento de entregar
+  // Guardar inmediatamente — user:pass se buscan en Proxy6 al momento de entregar
   await addToPool({ hostPort, full: hostPort, addedAt: Date.now() });
   const poolActualizado = await getPool();
   const lista = poolActualizado.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n");
@@ -189,16 +193,14 @@ async function handleLimpiarIP(input: string, adminChatId: number) {
   const hostPort = input.replace("/limpiar", "").trim();
   if (!hostPort) {
     await sendMessage(adminChatId,
-      `❌ Uso: <code>/limpiar IP:Puerto</code>
-Ejemplo: <code>/limpiar 186.65.117.52:9927</code>`
+      `❌ Uso: <code>/limpiar IP:Puerto</code>\nEjemplo: <code>/limpiar 186.65.117.52:9927</code>`
     );
     return;
   }
   await removeFromPool(hostPort);
   const pool = await getPool();
   await sendMessage(adminChatId,
-    `✅ <code>${hostPort}</code> eliminada del pool.
-📦 Disponibles ahora: <b>${pool.length}</b>`
+    `✅ <code>${hostPort}</code> eliminada.\n📦 Disponibles ahora: <b>${pool.length}</b>`
   );
 }
 
@@ -295,13 +297,11 @@ async function deliverProxies(order: Order, proxies: string[]) {
   const factura = generarFacturaTexto(order, proxies);
   await sendMessage(order.chatId, factura, { reply_markup: mainMenu() });
 
-  // Guardar IPs del cliente en Firebase
   const expira = Date.now() + 30 * 24 * 60 * 60 * 1000;
   for (const full of proxies) {
     await saveClientProxy({ chatId: order.chatId, full, orderId: order.orderId, fechaExpira: expira, avisado: false });
   }
 
-  // Guardar estadística
   const metodoKey = Object.entries(METODOS_PAGO).find(([, v]) => v.nombre === order.metodoPago)?.[0] || "banreservas";
   await saveStat({
     orderId: order.orderId, chatId: order.chatId,
@@ -318,7 +318,7 @@ async function deliverProxies(order: Order, proxies: string[]) {
 // ─── RENOVACION ────────────────────────────────────────
 async function confirmRenovacion(order: Order, adminChatId: number) {
   if (!order.proxyRenovar) { await sendMessage(adminChatId, "❌ No hay IP definida."); return; }
-  await sendMessage(adminChatId, `⏳ Buscando en Proxy6...`);
+  await sendMessage(adminChatId, `⏳ Renovando en Proxy6...`);
   const proxy = await findProxyByHostPort(order.proxyRenovar);
 
   if (!proxy) {
@@ -335,19 +335,15 @@ async function confirmRenovacion(order: Order, adminChatId: number) {
   const nuevaExpira = Date.now() + DIAS_RENOVACION * 24 * 60 * 60 * 1000;
   const [ip, port] = order.proxyRenovar.split(":");
 
-  // Actualizar fecha en Firebase
   const clientIPs = await getClientProxies(order.chatId);
   const cp = clientIPs.find((p) => p.full.startsWith(order.proxyRenovar!));
   if (cp?.id) await saveClientProxy({ ...cp, fechaExpira: nuevaExpira, avisado: false });
 
-  // Guardar estadística
   const metodoKey = Object.entries(METODOS_PAGO).find(([, v]) => v.nombre === order.metodoPago)?.[0] || "banreservas";
   await saveStat({
-    orderId: order.orderId, chatId: order.chatId,
-    firstName: order.firstName, username: order.username,
-    qty: 1, metodoPago: order.metodoPago,
-    monto: getPrecioMonto(metodoKey, 1),
-    tipo: "renovacion", fecha: Date.now(),
+    orderId: order.orderId, chatId: order.chatId, firstName: order.firstName,
+    username: order.username, qty: 1, metodoPago: order.metodoPago,
+    monto: getPrecioMonto(metodoKey, 1), tipo: "renovacion", fecha: Date.now(),
   });
 
   await sendMessage(order.chatId,
@@ -495,6 +491,7 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
   if (order.tipo === "renovacion") { await confirmRenovacion(order, adminChatId); return; }
 
   const pool = await getPool();
+
   if (pool.length < order.qty) {
     await sendMessage(adminChatId,
       `❌ No hay suficientes IPs en la lista.\nNecesitas: <b>${order.qty}</b> — Disponibles: <b>${pool.length}</b>\n\n` +
@@ -503,24 +500,22 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
     return;
   }
 
+  // Tomar IPs del pool y obtener datos completos de Proxy6
   const tomados = pool.slice(0, order.qty);
   await removeFromPoolMany(tomados.map((p) => p.hostPort));
 
-  // Obtener datos completos de Proxy6 para cada IP
   const proxies: string[] = [];
   for (const entry of tomados) {
-    // Si ya tiene user:pass completo, usarlo
     if (entry.full.split(":").length >= 4) {
       proxies.push(entry.full);
     } else {
-      // Buscar en Proxy6
-      const data = await fetchProxyData(entry.hostPort);
-      proxies.push(data || entry.full);
+      const full = await fetchProxyData(entry.hostPort);
+      proxies.push(full || entry.hostPort);
     }
   }
 
   await deliverProxies(order, proxies);
-  await sendMessage(adminChatId, `✅ Pedido <b>${orderId}</b> entregado.\n${proxies.length} IP(s) enviadas y quitadas de la lista.`);
+  await sendMessage(adminChatId, `✅ Pedido <b>${orderId}</b> entregado. ${proxies.length} IP(s) enviadas.`);
 }
 
 async function handleAdminReject(orderId: string, adminChatId: number) {
@@ -613,20 +608,15 @@ async function handleStats(adminChatId: number) {
     }
   }
   if (stats.length === 0) txt += `No hay actividad registrada este mes aun.`;
-
   await sendMessage(adminChatId, txt);
 }
 
 // ─── ROUTE HANDLER ─────────────────────────────────────
-// Solo revisar expiraciones cada 30 minutos
-let lastCheck = 0;
-const CHECK_INTERVAL = 30 * 60 * 1000;
-
 export async function POST(req: NextRequest) {
   try {
     if (Date.now() - lastCheck > CHECK_INTERVAL) {
       lastCheck = Date.now();
-      checkExpiraciones().catch(console.error); // sin await — no bloquea
+      checkExpiraciones().catch(console.error);
     }
 
     const body = await req.json();
@@ -684,16 +674,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ ok: true });
       }
 
-      if (isAdmin && text === "/stats")      { await handleStats(chatId); return NextResponse.json({ ok: true }); }
-      if (isAdmin && text === "/lista")      {
+      if (isAdmin && text === "/stats")             { await handleStats(chatId); return NextResponse.json({ ok: true }); }
+      if (isAdmin && text.startsWith("/limpiar"))   { await handleLimpiarIP(text, chatId); return NextResponse.json({ ok: true }); }
+      if (isAdmin && text === "/lista")             {
         const pool = await getPool();
         if (pool.length === 0) { await sendMessage(chatId, `📋 La lista esta vacia.`); }
         else { await sendMessage(chatId, `📋 <b>IPs disponibles (${pool.length}):</b>\n\n${pool.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n")}`); }
         return NextResponse.json({ ok: true });
       }
-      if (isAdmin && text.startsWith("/limpiar"))   { await handleLimpiarIP(text, chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/entregar")) { await handleManualDeliver(text, chatId); return NextResponse.json({ ok: true }); }
-      if (isAdmin && text.startsWith("/renovado"))  { await handleManualRenovado(text, chatId);  return NextResponse.json({ ok: true }); }
+      if (isAdmin && text.startsWith("/renovado"))  { await handleManualRenovado(text, chatId); return NextResponse.json({ ok: true }); }
 
       if      (text === "/start")              await handleStart(chatId, firstName);
       else if (text === "🛒 Comprar IPs")      await handleBuyStart(chatId);
@@ -709,7 +699,7 @@ export async function POST(req: NextRequest) {
     if (callbackQuery) {
       const chatId: number = callbackQuery.message.chat.id;
       const data: string   = callbackQuery.data;
-      const firstName: string        = callbackQuery.from?.first_name || "Usuario";
+      const firstName: string = callbackQuery.from?.first_name || "Usuario";
       const username: string | undefined = callbackQuery.from?.username;
 
       await tPost("answerCallbackQuery", { callback_query_id: callbackQuery.id });
