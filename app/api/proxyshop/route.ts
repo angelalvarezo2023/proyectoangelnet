@@ -18,7 +18,7 @@ const DIAS_AVISO_EXPIRACION = 3;
 
 const PRECIO_DOP = 1000;
 const PRECIO_USD = 18;
-const PRECIO_ZELLE = 30;
+const PRECIO_ZELLE = 28;
 
 const METODOS_PAGO = {
   banreservas: {
@@ -156,6 +156,9 @@ async function fetchProxyData(hostPort: string): Promise<string | null> {
 
 async function agregarProxy(input: string, adminChatId: number) {
   const parts = input.trim().split(":");
+
+  // Formato corto: IP:Puerto (el bot busca user:pass en Proxy6 en segundo plano)
+  // Formato completo: IP:Puerto:usuario:clave
   if (parts.length < 2 || !parts[0] || !parts[1] || isNaN(Number(parts[1]))) {
     await sendMessage(adminChatId,
       `❌ Formato incorrecto.\nEnvia: <code>IP:Puerto</code>\nEjemplo: <code>181.177.86.38:9344</code>`
@@ -171,24 +174,58 @@ async function agregarProxy(input: string, adminChatId: number) {
     return;
   }
 
-  await sendMessage(adminChatId, `⏳ Verificando en Proxy6...`);
-  const full = await fetchProxyData(hostPort);
+  // Si viene formato completo IP:Puerto:user:pass, usarlo directo
+  // Si viene solo IP:Puerto, buscar en Proxy6 en segundo plano
+  let full = parts.length >= 4
+    ? `${parts[0].trim()}:${parts[1].trim()}:${parts[2].trim()}:${parts[3].trim()}`
+    : null;
 
   if (!full) {
-    await sendMessage(adminChatId,
-      `❌ No encontre esa IP en tu cuenta de Proxy6.\nVerifica que sea correcta y este activa.`
-    );
-    return;
+    // Buscar en Proxy6 sin bloquear — timeout de 5 segundos
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${PROXY6_API}/getproxy?state=active&limit=1000`, { signal: controller.signal });
+      clearTimeout(timeout);
+      const data = await res.json();
+      if (data.status === "yes") {
+        const all = Object.values(data.list) as any[];
+        const found = all.find(
+          (p: any) => p.host === parts[0].trim() && String(p.port) === parts[1].trim()
+        );
+        if (found) full = `${found.host}:${found.port}:${found.user}:${found.pass}`;
+      }
+    } catch {
+      // Si falla o timeout, guardar solo con hostPort — se completará al entregar
+      full = hostPort;
+    }
   }
 
-  await addToPool({ hostPort, full, addedAt: Date.now() });
+  await addToPool({ hostPort, full: full || hostPort, addedAt: Date.now() });
   const poolActualizado = await getPool();
   const lista = poolActualizado.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n");
 
   await sendMessage(adminChatId,
-    `✅ <b>IP agregada a la lista de ventas.</b>\n\n` +
-    `🌐 <code>${hostPort}</code>\n\n` +
+    `✅ <b>IP agregada.</b>\n\n` +
+    `🌐 <code>${hostPort}</code>\n` +
     `📦 Disponibles ahora: <b>${poolActualizado.length}</b>\n\n${lista}`
+  );
+}
+
+async function handleLimpiarIP(input: string, adminChatId: number) {
+  const hostPort = input.replace("/limpiar", "").trim();
+  if (!hostPort) {
+    await sendMessage(adminChatId,
+      `❌ Uso: <code>/limpiar IP:Puerto</code>
+Ejemplo: <code>/limpiar 186.65.117.52:9927</code>`
+    );
+    return;
+  }
+  await removeFromPool(hostPort);
+  const pool = await getPool();
+  await sendMessage(adminChatId,
+    `✅ <code>${hostPort}</code> eliminada del pool.
+📦 Disponibles ahora: <b>${pool.length}</b>`
   );
 }
 
@@ -661,6 +698,7 @@ export async function POST(req: NextRequest) {
         else { await sendMessage(chatId, `📋 <b>IPs disponibles (${pool.length}):</b>\n\n${pool.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n")}`); }
         return NextResponse.json({ ok: true });
       }
+      if (isAdmin && text.startsWith("/limpiar"))   { await handleLimpiarIP(text, chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/entregar")) { await handleManualDeliver(text, chatId); return NextResponse.json({ ok: true }); }
       if (isAdmin && text.startsWith("/renovado"))  { await handleManualRenovado(text, chatId);  return NextResponse.json({ ok: true }); }
 
