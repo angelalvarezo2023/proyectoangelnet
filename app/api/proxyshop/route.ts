@@ -8,38 +8,62 @@ const API = `https://api.telegram.org/bot${TOKEN}`;
 const PROXY6_KEY = "c5008743d3-dfb41a5904-d007bb3002";
 const PROXY6_API = `https://px6.link/api/${PROXY6_KEY}`;
 
+// Tu Telegram ID — recibirás todas las notificaciones de pedidos aquí
+const ADMIN_ID = 1466412206;
+
+// Precio por proxy
+const PRECIO_DOP = 1000;
+const PRECIO_USD = 18;
+const PRECIO_ZELLE = 28;
+
+// Info de pago
+const METODOS_PAGO = {
+  banreservas: {
+    emoji: "🏦",
+    nombre: "Banreservas",
+    detalle:
+      `Cuenta: <code>9607314353</code>\nTitular: <b>JOSE ANGEL ALVAREZ NUÑEZ</b>\nMonto: <b>RD$ ${PRECIO_DOP} por proxy</b>`,
+  },
+  remitly: {
+    emoji: "💸",
+    nombre: "Remitly",
+    detalle:
+      `País: <b>República Dominicana, Santiago</b>\nCuenta: <code>9607314353</code>\nTitular: <b>JOSE ANGEL ALVAREZ NUÑEZ</b>\nMonto: <b>$${PRECIO_USD} USD por proxy</b>`,
+  },
+  zelle: {
+    emoji: "💳",
+    nombre: "Zelle",
+    detalle:
+      `Email: <code>estherlopeztineo2025@gmail.com</code>\nTitular: <b>Laury Lopez</b>\nMonto: <b>$${PRECIO_ZELLE} USD por proxy</b>`,
+  },
+};
+
 // ─────────────────────────────────────────
 //  TIPOS
 // ─────────────────────────────────────────
+type OrderStatus = "pending_payment" | "pending_confirm" | "completed" | "cancelled";
+
+type Order = {
+  orderId: string;
+  chatId: number;
+  firstName: string;
+  username?: string;
+  qty: number;
+  metodoPago: string;
+  status: OrderStatus;
+  createdAt: number;
+  proxies?: string[];
+};
+
 type Session = {
-  step: "idle" | "country" | "type" | "qty" | "days" | "confirm";
-  country?: string;
-  version?: "4" | "6";
+  step: "idle" | "qty" | "payment" | "waiting_receipt";
   qty?: number;
-  days?: number;
-  price?: string;
-  currency?: string;
+  metodoPago?: string;
+  orderId?: string;
 };
 
-// Sesiones en memoria
 const sessions: Record<number, Session> = {};
-
-// Países populares disponibles en Proxy6
-const COUNTRIES: Record<string, string> = {
-  "🇺🇸 USA": "us",
-  "🇩🇪 Alemania": "de",
-  "🇬🇧 UK": "gb",
-  "🇫🇷 Francia": "fr",
-  "🇳🇱 Holanda": "nl",
-  "🇷🇺 Rusia": "ru",
-  "🇨🇦 Canadá": "ca",
-  "🇧🇷 Brasil": "br",
-  "🇯🇵 Japón": "jp",
-  "🇸🇬 Singapur": "sg",
-};
-
-const PERIODS = [7, 14, 30, 60, 90];
-const QTY_OPTIONS = [1, 3, 5, 10, 20, 50];
+const orders: Record<string, Order> = {};
 
 // ─────────────────────────────────────────
 //  HELPERS
@@ -53,13 +77,8 @@ async function tPost(method: string, body: object): Promise<any> {
   return res.json();
 }
 
-async function sendMessage(chatId: number, text: string, extra: object = {}): Promise<void> {
-  await tPost("sendMessage", {
-    chat_id: chatId,
-    text,
-    parse_mode: "HTML",
-    ...extra,
-  });
+async function sendMessage(chatId: number, text: string, extra: object = {}): Promise<any> {
+  return tPost("sendMessage", { chat_id: chatId, text, parse_mode: "HTML", ...extra });
 }
 
 async function proxy6Get(endpoint: string): Promise<any> {
@@ -67,282 +86,354 @@ async function proxy6Get(endpoint: string): Promise<any> {
   return res.json();
 }
 
-function buildKeyboard(options: string[][], isInline = true) {
-  if (isInline) {
-    return {
-      inline_keyboard: options.map((row) =>
-        row.map((label) => ({ text: label, callback_data: label }))
-      ),
-    };
-  }
+function generateOrderId(): string {
+  return `ORD-${Date.now().toString(36).toUpperCase()}`;
+}
+
+function mainMenu() {
   return {
-    keyboard: options.map((row) => row.map((label) => ({ text: label }))),
+    keyboard: [
+      [{ text: "🛒 Comprar Proxies" }],
+      [{ text: "📦 Mis Pedidos" }, { text: "ℹ️ Ayuda" }],
+    ],
     resize_keyboard: true,
-    one_time_keyboard: true,
+  };
+}
+
+function inlineBtn(rows: { text: string; data: string }[][]) {
+  return {
+    inline_keyboard: rows.map((row) =>
+      row.map((btn) => ({ text: btn.text, callback_data: btn.data }))
+    ),
   };
 }
 
 // ─────────────────────────────────────────
-//  FLUJO DEL BOT
+//  NOTIFICAR AL ADMIN
 // ─────────────────────────────────────────
+async function notifyAdmin(order: Order) {
+  const userLink = order.username
+    ? `@${order.username}`
+    : `<a href="tg://user?id=${order.chatId}">${order.firstName}</a>`;
 
-async function handleStart(chatId: number, firstName: string) {
-  sessions[chatId] = { step: "idle" };
   await sendMessage(
-    chatId,
-    `🌐 <b>Bienvenido, ${firstName}!</b>\n\n` +
-      `Soy tu bot de compra de proxies privados. Aquí puedes adquirir proxies IPv4 e IPv6 de alta calidad en segundos.\n\n` +
-      `Usa los botones para comenzar:`,
+    ADMIN_ID,
+    `🔔 <b>NUEVO PEDIDO — ${order.orderId}</b>\n━━━━━━━━━━━━━━\n\n` +
+      `👤 Cliente: ${userLink}\n` +
+      `📦 Cantidad: <b>${order.qty} proxy(s)</b>\n` +
+      `💳 Método: <b>${order.metodoPago}</b>\n` +
+      `🕐 Hora: ${new Date(order.createdAt).toLocaleString("es-DO")}\n\n` +
+      `⏳ <i>Esperando comprobante del cliente...</i>`,
     {
-      reply_markup: buildKeyboard(
-        [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
-        false
-      ),
-    }
-  );
-}
-
-async function handleBuyStart(chatId: number) {
-  sessions[chatId] = { step: "country" };
-  const countryKeys = Object.keys(COUNTRIES);
-  const rows: string[][] = [];
-  for (let i = 0; i < countryKeys.length; i += 2) {
-    rows.push(countryKeys.slice(i, i + 2));
-  }
-  await sendMessage(chatId, `🌍 <b>Paso 1/4 — Elige el país de los proxies:</b>`, {
-    reply_markup: buildKeyboard(rows),
-  });
-}
-
-async function handleCountrySelected(chatId: number, countryLabel: string) {
-  const code = COUNTRIES[countryLabel];
-  if (!code) {
-    await sendMessage(chatId, "❌ País no válido. Por favor elige una opción del menú.");
-    return;
-  }
-  sessions[chatId] = { ...sessions[chatId], step: "type", country: code };
-  await sendMessage(
-    chatId,
-    `✅ País: <b>${countryLabel}</b>\n\n` +
-      `🔌 <b>Paso 2/4 — Elige el tipo de proxy:</b>\n\n` +
-      `• <b>IPv4</b> — Mayor compatibilidad, ideal para redes sociales\n` +
-      `• <b>IPv6</b> — Más económico, ideal para scraping y bots`,
-    { reply_markup: buildKeyboard([["🔵 IPv4", "🟣 IPv6"]]) }
-  );
-}
-
-async function handleTypeSelected(chatId: number, typeLabel: string) {
-  const version = typeLabel.includes("IPv4") ? "4" : "6";
-  sessions[chatId] = { ...sessions[chatId], step: "qty", version };
-  await sendMessage(
-    chatId,
-    `✅ Tipo: <b>${typeLabel}</b>\n\n` +
-      `📦 <b>Paso 3/4 — ¿Cuántos proxies necesitas?</b>`,
-    {
-      reply_markup: buildKeyboard([
-        QTY_OPTIONS.slice(0, 3).map((n) => `${n}`),
-        QTY_OPTIONS.slice(3).map((n) => `${n}`),
+      reply_markup: inlineBtn([
+        [
+          { text: "✅ Confirmar y entregar", data: `confirm_${order.orderId}` },
+          { text: "❌ Rechazar", data: `reject_${order.orderId}` },
+        ],
       ]),
     }
   );
 }
 
-async function handleQtySelected(chatId: number, qtyStr: string) {
-  const qty = parseInt(qtyStr);
-  if (isNaN(qty) || qty <= 0) {
-    await sendMessage(chatId, "❌ Cantidad no válida.");
-    return;
+async function notifyAdminReceipt(order: Order, photoFileId?: string, receiptText?: string) {
+  const userLink = order.username
+    ? `@${order.username}`
+    : `<a href="tg://user?id=${order.chatId}">${order.firstName}</a>`;
+
+  const caption =
+    `📸 <b>COMPROBANTE — ${order.orderId}</b>\n━━━━━━━━━━━━━━\n\n` +
+    `👤 Cliente: ${userLink}\n` +
+    `📦 Cantidad: <b>${order.qty} proxy(s)</b>\n` +
+    `💳 Método: <b>${order.metodoPago}</b>\n\n` +
+    `Revisa el pago y confirma o rechaza:`;
+
+  const keyboard = inlineBtn([
+    [
+      { text: "✅ Confirmar y entregar", data: `confirm_${order.orderId}` },
+      { text: "❌ Rechazar", data: `reject_${order.orderId}` },
+    ],
+  ]);
+
+  if (photoFileId) {
+    await tPost("sendPhoto", {
+      chat_id: ADMIN_ID,
+      photo: photoFileId,
+      caption,
+      parse_mode: "HTML",
+      reply_markup: keyboard,
+    });
+  } else {
+    await sendMessage(
+      ADMIN_ID,
+      caption + (receiptText ? `\n\n📝 Referencia: <i>${receiptText}</i>` : ""),
+      { reply_markup: keyboard }
+    );
   }
-  sessions[chatId] = { ...sessions[chatId], step: "days", qty };
+}
+
+// ─────────────────────────────────────────
+//  OBTENER PROXIES DE TU CUENTA PROXY6
+// ─────────────────────────────────────────
+async function getAvailableProxies(qty: number): Promise<string[]> {
+  try {
+    const data = await proxy6Get("getproxy?state=active&nokey");
+    if (data.status !== "yes") return [];
+    const allProxies = Object.values(data.list) as any[];
+    const valid = allProxies.filter((p: any) => {
+      const daysLeft = Math.floor(
+        (new Date(p.date_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+      );
+      return daysLeft > 3;
+    });
+    return valid.slice(0, qty).map((p: any) => `${p.host}:${p.port}:${p.user}:${p.pass}`);
+  } catch {
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────
+//  ENTREGAR PROXIES AL CLIENTE
+// ─────────────────────────────────────────
+async function deliverProxies(order: Order, proxies: string[]) {
+  const proxyText = proxies.map((p) => `<code>${p}</code>`).join("\n");
+
+  await sendMessage(
+    order.chatId,
+    `✅ <b>¡Pedido confirmado!</b>\n━━━━━━━━━━━━━━\n\n` +
+      `📦 Pedido: <b>${order.orderId}</b>\n` +
+      `🔢 Cantidad: <b>${proxies.length} proxy(s)</b>\n\n` +
+      `🔐 <b>Tus proxies (host:puerto:usuario:contraseña):</b>\n\n` +
+      proxyText +
+      `\n\n📌 Protocolo: HTTPS / SOCKS5\n` +
+      `💡 <i>Guarda estos datos en un lugar seguro.</i>`,
+    { reply_markup: mainMenu() }
+  );
+
+  orders[order.orderId].proxies = proxies;
+  orders[order.orderId].status = "completed";
+}
+
+// ─────────────────────────────────────────
+//  FLUJO DEL BOT
+// ─────────────────────────────────────────
+async function handleStart(chatId: number, firstName: string) {
+  sessions[chatId] = { step: "idle" };
   await sendMessage(
     chatId,
-    `✅ Cantidad: <b>${qty} proxies</b>\n\n` + `📅 <b>Paso 4/4 — ¿Por cuántos días?</b>`,
+    `🌐 <b>¡Bienvenido, ${firstName}!</b>\n\n` +
+      `Aquí puedes comprar proxies privados de forma rápida y segura.\n\n` +
+      `📌 <b>Precios:</b>\n` +
+      `• Banreservas: <b>RD$ ${PRECIO_DOP}</b> por proxy\n` +
+      `• Remitly: <b>$${PRECIO_USD} USD</b> por proxy\n` +
+      `• Zelle: <b>$${PRECIO_ZELLE} USD</b> por proxy\n\n` +
+      `Usa los botones para comenzar 👇`,
+    { reply_markup: mainMenu() }
+  );
+}
+
+async function handleBuyStart(chatId: number) {
+  sessions[chatId] = { step: "qty" };
+  await sendMessage(chatId, `🛒 <b>¿Cuántos proxies deseas comprar?</b>`, {
+    reply_markup: inlineBtn([
+      [
+        { text: "1 proxy", data: "qty_1" },
+        { text: "3 proxies", data: "qty_3" },
+        { text: "5 proxies", data: "qty_5" },
+      ],
+      [
+        { text: "10 proxies", data: "qty_10" },
+        { text: "20 proxies", data: "qty_20" },
+        { text: "50 proxies", data: "qty_50" },
+      ],
+    ]),
+  });
+}
+
+async function handleQtySelected(chatId: number, qty: number) {
+  sessions[chatId] = { step: "payment", qty };
+  const totalDOP = qty * PRECIO_DOP;
+  const totalUSD = qty * PRECIO_USD;
+  const totalZelle = qty * PRECIO_ZELLE;
+
+  await sendMessage(
+    chatId,
+    `✅ <b>${qty} proxy(s) seleccionado(s)</b>\n\n` +
+      `💵 <b>Total a pagar:</b>\n` +
+      `• Banreservas: <b>RD$ ${totalDOP.toLocaleString()}</b>\n` +
+      `• Remitly: <b>$${totalUSD} USD</b>\n` +
+      `• Zelle: <b>$${totalZelle} USD</b>\n\n` +
+      `💳 <b>¿Con qué método deseas pagar?</b>`,
     {
-      reply_markup: buildKeyboard([PERIODS.map((d) => `${d} días`)]),
+      reply_markup: inlineBtn([
+        [{ text: "🏦 Banreservas", data: "pay_banreservas" }],
+        [{ text: "💸 Remitly", data: "pay_remitly" }],
+        [{ text: "💳 Zelle", data: "pay_zelle" }],
+        [{ text: "❌ Cancelar", data: "cancel" }],
+      ]),
     }
   );
 }
 
-async function handleDaysSelected(chatId: number, daysStr: string) {
-  const days = parseInt(daysStr);
-  if (isNaN(days)) {
-    await sendMessage(chatId, "❌ Período no válido.");
-    return;
-  }
+async function handlePaymentSelected(
+  chatId: number,
+  firstName: string,
+  username: string | undefined,
+  metodo: string
+) {
   const session = sessions[chatId];
-  if (!session?.qty || !session?.country || !session?.version) {
-    await sendMessage(chatId, "❌ Sesión expirada. Usa /start para comenzar.");
+  if (!session?.qty) {
+    await sendMessage(chatId, "❌ Sesión expirada. Usa /start para reiniciar.");
     return;
   }
 
-  await sendMessage(chatId, "⏳ Calculando precio...");
+  const orderId = generateOrderId();
+  const order: Order = {
+    orderId,
+    chatId,
+    firstName,
+    username,
+    qty: session.qty,
+    metodoPago: METODOS_PAGO[metodo as keyof typeof METODOS_PAGO].nombre,
+    status: "pending_payment",
+    createdAt: Date.now(),
+  };
+  orders[orderId] = order;
+  sessions[chatId] = { step: "waiting_receipt", qty: session.qty, metodoPago: metodo, orderId };
 
-  try {
-    const priceData = await proxy6Get(
-      `getprice?count=${session.qty}&period=${days}&version=${session.version}`
-    );
+  const m = METODOS_PAGO[metodo as keyof typeof METODOS_PAGO];
+  const qty = session.qty;
+  const total =
+    metodo === "banreservas"
+      ? `RD$ ${(qty * PRECIO_DOP).toLocaleString()}`
+      : metodo === "zelle"
+      ? `$${qty * PRECIO_ZELLE} USD`
+      : `$${qty * PRECIO_USD} USD`;
 
-    if (priceData.status !== "yes") {
-      await sendMessage(
-        chatId,
-        `❌ Error al obtener precio: <code>${priceData.error || "desconocido"}</code>`
-      );
-      return;
-    }
+  await sendMessage(
+    chatId,
+    `${m.emoji} <b>Instrucciones — ${m.nombre}</b>\n━━━━━━━━━━━━━━\n\n` +
+      m.detalle +
+      `\n\n📦 Pedido: <code>${orderId}</code>\n` +
+      `💵 <b>Total a enviar: ${total}</b>\n\n` +
+      `📸 <b>Una vez pagado, envía aquí el comprobante</b> (foto o captura de pantalla).\n\n` +
+      `⏳ Tu pedido será confirmado en máximo <b>30 minutos</b>.`
+  );
 
-    const price = priceData.price;
-    const currency = priceData.currency;
-
-    sessions[chatId] = { ...session, step: "confirm", days, price, currency };
-
-    const countryLabel =
-      Object.entries(COUNTRIES).find(([, v]) => v === session.country)?.[0] || session.country;
-
-    await sendMessage(
-      chatId,
-      `📋 <b>Resumen de tu pedido:</b>\n\n` +
-        `🌍 País: <b>${countryLabel}</b>\n` +
-        `🔌 Tipo: <b>IPv${session.version}</b>\n` +
-        `📦 Cantidad: <b>${session.qty} proxies</b>\n` +
-        `📅 Período: <b>${days} días</b>\n` +
-        `💵 Precio total: <b>${price} ${currency}</b>\n\n` +
-        `⚠️ El pago se deducirá del saldo en Proxy6.\n\n` +
-        `¿Confirmas la compra?`,
-      { reply_markup: buildKeyboard([["✅ Confirmar compra", "❌ Cancelar"]]) }
-    );
-  } catch (err) {
-    await sendMessage(chatId, "❌ Error de conexión con Proxy6. Intenta de nuevo.");
-    console.error("Proxy6 getprice error:", err);
-  }
+  await notifyAdmin(order);
 }
 
-async function handleConfirmPurchase(chatId: number) {
-  const session = sessions[chatId];
-  if (!session?.qty || !session?.country || !session?.version || !session?.days) {
-    await sendMessage(chatId, "❌ Sesión expirada. Usa /start para comenzar.");
+async function handleMyOrders(chatId: number) {
+  const myOrders = Object.values(orders).filter((o) => o.chatId === chatId);
+  if (myOrders.length === 0) {
+    await sendMessage(chatId, "📦 No tienes pedidos aún.\n\nUsa <b>🛒 Comprar Proxies</b> para comenzar.", {
+      reply_markup: mainMenu(),
+    });
     return;
   }
 
-  await sendMessage(chatId, "🔄 Procesando tu compra...");
+  const statusLabel: Record<OrderStatus, string> = {
+    pending_payment: "⏳ Pendiente de pago",
+    pending_confirm: "🔍 En revisión",
+    completed: "✅ Completado",
+    cancelled: "❌ Cancelado",
+  };
 
-  try {
-    // Verificar balance antes de comprar
-    const balanceData = await proxy6Get("");
-    if (balanceData.status !== "yes") {
-      await sendMessage(chatId, "❌ Error al verificar balance en Proxy6.");
-      return;
-    }
-
-    const balance = parseFloat(balanceData.balance);
-    const price = parseFloat(session.price || "0");
-
-    if (balance < price) {
-      await sendMessage(
-        chatId,
-        `❌ <b>Balance insuficiente en Proxy6.</b>\n\n` +
-          `Balance actual: <b>${balanceData.balance} ${balanceData.currency}</b>\n` +
-          `Precio del pedido: <b>${session.price} ${session.currency}</b>\n\n` +
-          `Por favor recarga tu cuenta en Proxy6 e intenta de nuevo.`
-      );
-      return;
-    }
-
-    // Comprar proxies
-    const buyData = await proxy6Get(
-      `buy?count=${session.qty}&period=${session.days}&country=${session.country}&version=${session.version}&type=http`
-    );
-
-    if (buyData.status !== "yes") {
-      const errMsg =
-        buyData.error_id === 400
-          ? "Balance insuficiente en Proxy6."
-          : buyData.error_id === 200
-          ? "Cantidad de proxies no disponible para ese país."
-          : `Error ${buyData.error_id}: ${buyData.error || "desconocido"}`;
-
-      await sendMessage(chatId, `❌ <b>Compra fallida:</b> ${errMsg}`);
-      return;
-    }
-
-    // Formatear proxies entregados
-    const proxyList = Object.values(buyData.list) as any[];
-    let proxyText = "";
-    for (const proxy of proxyList) {
-      proxyText += `<code>${proxy.host}:${proxy.port}:${proxy.user}:${proxy.pass}</code>\n`;
-    }
-
-    const countryLabel =
-      Object.entries(COUNTRIES).find(([, v]) => v === session.country)?.[0] || session.country;
-
-    const expiryDate = new Date();
-    expiryDate.setDate(expiryDate.getDate() + (session.days || 0));
-    const expiry = expiryDate.toLocaleDateString("es-ES", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-
-    await sendMessage(
-      chatId,
-      `✅ <b>¡Compra exitosa!</b>\n\n` +
-        `🌍 País: <b>${countryLabel}</b>\n` +
-        `🔌 Tipo: <b>IPv${session.version}</b>\n` +
-        `📦 Cantidad: <b>${session.qty} proxies</b>\n` +
-        `📅 Expiran: <b>${expiry}</b>\n` +
-        `💵 Total pagado: <b>${session.price} ${session.currency}</b>\n\n` +
-        `🔐 <b>Tus proxies (host:puerto:usuario:contraseña):</b>\n\n` +
-        proxyText +
-        `\n📌 Protocolo: HTTP/HTTPS`
-    );
-
-    // Resetear sesión
-    sessions[chatId] = { step: "idle" };
-
-    await sendMessage(chatId, `¿Deseas comprar más proxies?`, {
-      reply_markup: buildKeyboard(
-        [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
-        false
-      ),
-    });
-  } catch (err) {
-    await sendMessage(chatId, "❌ Error interno al procesar la compra. Intenta de nuevo.");
-    console.error("Proxy6 buy error:", err);
+  let text = `📦 <b>Tus pedidos:</b>\n━━━━━━━━━━━━━━\n\n`;
+  for (const o of myOrders.slice(-5)) {
+    text += `🔖 <code>${o.orderId}</code> — ${statusLabel[o.status]}\n`;
+    text += `   ${o.qty} proxy(s) · ${o.metodoPago}\n\n`;
   }
-}
-
-async function handleBalance(chatId: number) {
-  try {
-    const data = await proxy6Get("");
-    if (data.status !== "yes") {
-      await sendMessage(chatId, "❌ Error al obtener el balance.");
-      return;
-    }
-    await sendMessage(
-      chatId,
-      `💰 <b>Balance en Proxy6:</b>\n\n` +
-        `<b>${data.balance} ${data.currency}</b>`
-    );
-  } catch {
-    await sendMessage(chatId, "❌ Error de conexión con Proxy6.");
-  }
+  await sendMessage(chatId, text, { reply_markup: mainMenu() });
 }
 
 async function handleHelp(chatId: number) {
   await sendMessage(
     chatId,
-    `ℹ️ <b>¿Cómo funciona este bot?</b>\n\n` +
-      `1. Toca <b>🛒 Comprar Proxies</b>\n` +
-      `2. Elige tu país, tipo (IPv4/IPv6), cantidad y período\n` +
-      `3. Revisa el precio y confirma\n` +
-      `4. ¡Recibes tus proxies al instante!\n\n` +
-      `<b>Formato entregado:</b>\n` +
-      `<code>host:puerto:usuario:contraseña</code>\n\n` +
-      `<b>Protocolos:</b> HTTP / HTTPS`
+    `ℹ️ <b>¿Cómo funciona?</b>\n\n` +
+      `1️⃣ Toca <b>🛒 Comprar Proxies</b>\n` +
+      `2️⃣ Elige la cantidad\n` +
+      `3️⃣ Elige tu método de pago\n` +
+      `4️⃣ Realiza el pago y envía el comprobante\n` +
+      `5️⃣ En máximo 30 min recibes tus proxies ✅\n\n` +
+      `<b>Formato entregado:</b>\n<code>host:puerto:usuario:contraseña</code>\n\n` +
+      `<b>Protocolos:</b> HTTPS / SOCKS5\n\n` +
+      `📩 ¿Problemas? Contacta: @Soportetecnico2323`,
+    { reply_markup: mainMenu() }
   );
 }
 
 // ─────────────────────────────────────────
-//  WEBHOOK HANDLER PRINCIPAL
+//  COMANDOS DEL ADMIN
+// ─────────────────────────────────────────
+async function handleAdminConfirm(orderId: string, adminChatId: number) {
+  const order = orders[orderId];
+  if (!order) {
+    await sendMessage(adminChatId, `❌ Pedido <code>${orderId}</code> no encontrado.`);
+    return;
+  }
+  if (order.status === "completed") {
+    await sendMessage(adminChatId, `⚠️ Este pedido ya fue entregado.`);
+    return;
+  }
+
+  await sendMessage(adminChatId, `⏳ Obteniendo proxies de tu cuenta Proxy6...`);
+  const proxies = await getAvailableProxies(order.qty);
+
+  if (proxies.length < order.qty) {
+    await sendMessage(
+      adminChatId,
+      `❌ <b>No hay suficientes proxies disponibles.</b>\n\n` +
+        `Necesitas: <b>${order.qty}</b> — Disponibles: <b>${proxies.length}</b>\n\n` +
+        `Usa entrega manual:\n` +
+        `<code>/entregar ${orderId} host:port:user:pass</code>`
+    );
+    return;
+  }
+
+  await deliverProxies(order, proxies);
+  await sendMessage(
+    adminChatId,
+    `✅ <b>Pedido ${orderId} entregado.</b> Se enviaron <b>${proxies.length} proxies</b> al cliente.`
+  );
+}
+
+async function handleAdminReject(orderId: string, adminChatId: number) {
+  const order = orders[orderId];
+  if (!order) {
+    await sendMessage(adminChatId, `❌ Pedido no encontrado.`);
+    return;
+  }
+  orders[orderId].status = "cancelled";
+  await sendMessage(
+    order.chatId,
+    `❌ <b>Pedido ${orderId} rechazado.</b>\n\nEl comprobante no fue válido.\nContacta: @Soportetecnico2323`,
+    { reply_markup: mainMenu() }
+  );
+  await sendMessage(adminChatId, `✅ Pedido <code>${orderId}</code> rechazado y cliente notificado.`);
+}
+
+async function handleManualDeliver(text: string, adminChatId: number) {
+  const parts = text.split(" ");
+  if (parts.length < 3) {
+    await sendMessage(
+      adminChatId,
+      `❌ Formato: <code>/entregar ORD-XXX host:port:user:pass</code>`
+    );
+    return;
+  }
+  const orderId = parts[1];
+  const proxies = parts.slice(2);
+  const order = orders[orderId];
+  if (!order) {
+    await sendMessage(adminChatId, `❌ Pedido <code>${orderId}</code> no encontrado.`);
+    return;
+  }
+  await deliverProxies(order, proxies);
+  await sendMessage(adminChatId, `✅ Proxies entregados manualmente.`);
+}
+
+// ─────────────────────────────────────────
+//  ROUTE HANDLER
 // ─────────────────────────────────────────
 export async function POST(req: NextRequest) {
   try {
@@ -350,121 +441,99 @@ export async function POST(req: NextRequest) {
     const message = body.message;
     const callbackQuery = body.callback_query;
 
-    // ── Mensajes de texto ──
     if (message) {
       const chatId: number = message.chat.id;
       const text: string = message.text || "";
       const firstName: string = message.from?.first_name || "Usuario";
+      const username: string | undefined = message.from?.username;
       const session = sessions[chatId] || { step: "idle" };
+      const isAdmin = chatId === ADMIN_ID;
 
-      if (text === "/start") {
-        await handleStart(chatId, firstName);
-      } else if (text === "🛒 Comprar Proxies") {
-        await handleBuyStart(chatId);
-      } else if (text === "💰 Mi Balance") {
-        await handleBalance(chatId);
-      } else if (text === "ℹ️ Ayuda") {
-        await handleHelp(chatId);
-      } else {
-        await sendMessage(
-          chatId,
-          `Usa los botones del menú para navegar.\nEscribe /start si necesitas reiniciar.`
-        );
-      }
-    }
-
-    // ── Botones inline ──
-    if (callbackQuery) {
-      const chatId: number = callbackQuery.message.chat.id;
-      const data: string = callbackQuery.data;
-      const session = sessions[chatId] || { step: "idle" };
-
-      await tPost("answerCallbackQuery", { callback_query_id: callbackQuery.id });
-
-      if (data === "❌ Cancelar") {
-        sessions[chatId] = { step: "idle" };
-        await sendMessage(chatId, "❌ Compra cancelada.", {
-          reply_markup: buildKeyboard(
-            [["🛒 Comprar Proxies"], ["💰 Mi Balance", "ℹ️ Ayuda"]],
-            false
-          ),
-        });
+      // Comprobante foto
+      if (message.photo && session.step === "waiting_receipt" && session.orderId) {
+        const fileId = message.photo[message.photo.length - 1].file_id;
+        const order = orders[session.orderId];
+        if (order) {
+          order.status = "pending_confirm";
+          await sendMessage(
+            chatId,
+            `📸 <b>Comprobante recibido.</b>\n\nPedido <code>${session.orderId}</code> en revisión.\n⏳ Máximo <b>30 minutos</b>.`
+          );
+          await notifyAdminReceipt(order, fileId);
+        }
         return NextResponse.json({ ok: true });
       }
 
-      switch (session.step) {
-        case "country":
-          if (Object.keys(COUNTRIES).includes(data)) {
-            await handleCountrySelected(chatId, data);
-          }
-          break;
+      // Comprobante texto
+      if (session.step === "waiting_receipt" && session.orderId && text && !text.startsWith("/")) {
+        const order = orders[session.orderId];
+        if (order) {
+          order.status = "pending_confirm";
+          await sendMessage(
+            chatId,
+            `📝 <b>Referencia recibida.</b>\n\nPedido <code>${session.orderId}</code> en revisión.\n⏳ Máximo <b>30 minutos</b>.`
+          );
+          await notifyAdminReceipt(order, undefined, text);
+        }
+        return NextResponse.json({ ok: true });
+      }
 
-        case "type":
-          if (data.includes("IPv4") || data.includes("IPv6")) {
-            await handleTypeSelected(chatId, data);
-          }
-          break;
+      // Comandos admin
+      if (isAdmin && text.startsWith("/entregar")) {
+        await handleManualDeliver(text, chatId);
+        return NextResponse.json({ ok: true });
+      }
 
-        case "qty":
-          if (QTY_OPTIONS.map(String).includes(data)) {
-            await handleQtySelected(chatId, data);
-          }
-          break;
+      if (text === "/start") await handleStart(chatId, firstName);
+      else if (text === "🛒 Comprar Proxies") await handleBuyStart(chatId);
+      else if (text === "📦 Mis Pedidos") await handleMyOrders(chatId);
+      else if (text === "ℹ️ Ayuda") await handleHelp(chatId);
+    }
 
-        case "days":
-          const daysMatch = data.match(/^(\d+) días$/);
-          if (daysMatch) {
-            await handleDaysSelected(chatId, daysMatch[1]);
-          }
-          break;
+    if (callbackQuery) {
+      const chatId: number = callbackQuery.message.chat.id;
+      const data: string = callbackQuery.data;
+      const firstName: string = callbackQuery.from?.first_name || "Usuario";
+      const username: string | undefined = callbackQuery.from?.username;
 
-        case "confirm":
-          if (data === "✅ Confirmar compra") {
-            await handleConfirmPurchase(chatId);
-          }
-          break;
+      await tPost("answerCallbackQuery", { callback_query_id: callbackQuery.id });
 
-        default:
-          await sendMessage(chatId, "Usa /start para comenzar.");
+      if (data === "cancel") {
+        sessions[chatId] = { step: "idle" };
+        await sendMessage(chatId, "❌ Compra cancelada.", { reply_markup: mainMenu() });
+        return NextResponse.json({ ok: true });
+      }
+      if (data.startsWith("qty_")) {
+        await handleQtySelected(chatId, parseInt(data.replace("qty_", "")));
+      } else if (data.startsWith("pay_")) {
+        await handlePaymentSelected(chatId, firstName, username, data.replace("pay_", ""));
+      } else if (data.startsWith("confirm_") && chatId === ADMIN_ID) {
+        await handleAdminConfirm(data.replace("confirm_", ""), chatId);
+      } else if (data.startsWith("reject_") && chatId === ADMIN_ID) {
+        await handleAdminReject(data.replace("reject_", ""), chatId);
       }
     }
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("Proxy bot error:", err);
+    console.error("ProxyShop error:", err);
     return NextResponse.json({ ok: false }, { status: 500 });
   }
 }
 
-// ─────────────────────────────────────────
-//  GET — registrar / verificar webhook
-// ─────────────────────────────────────────
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
 
   if (action === "setWebhook") {
     const webhookUrl = searchParams.get("url");
-    if (!webhookUrl) {
-      return NextResponse.json({ error: "Falta ?url=https://tu-dominio.vercel.app/api/proxyshop" });
-    }
+    if (!webhookUrl) return NextResponse.json({ error: "Falta ?url=..." });
     const res = await fetch(`${API}/setWebhook?url=${encodeURIComponent(webhookUrl)}`);
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(await res.json());
   }
-
   if (action === "getWebhook") {
     const res = await fetch(`${API}/getWebhookInfo`);
-    const data = await res.json();
-    return NextResponse.json(data);
+    return NextResponse.json(await res.json());
   }
-
-  return NextResponse.json({
-    bot: "ProxyShop Bot",
-    status: "running",
-    instructions: {
-      setWebhook: "GET /api/proxyshop?action=setWebhook&url=https://tu-dominio.vercel.app/api/proxyshop",
-      getWebhook: "GET /api/proxyshop?action=getWebhook",
-    },
-  });
+  return NextResponse.json({ bot: "ProxyShop Bot", status: "running" });
 }
