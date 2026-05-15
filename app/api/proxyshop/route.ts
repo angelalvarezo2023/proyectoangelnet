@@ -157,8 +157,6 @@ async function fetchProxyData(hostPort: string): Promise<string | null> {
 async function agregarProxy(input: string, adminChatId: number) {
   const parts = input.trim().split(":");
 
-  // Formato corto: IP:Puerto (el bot busca user:pass en Proxy6 en segundo plano)
-  // Formato completo: IP:Puerto:usuario:clave
   if (parts.length < 2 || !parts[0] || !parts[1] || isNaN(Number(parts[1]))) {
     await sendMessage(adminChatId,
       `❌ Formato incorrecto.\nEnvia: <code>IP:Puerto</code>\nEjemplo: <code>181.177.86.38:9344</code>`
@@ -174,34 +172,9 @@ async function agregarProxy(input: string, adminChatId: number) {
     return;
   }
 
-  // Si viene formato completo IP:Puerto:user:pass, usarlo directo
-  // Si viene solo IP:Puerto, buscar en Proxy6 en segundo plano
-  let full = parts.length >= 4
-    ? `${parts[0].trim()}:${parts[1].trim()}:${parts[2].trim()}:${parts[3].trim()}`
-    : null;
-
-  if (!full) {
-    // Buscar en Proxy6 sin bloquear — timeout de 5 segundos
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      const res = await fetch(`${PROXY6_API}/getproxy?state=active&limit=1000`, { signal: controller.signal });
-      clearTimeout(timeout);
-      const data = await res.json();
-      if (data.status === "yes") {
-        const all = Object.values(data.list) as any[];
-        const found = all.find(
-          (p: any) => p.host === parts[0].trim() && String(p.port) === parts[1].trim()
-        );
-        if (found) full = `${found.host}:${found.port}:${found.user}:${found.pass}`;
-      }
-    } catch {
-      // Si falla o timeout, guardar solo con hostPort — se completará al entregar
-      full = hostPort;
-    }
-  }
-
-  await addToPool({ hostPort, full: full || hostPort, addedAt: Date.now() });
+  // Guardar inmediatamente con hostPort como placeholder
+  // Los datos completos se obtienen de Proxy6 al momento de entregar
+  await addToPool({ hostPort, full: hostPort, addedAt: Date.now() });
   const poolActualizado = await getPool();
   const lista = poolActualizado.map((p, i) => `${i + 1}. <code>${p.hostPort}</code>`).join("\n");
 
@@ -531,8 +504,21 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
   }
 
   const tomados = pool.slice(0, order.qty);
-  const proxies = tomados.map((p) => p.full);
   await removeFromPoolMany(tomados.map((p) => p.hostPort));
+
+  // Obtener datos completos de Proxy6 para cada IP
+  const proxies: string[] = [];
+  for (const entry of tomados) {
+    // Si ya tiene user:pass completo, usarlo
+    if (entry.full.split(":").length >= 4) {
+      proxies.push(entry.full);
+    } else {
+      // Buscar en Proxy6
+      const data = await fetchProxyData(entry.hostPort);
+      proxies.push(data || entry.full);
+    }
+  }
+
   await deliverProxies(order, proxies);
   await sendMessage(adminChatId, `✅ Pedido <b>${orderId}</b> entregado.\n${proxies.length} IP(s) enviadas y quitadas de la lista.`);
 }
