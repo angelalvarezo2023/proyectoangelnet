@@ -152,11 +152,11 @@ function generarFacturaTexto(order: Order, proxies: string[]): string {
     `💵 Monto:    <b>${monto}</b>\n` +
     `📆 Expira:   ${formatFecha(expira)}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `🔐 <b>PROXIES ENTREGADOS</b>\n` +
+    `🔐 <b>IPs ENTREGADAS</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n\n` +
     proxiesFormateados + `\n\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
-    `📌 Protocolo: HTTPS / SOCKS5\n` +
+    `📌 Protocolo: HTTPS / SOCKS5 ✓\n` +
     `✅ <b>Pago Confirmado</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `💡 <i>Guarda este mensaje como comprobante.</i>\n` +
@@ -176,7 +176,7 @@ async function getProxiesDisponibles(): Promise<any[]> {
       const daysLeft = Math.floor(
         (new Date(p.date_end).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       );
-      return comentario === COMENTARIO_VENTA.toLowerCase() && daysLeft > 3;
+      return comentario === COMENTARIO_VENTA.toLowerCase() && daysLeft >= 1;
     });
   } catch {
     return [];
@@ -223,7 +223,7 @@ async function notifyAdmin(order: Order) {
   const titulo = esRenovacion ? "🔄 RENOVACION" : "🛒 NUEVA COMPRA";
   const detalle = esRenovacion
     ? `🔌 Proxy: <code>${order.proxyRenovar}</code>\n📅 Dias: <b>${DIAS_RENOVACION}</b>`
-    : `📦 Cantidad: <b>${order.qty} proxy(s)</b>`;
+    : `📦 Cantidad: <b>${order.qty} IP(s)</b>`;
 
   await sendMessage(
     ADMIN_ID,
@@ -250,7 +250,7 @@ async function notifyAdminReceipt(order: Order, photoFileId?: string, receiptTex
   const esRenovacion = order.tipo === "renovacion";
   const detalle = esRenovacion
     ? `🔌 Proxy: <code>${order.proxyRenovar}</code>`
-    : `📦 Cantidad: <b>${order.qty} proxy(s)</b>`;
+    : `📦 Cantidad: <b>${order.qty} IP(s)</b>`;
 
   const caption =
     `📸 <b>COMPROBANTE — ${order.orderId}</b>\n━━━━━━━━━━━━━━\n\n` +
@@ -381,7 +381,7 @@ async function handleBuyStart(chatId: number) {
   if (stock === 0) {
     await sendMessage(
       chatId,
-      `😔 <b>Sin stock disponible ahora mismo.</b>\n\nContactanos: @Soportetecnico2323`,
+      `😔 <b>Sin IPs disponibles ahora mismo.</b>\n\nEscribenos: @Soportetecnico2323`,
       { reply_markup: mainMenu() }
     );
     return;
@@ -400,7 +400,7 @@ async function handleBuyStart(chatId: number) {
 
   await sendMessage(
     chatId,
-    `🛒 <b>Proxies disponibles: ${stock}</b>\n\n¿Cuantos deseas comprar?`,
+    `🛒 <b>IPs disponibles: ${stock}</b>\n\n¿Cuantas necesitas?`,
     { reply_markup: inlineBtn(rows) }
   );
 }
@@ -409,7 +409,7 @@ async function handleQtySelected(chatId: number, qty: number) {
   sessions[chatId] = { step: "payment", qty };
   await sendMessage(
     chatId,
-    `✅ <b>${qty} proxy(s)</b>\n\n` +
+    `✅ <b>${qty} IP(s)</b>\n\n` +
       `💵 <b>Total:</b>\n` +
       `• Banreservas: <b>RD$ ${(qty * PRECIO_DOP).toLocaleString()}</b>\n` +
       `• Remitly: <b>$${qty * PRECIO_USD} USD</b>\n` +
@@ -452,7 +452,7 @@ async function handlePaymentSelected(
   const m = METODOS_PAGO[metodo as keyof typeof METODOS_PAGO];
   const descripcion = tipo === "renovacion"
     ? `🔄 Renovacion\n🔌 Proxy: <code>${session?.proxyRenovar}</code>\n📅 Dias: <b>${DIAS_RENOVACION}</b>`
-    : `📦 <b>${qty} proxy(s)</b>`;
+    : `📦 <b>${qty} IP(s)</b>`;
 
   await sendMessage(
     chatId,
@@ -460,8 +460,8 @@ async function handlePaymentSelected(
       m.detalle + `\n\n${descripcion}\n` +
       `📦 Pedido: <code>${orderId}</code>\n` +
       `💵 <b>Total: ${monto}</b>\n\n` +
-      `📸 <b>Envia el comprobante de pago</b> (foto o captura).\n` +
-      `⏳ Confirmacion en maximo <b>30 minutos</b>.`
+      `📸 <b>Envia una foto del comprobante</b> (foto o captura).\n` +
+      `⏳ Te respondemos en menos de 30 minutos.`
   );
 
   await notifyAdmin(order);
@@ -581,7 +581,7 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
   if (proxies.length < order.qty) {
     await sendMessage(
       adminChatId,
-      `❌ Proxies insuficientes.\nNecesitas: <b>${order.qty}</b> — Disponibles: <b>${proxies.length}</b>\n\n` +
+      `❌ No hay suficientes IPs disponibles.\nNecesitas: <b>${order.qty}</b> — Disponibles: <b>${proxies.length}</b>\n\n` +
         `Entrega manual:\n<code>/entregar ${orderId} host:port:user:pass</code>`
     );
     return;
@@ -591,7 +591,7 @@ async function handleAdminConfirm(orderId: string, adminChatId: number) {
   await sendMessage(
     adminChatId,
     `✅ Pedido <b>${orderId}</b> entregado.\n` +
-      `${proxies.length} proxy(s) enviados y marcados como "vendido" en Proxy6.`
+      `${proxies.length} IP(s) enviados y marcados como "vendido" en Proxy6.`
   );
 }
 
@@ -604,7 +604,7 @@ async function handleAdminReject(orderId: string, adminChatId: number) {
   orders[orderId].status = "cancelled";
   await sendMessage(
     order.chatId,
-    `❌ <b>Pedido ${orderId} rechazado.</b>\n\nComprobante no valido.\nContacta: @Soportetecnico2323`,
+    `❌ <b>Pedido ${orderId} rechazado.</b>\n\nEl pago no se pudo verificar.\nContacta: @Soportetecnico2323`,
     { reply_markup: mainMenu() }
   );
   await sendMessage(adminChatId, `✅ Pedido rechazado y cliente notificado.`);
@@ -686,7 +686,7 @@ export async function POST(req: NextRequest) {
         if (order) {
           order.status = "pending_confirm";
           await sendMessage(chatId,
-            `📸 <b>Comprobante recibido.</b>\n\nPedido <code>${session.orderId}</code> en revision.\n⏳ Max. <b>30 minutos</b>.`
+            `📸 <b>¡Comprobante recibido!</b>\n\nPedido <code>${session.orderId}</code> en revision.\n⏳ Max. <b>30 minutos</b>.`
           );
           await notifyAdminReceipt(order, fileId);
         }
