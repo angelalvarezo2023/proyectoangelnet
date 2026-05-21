@@ -90,6 +90,13 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     const decoded = decodeURIComponent(targetUrl);
     const { proxyHost = "", proxyPort = "", proxyUser = "", proxyPass = "" } = user;
 
+    // Debug: log proxy config para verificar que llega desde Firebase
+    console.log("[AR-PROXY]", username,
+      "host:", proxyHost || "NONE",
+      "port:", proxyPort || "NONE",
+      "url:", decoded.substring(0, 60)
+    );
+
     const agent = (proxyHost && proxyPort)
       ? new HttpsProxyAgent(
           proxyUser && proxyPass
@@ -97,6 +104,10 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
             : `http://${proxyHost}:${proxyPort}`
         )
       : undefined;
+
+    if (!agent) {
+      console.warn("[AR-PROXY] WARNING: No proxy agent — request saldrá con IP de Vercel");
+    }
 
     const pb = `/api/angel-rent?u=${enc(username)}&url=`;
 
@@ -155,6 +166,16 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       cookies, getUA(user), upstreamReferer
     );
 
+    // Log para debug de login — ver qué responde MegaPersonals exactamente
+    if (decoded.includes("/users/api/login") || decoded.includes("/users/login")) {
+      console.log("[AR-LOGIN]", method, resp.status,
+        "ct:", resp.headers["content-type"],
+        "body:", resp.body.toString("utf-8").substring(0, 300)
+      );
+    }
+
+    // Si MegaPersonals devuelve JSON de error (como el 500), pasarlo al browser
+    // como HTML para que el proxy no lo confunda con un error propio
     const ct = resp.headers["content-type"] || "";
     const rh = new Headers(cors());
 
