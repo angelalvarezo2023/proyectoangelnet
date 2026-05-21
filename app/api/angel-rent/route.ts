@@ -125,11 +125,12 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     if (!upstreamReferer) {
       try {
         const parsedDec = new URL(decoded);
-        if (decoded.includes("/login") || decoded.includes("/sign_in") || decoded.includes("/users/api/login")) {
-          // Login: referer es la propia página de login
+        if (decoded.includes("/users/api/login")) {
+          // El POST de login siempre viene de la página de login GET
           upstreamReferer = parsedDec.origin + "/users/login";
+        } else if (decoded.includes("/login") || decoded.includes("/sign_in")) {
+          upstreamReferer = parsedDec.origin + "/";
         } else if (method === "GET" && parsedDec.pathname !== "/") {
-          // Navegación normal: referer plausible es el listado
           upstreamReferer = parsedDec.origin + "/users/posts/list";
         }
       } catch { /* ignorar */ }
@@ -137,23 +138,16 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
 
     let cookies = req.headers.get("cookie") || "";
 
-    // Para requests de login POST: limpiar cookies de sesión anteriores
-    // que pueden causar 500 en el servidor de MegaPersonals.
-    // Solo se mantienen cookies no-sesión (preferencias, analytics).
-    if (method === "POST" && (
+    // Para POST de login: no enviar cookies anteriores en absoluto.
+    // Cookies de sesiones previas causan 500 en MegaPersonals porque
+    // el servidor intenta validar una sesión inválida en lugar de crear una nueva.
+    const isLoginRequest =
       decoded.includes("/users/api/login") ||
       decoded.includes("/users/login") ||
-      decoded.includes("/sign_in")
-    )) {
-      const sessionCookieNames = ["PHPSESSID","session","sess","auth","token","remember","login","user_session","_session"];
-      const filteredCookies = cookies
-        .split(";")
-        .filter(c => {
-          const name = c.trim().split("=")[0].trim().toLowerCase();
-          return !sessionCookieNames.some(s => name.includes(s));
-        })
-        .join(";");
-      cookies = filteredCookies;
+      decoded.includes("/sign_in");
+
+    if (method === "POST" && isLoginRequest) {
+      cookies = "";
     }
 
     const resp = await fetchProxy(
@@ -677,39 +671,60 @@ document.addEventListener("click",function(e){
   }
 })();
 
-// ── Interceptar window.location y document.location ──────────────────────
-// MegaPersonals después del Publish hace location.href = "/users/posts/..."
-// lo que navega fuera del proxy. Lo interceptamos con un Proxy de JS.
+// ── Interceptar navegación via location ───────────────────────────────────
+// location.href no se puede sobreescribir en Chrome con defineProperty.
+// La estrategia correcta es interceptar location.assign y location.replace,
+// y usar beforeunload para capturar navegaciones que escapan al proxy.
 (function(){
-  function interceptLocation(obj){
+  // assign y replace sí son interceptables
+  try{
+    var origAssign=location.assign.bind(location);
+    location.assign=function(u){
+      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
+      origAssign(u);
+    };
+  }catch(e){}
+  try{
+    var origReplace=location.replace.bind(location);
+    location.replace=function(u){
+      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
+      origReplace(u);
+    };
+  }catch(e){}
+
+  // Interceptar navegación en beforeunload — si el destino es megapersonals
+  // sin pasar por el proxy, redirigir correctamente.
+  window.addEventListener("beforeunload",function(){
     try{
-      var origAssign=obj.assign.bind(obj);
-      var origReplace=obj.replace.bind(obj);
-      obj.assign=function(u){
-        var f=px(u);origAssign(f||u);
-      };
-      obj.replace=function(u){
-        var f=px(u);origReplace(f||u);
-      };
-      // Interceptar .href con defineProperty
-      var desc=Object.getOwnPropertyDescriptor(obj,"href");
-      if(desc&&desc.set){
-        var origSet=desc.set;
-        Object.defineProperty(obj,"href",{
-          get:desc.get,
-          set:function(u){
-            if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
-              var f=px(u);if(f)u=f;
-            }
-            origSet.call(this,u);
-          },
-          configurable:true
-        });
+      var next=document.activeElement;
+      var href=next?(next.getAttribute("href")||""):"";
+      // Si la navegación pendiente es a megapersonals sin proxy, redirigir
+      if(href&&href.indexOf("megapersonals")!==-1&&href.indexOf("/api/angel-rent")===-1){
+        var f=px(href);
+        if(f){window.stop();location.href=f;}
       }
     }catch(e){}
-  }
-  try{interceptLocation(window.location);}catch(e){}
-  try{interceptLocation(document.location);}catch(e){}
+  });
+
+  // La forma más efectiva: monkey-patch el setter de Location en el prototype
+  // Esto funciona ANTES de que el JS de la página cargue porque lo inyectamos en <head>
+  try{
+    var locProto=Object.getPrototypeOf(location);
+    var hrefDesc=Object.getOwnPropertyDescriptor(locProto,"href");
+    if(hrefDesc&&hrefDesc.set){
+      var _origHrefSet=hrefDesc.set;
+      Object.defineProperty(locProto,"href",{
+        get:hrefDesc.get,
+        set:function(u){
+          if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
+            var f=px(u);if(f){_origHrefSet.call(this,f);return;}
+          }
+          _origHrefSet.call(this,u);
+        },
+        configurable:true
+      });
+    }
+  }catch(e){}
 })();
 
 // ── Bloquear WebRTC (evita leak de IP real del servidor proxy) ────────────
