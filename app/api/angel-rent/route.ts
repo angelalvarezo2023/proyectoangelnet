@@ -458,8 +458,16 @@ function px(u){
   }catch(e){return null;}
 }
 
-// ── Deshabilitar document.write (evita romper el DOM reescrito) ───────────
-try{document.write=function(){};document.writeln=function(){};}catch(e){}
+// ── Deshabilitar document.write de forma no destructiva ───────────────────
+// Solo lo reemplazamos si el documento ya terminó de cargar.
+// Si lo hacemos antes, puede romper scripts síncronos de la página (SyntaxError).
+if(document.readyState==="complete"||document.readyState==="interactive"){
+  try{document.write=function(){};document.writeln=function(){};}catch(e){}
+} else {
+  document.addEventListener("DOMContentLoaded",function(){
+    try{document.write=function(){};document.writeln=function(){};}catch(e){}
+  });
+}
 
 // ── Intercepción de clicks en <a> ─────────────────────────────────────────
 document.addEventListener("click",function(e){
@@ -929,7 +937,9 @@ setTimeout(showNextPromo,5000);
 function updateUI(){
   var s=gst(),on=!!s.on,paused=!!s.paused,cnt=s.cnt||0,nextAt=s.nextAt||0;
   if(G("ar-uname"))G("ar-uname").textContent=DNAME;
-  var rl=rentLeft(),re=G("ar-rent");
+  // ENDTS puede ser 0 si no hay fecha de renta configurada
+  var rl=(ENDTS&&ENDTS>0)?Math.max(0,ENDTS-Date.now()):null;
+  var re=G("ar-rent");
   if(re){
     re.textContent=fmtR(rl);
     re.className="arv";
@@ -1113,7 +1123,46 @@ function handlePage(){
   // Páginas de posts (listado, detalle, edición)
   if(u.indexOf("/users/posts")!==-1){
     startTick();
-    // Capturar número de teléfono para sincronizar con Firebase
+
+    // ── Página de edición: rellenar campo de teléfono respetando la máscara ──
+    // El campo usa IMask/jQuery Mask que escucha eventos nativos.
+    // Asignar .value directamente lo borra — hay que simular typing real.
+    if(u.indexOf("/users/posts/edit")!==-1 && PHONE){
+      setTimeout(function(){
+        try{
+          // Extraer solo dígitos del teléfono guardado (sin +1, guiones, etc.)
+          var digits=PHONE.replace(/[^0-9]/g,"");
+          // Si empieza con 1 y tiene 11 dígitos, quitar el 1 del país
+          if(digits.length===11&&digits.charAt(0)==="1")digits=digits.substring(1);
+
+          // Buscar el input de teléfono — MegaPersonals usa varios selectores
+          var phoneInput=
+            document.querySelector("input[name='phone_number']")||
+            document.querySelector("input[name='phone']")||
+            document.querySelector("input[type='tel']")||
+            document.querySelector(".intl-tel-input input")||
+            document.querySelector(".iti input");
+
+          if(phoneInput&&digits){
+            // Enfocar primero
+            phoneInput.focus();
+            // Usar nativeInputValueSetter si React controla el campo
+            var nativeSetter=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,"value");
+            if(nativeSetter&&nativeSetter.set){
+              nativeSetter.set.call(phoneInput,digits);
+            } else {
+              phoneInput.value=digits;
+            }
+            // Disparar eventos que la máscara escucha
+            ["input","change","keyup","blur"].forEach(function(ev){
+              try{phoneInput.dispatchEvent(new Event(ev,{bubbles:true}));}catch(x){}
+            });
+          }
+        }catch(e){}
+      },1500);
+    }
+
+    // ── Capturar número de teléfono para sincronizar con Firebase ─────────
     if(!/\/(bump|repost|renew)/.test(u)){
       setTimeout(function(){
         try{
@@ -1197,7 +1246,6 @@ if(modal){
 }
 
 // ── Eventos de botones principales ────────────────────────────────────────
-document.body.style.paddingTop="48px";
 var rb2=G("ar-rb");
 if(rb2)rb2.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();toggleRobot();});
 
@@ -1269,29 +1317,41 @@ if(G("ar-s-send"))G("ar-s-send").addEventListener("click",async function(){
 });
 
 // ── Arranque ──────────────────────────────────────────────────────────────
-handlePage();
+// Esperar a que el DOM esté completamente listo antes de arrancar
+function arInit(){
+  if(document.body){
+    document.body.style.paddingTop="48px";
+  }
+  updateUI();
+  handlePage();
+  var initS=gst();
+  if(initS.on&&!initS.paused)startTick();
+}
+if(document.readyState==="loading"){
+  document.addEventListener("DOMContentLoaded",arInit);
+} else {
+  arInit();
+}
 setInterval(updateUI,1000);
-updateUI();
-var initS=gst();if(initS.on&&!initS.paused)startTick();
 
 })();
 </script>`;
 
-  const bodyBlock = uiHtml + css + script;
   let result = html;
 
-  // Insertar CSS en <head>
+  // Insertar CSS en <head> — solo una vez
   if (result.includes("</head>")) {
     result = result.replace("</head>", css + "</head>");
-    // CSS ya está en bodyBlock sin duplicar — extraer solo uiHtml + script
-    const bodyOnly = uiHtml + script;
-    result = result.includes("<body")
-      ? result.replace(/(<body[^>]*>)/i, "$1" + bodyOnly)
-      : bodyOnly + result;
+  } else if (/<head[^>]*>/i.test(result)) {
+    result = result.replace(/<head[^>]*>/i, (m: string) => m + css);
+  }
+
+  // Insertar UI + script justo después de <body>
+  const bodyOnly = uiHtml + script;
+  if (result.includes("<body")) {
+    result = result.replace(/(<body[^>]*>)/i, "$1" + bodyOnly);
   } else {
-    result = result.includes("<body")
-      ? result.replace(/(<body[^>]*>)/i, "$1" + bodyBlock)
-      : bodyBlock + result;
+    result = bodyOnly + result;
   }
 
   return result;
