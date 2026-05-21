@@ -596,34 +596,55 @@ document.addEventListener("submit",function(e){
   form.setAttribute("action",P+encodeURIComponent(target));
 },true);
 
-// ── Interceptor de botones Publish / Submit que navegan sin form ───────────
-// MegaPersonals en el último paso de edición usa un botón que puede hacer
-// location.href o window.location directo en lugar de submit del form.
-// Lo capturamos en el click para evitar que navegue fuera del proxy.
-document.addEventListener("click",function(e){
-  var el=e.target;
-  // Subir hasta 3 niveles para capturar clicks en hijos del botón
-  for(var i=0;i<3;i++){
-    if(!el)break;
-    var tag=(el.tagName||"").toUpperCase();
-    var txt=(el.innerText||el.textContent||el.value||"").trim().toLowerCase();
-    var isPublish=txt.indexOf("publish")!==-1||txt.indexOf("publicar")!==-1;
-    var isSubmit=tag==="INPUT"&&(el.type==="submit"||el.type==="button");
-    var isBtn=tag==="BUTTON"||tag==="A"||isSubmit;
-    if(isBtn&&isPublish){
-      // Asegurarse de que el form padre tenga action proxificada
-      var form=el.closest?el.closest("form"):null;
-      if(form){
-        var ac=form.getAttribute("action")||"";
-        if(ac.indexOf("/api/angel-rent")===-1){
-          var tgt;try{tgt=ac?new URL(ac,B).href:C;}catch(x){tgt=C;}
-          form.setAttribute("action",P+encodeURIComponent(tgt));
-        }
-      }
-      break;
+// ── Interceptor de submit para mantener navegación dentro del proxy ────────
+// El submit nativo del form hace que el browser navegue directamente a la URL
+// de respuesta (aunque pase por el proxy). Para evitarlo, interceptamos el
+// submit del form de publicación y lo hacemos via fetch, luego navegamos
+// manualmente a la URL de respuesta proxificada.
+document.addEventListener("submit",function(e){
+  var form=e.target;
+  if(!form||form.tagName!=="FORM")return;
+
+  var action=form.getAttribute("action")||"";
+  // Solo interceptar forms que ya están proxificados
+  if(action.indexOf("/api/angel-rent")===-1)return;
+
+  // Detectar si es el form de publicación final (tiene captcha)
+  var hasCaptcha=form.querySelector("input[name*='captcha'],input[name*='code'],input[name*='security']");
+  var hasPublish=form.querySelector("input[type=submit][value*='Publish'],button[type=submit]");
+  var isEditForm=C.indexOf("/users/posts/edit")!==-1;
+
+  if(!isEditForm)return; // Solo en páginas de edición
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  // Serializar el form manualmente
+  var fd=new FormData(form);
+  var body=new URLSearchParams();
+  fd.forEach(function(v,k){if(typeof v==="string")body.append(k,v);});
+
+  // Enviar via fetch al proxy
+  fetch(action,{
+    method:"POST",
+    headers:{"Content-Type":"application/x-www-form-urlencoded"},
+    body:body.toString(),
+    redirect:"follow"
+  }).then(function(resp){
+    // La URL final después de todos los redirects
+    var finalUrl=resp.url;
+    if(finalUrl&&finalUrl.indexOf("/api/angel-rent")!==-1){
+      // Ya está proxificada, navegar directo
+      location.href=finalUrl;
+    } else if(finalUrl){
+      // No está proxificada, proxificar antes de navegar
+      var f=px(finalUrl);
+      location.href=f||finalUrl;
     }
-    el=el.parentElement;
-  }
+  }).catch(function(){
+    // Si falla el fetch, hacer submit normal como fallback
+    form.submit();
+  });
 },true);
 
 // ── MutationObserver: reescribir nodos añadidos dinámicamente ─────────────
