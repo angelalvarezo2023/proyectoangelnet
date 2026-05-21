@@ -701,42 +701,8 @@ document.addEventListener("click",function(e){
 })();
 
 // ── Interceptar navegación via location ───────────────────────────────────
-// location.href no se puede sobreescribir en Chrome con defineProperty.
-// La estrategia correcta es interceptar location.assign y location.replace,
-// y usar beforeunload para capturar navegaciones que escapan al proxy.
 (function(){
-  // assign y replace sí son interceptables
-  try{
-    var origAssign=location.assign.bind(location);
-    location.assign=function(u){
-      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
-      origAssign(u);
-    };
-  }catch(e){}
-  try{
-    var origReplace=location.replace.bind(location);
-    location.replace=function(u){
-      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
-      origReplace(u);
-    };
-  }catch(e){}
-
-  // Interceptar navegación en beforeunload — si el destino es megapersonals
-  // sin pasar por el proxy, redirigir correctamente.
-  window.addEventListener("beforeunload",function(){
-    try{
-      var next=document.activeElement;
-      var href=next?(next.getAttribute("href")||""):"";
-      // Si la navegación pendiente es a megapersonals sin proxy, redirigir
-      if(href&&href.indexOf("megapersonals")!==-1&&href.indexOf("/api/angel-rent")===-1){
-        var f=px(href);
-        if(f){window.stop();location.href=f;}
-      }
-    }catch(e){}
-  });
-
-  // La forma más efectiva: monkey-patch el setter de Location en el prototype
-  // Esto funciona ANTES de que el JS de la página cargue porque lo inyectamos en <head>
+  // 1. Patch Location.prototype.href (funciona en Firefox y algunos Chrome)
   try{
     var locProto=Object.getPrototypeOf(location);
     var hrefDesc=Object.getOwnPropertyDescriptor(locProto,"href");
@@ -753,6 +719,40 @@ document.addEventListener("click",function(e){
         configurable:true
       });
     }
+  }catch(e){}
+
+  // 2. Patch location.assign y location.replace
+  try{
+    var _oa=location.assign.bind(location);
+    location.assign=function(u){
+      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
+      _oa(u);
+    };
+  }catch(e){}
+  try{
+    var _or=location.replace.bind(location);
+    location.replace=function(u){
+      if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){var f=px(u);if(f)u=f;}
+      _or(u);
+    };
+  }catch(e){}
+
+  // 3. Interceptar con Proxy global de navegacion — captura CUALQUIER asignacion
+  // incluyendo las que Chrome no deja interceptar con defineProperty
+  try{
+    var _origFetch=window.fetch;
+    // Monitorear cambios de URL cada 100ms mientras hay navegacion pendiente
+    var _lastHref=location.href;
+    setInterval(function(){
+      var cur=location.href;
+      if(cur===_lastHref)return;
+      _lastHref=cur;
+      // Si la nueva URL es megapersonals SIN proxy, redirigir
+      if(cur.indexOf("megapersonals")!==-1&&cur.indexOf("/api/angel-rent")===-1){
+        var f=px(cur);
+        if(f){location.replace(f);}
+      }
+    },50);
   }catch(e){}
 })();
 
