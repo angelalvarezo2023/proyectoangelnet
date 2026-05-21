@@ -121,18 +121,41 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
     } else if (/^https?:\/\/megapersonals/.test(rawRef)) {
       upstreamReferer = rawRef;
     }
-    // Si no hay referer, construir uno plausible para navegación normal
-    if (!upstreamReferer && method === "GET") {
+    // Construir referer plausible si no hay uno
+    if (!upstreamReferer) {
       try {
         const parsedDec = new URL(decoded);
-        // Para páginas internas, el referer probable es el listado
-        if (parsedDec.pathname !== "/" && !parsedDec.pathname.includes("/login")) {
+        if (decoded.includes("/login") || decoded.includes("/sign_in") || decoded.includes("/users/api/login")) {
+          // Login: referer es la propia página de login
+          upstreamReferer = parsedDec.origin + "/users/login";
+        } else if (method === "GET" && parsedDec.pathname !== "/") {
+          // Navegación normal: referer plausible es el listado
           upstreamReferer = parsedDec.origin + "/users/posts/list";
         }
       } catch { /* ignorar */ }
     }
 
-    const cookies = req.headers.get("cookie") || "";
+    let cookies = req.headers.get("cookie") || "";
+
+    // Para requests de login POST: limpiar cookies de sesión anteriores
+    // que pueden causar 500 en el servidor de MegaPersonals.
+    // Solo se mantienen cookies no-sesión (preferencias, analytics).
+    if (method === "POST" && (
+      decoded.includes("/users/api/login") ||
+      decoded.includes("/users/login") ||
+      decoded.includes("/sign_in")
+    )) {
+      const sessionCookieNames = ["PHPSESSID","session","sess","auth","token","remember","login","user_session","_session"];
+      const filteredCookies = cookies
+        .split(";")
+        .filter(c => {
+          const name = c.trim().split("=")[0].trim().toLowerCase();
+          return !sessionCookieNames.some(s => name.includes(s));
+        })
+        .join(";");
+      cookies = filteredCookies;
+    }
+
     const resp = await fetchProxy(
       decoded, agent, method, postBody, postCT,
       cookies, getUA(user), upstreamReferer
