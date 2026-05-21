@@ -347,6 +347,7 @@ function fetchProxy(
           ck = (ck ? ck + "; " : "") + nv.join("; ");
         }
         r.resume(); // vaciar stream para evitar leak de memoria
+        console.log("[AR-REDIR]", r.statusCode, "->", redir.substring(0, 80));
         fetchProxy(redir, agent, nextMethod, null, null, ck, ua, url, _redirects + 1)
           .then(res => { res.setCookies = [...sc, ...res.setCookies]; resolve(res); })
           .catch(reject);
@@ -504,16 +505,9 @@ function px(u){
   }catch(e){return null;}
 }
 
-// ── Deshabilitar document.write de forma no destructiva ───────────────────
-// Solo lo reemplazamos si el documento ya terminó de cargar.
-// Si lo hacemos antes, puede romper scripts síncronos de la página (SyntaxError).
-if(document.readyState==="complete"||document.readyState==="interactive"){
-  try{document.write=function(){};document.writeln=function(){};}catch(e){}
-} else {
-  document.addEventListener("DOMContentLoaded",function(){
-    try{document.write=function(){};document.writeln=function(){};}catch(e){}
-  });
-}
+// ── Deshabilitar document.write de forma segura ──────────────────────────
+// Envuelto en try/catch para no romper scripts síncronos de la página
+try{document.write=function(){};document.writeln=function(){};}catch(e){}
 
 // ── Intercepción de clicks en <a> ─────────────────────────────────────────
 document.addEventListener("click",function(e){
