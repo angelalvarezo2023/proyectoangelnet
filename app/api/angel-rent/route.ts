@@ -569,20 +569,44 @@ document.addEventListener("click",function(e){
 
 // ── Intercepción de formularios ────────────────────────────────────────────
 // Para multipart (subida de fotos): solo actualizar action, NO tocar el body.
-// El browser construye el FormData correctamente si action es lo único que cambia.
 document.addEventListener("submit",function(e){
   var form=e.target;
   if(!form||form.tagName!=="FORM")return;
   var action=form.getAttribute("action")||"";
   if(action.indexOf("/api/angel-rent")!==-1)return;
-
   var target;
   try{target=action?new URL(action,B).href:C;}catch(x){target=C;}
   form.setAttribute("action",P+encodeURIComponent(target));
+},true);
 
-  // Para multipart: no interceptar, dejar que el browser envíe el body intacto
-  // Solo necesitamos que action apunte al proxy, que ya hicimos arriba.
-  // El proxy hace pass-through del buffer sin modificarlo.
+// ── Interceptor de botones Publish / Submit que navegan sin form ───────────
+// MegaPersonals en el último paso de edición usa un botón que puede hacer
+// location.href o window.location directo en lugar de submit del form.
+// Lo capturamos en el click para evitar que navegue fuera del proxy.
+document.addEventListener("click",function(e){
+  var el=e.target;
+  // Subir hasta 3 niveles para capturar clicks en hijos del botón
+  for(var i=0;i<3;i++){
+    if(!el)break;
+    var tag=(el.tagName||"").toUpperCase();
+    var txt=(el.innerText||el.textContent||el.value||"").trim().toLowerCase();
+    var isPublish=txt.indexOf("publish")!==-1||txt.indexOf("publicar")!==-1;
+    var isSubmit=tag==="INPUT"&&(el.type==="submit"||el.type==="button");
+    var isBtn=tag==="BUTTON"||tag==="A"||isSubmit;
+    if(isBtn&&isPublish){
+      // Asegurarse de que el form padre tenga action proxificada
+      var form=el.closest?el.closest("form"):null;
+      if(form){
+        var ac=form.getAttribute("action")||"";
+        if(ac.indexOf("/api/angel-rent")===-1){
+          var tgt;try{tgt=ac?new URL(ac,B).href:C;}catch(x){tgt=C;}
+          form.setAttribute("action",P+encodeURIComponent(tgt));
+        }
+      }
+      break;
+    }
+    el=el.parentElement;
+  }
 },true);
 
 // ── MutationObserver: reescribir nodos añadidos dinámicamente ─────────────
@@ -651,6 +675,41 @@ document.addEventListener("submit",function(e){
   }else{
     startObs();
   }
+})();
+
+// ── Interceptar window.location y document.location ──────────────────────
+// MegaPersonals después del Publish hace location.href = "/users/posts/..."
+// lo que navega fuera del proxy. Lo interceptamos con un Proxy de JS.
+(function(){
+  function interceptLocation(obj){
+    try{
+      var origAssign=obj.assign.bind(obj);
+      var origReplace=obj.replace.bind(obj);
+      obj.assign=function(u){
+        var f=px(u);origAssign(f||u);
+      };
+      obj.replace=function(u){
+        var f=px(u);origReplace(f||u);
+      };
+      // Interceptar .href con defineProperty
+      var desc=Object.getOwnPropertyDescriptor(obj,"href");
+      if(desc&&desc.set){
+        var origSet=desc.set;
+        Object.defineProperty(obj,"href",{
+          get:desc.get,
+          set:function(u){
+            if(typeof u==="string"&&u.indexOf("/api/angel-rent")===-1){
+              var f=px(u);if(f)u=f;
+            }
+            origSet.call(this,u);
+          },
+          configurable:true
+        });
+      }
+    }catch(e){}
+  }
+  try{interceptLocation(window.location);}catch(e){}
+  try{interceptLocation(document.location);}catch(e){}
 })();
 
 // ── Bloquear WebRTC (evita leak de IP real del servidor proxy) ────────────
