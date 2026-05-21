@@ -161,16 +161,22 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       cookies = "";
     }
 
-    const resp = await fetchProxy(
-      decoded, agent, method, postBody, postCT,
-      cookies, getUA(user), upstreamReferer
-    );
+    let resp: FetchResult;
+    try {
+      resp = await fetchProxy(
+        decoded, agent, method, postBody, postCT,
+        cookies, getUA(user), upstreamReferer
+      );
+    } catch (fetchErr: any) {
+      console.error("[AR-FETCH-ERR]", fetchErr.message, "url:", decoded.substring(0, 80));
+      return jres(502, { error: "Proxy fetch failed: " + fetchErr.message });
+    }
 
-    // Log para debug de login — ver qué responde MegaPersonals exactamente
+    // Log para debug de login
     if (decoded.includes("/users/api/login") || decoded.includes("/users/login")) {
       console.log("[AR-LOGIN]", method, resp.status,
         "ct:", resp.headers["content-type"],
-        "body:", resp.body.toString("utf-8").substring(0, 300)
+        "body:", resp.body.toString("utf-8").substring(0, 400)
       );
     }
 
@@ -193,7 +199,9 @@ async function handle(req: NextRequest, method: string): Promise<Response> {
       html = rewriteHtml(html, new URL(decoded).origin, pb, decoded);
       html = injectUI(html, decoded, username, user);
       rh.set("Content-Type", "text/html; charset=utf-8");
-      return new Response(html, { status: resp.status, headers: rh });
+      // Siempre devolver 200 para HTML aunque upstream sea 4xx/5xx
+      // Así el browser renderiza la página de error del sitio en lugar de romperse
+      return new Response(html, { status: 200, headers: rh });
     }
 
     // ── CSS ───────────────────────────────────────────────────────────────
