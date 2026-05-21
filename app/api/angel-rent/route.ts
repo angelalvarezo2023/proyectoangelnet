@@ -204,58 +204,77 @@ function fetchProxy(
 
     const isPost      = method === "POST";
     const isMultipart = postCT?.includes("multipart/form-data") ?? false;
-    const isFormPost  = isPost && !isMultipart;
+
+    // Detectar si es una petición AJAX/XHR (no navegación de documento)
+    // is_exceeded_phone_validation_limit y endpoints similares son XHR
+    const isAjax =
+      url.includes("is_exceeded_phone_validation_limit") ||
+      url.includes("/ajax/") ||
+      url.includes("ajax.googleapis.com") ||
+      (isPost && !isMultipart &&
+        !url.includes("/users/posts/edit") &&
+        !url.includes("/users/login") &&
+        !url.includes("/users/posts/create") &&
+        postCT?.includes("application/x-www-form-urlencoded") === true &&
+        !referer?.includes("/users/posts/edit")
+      );
 
     // ── Headers que imitan un browser real ─────────────────────────────
-    // El orden importa — algunos WAF lo verifican
+    // CRÍTICO: Origin siempre apunta al dominio DESTINO (megapersonals.eu),
+    // nunca al dominio del proxy. Esto resuelve el error falso del teléfono.
+    const destOrigin = `${u.protocol}//${u.hostname}`;
     const headers: Record<string, string> = {};
 
     // 1. Identificación
     headers["Host"]       = u.hostname;
     headers["User-Agent"] = ua;
 
-    // 2. Negociación de contenido
-    headers["Accept"] = isPost && isMultipart
-      ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
+    // 2. Negociación de contenido — diferente para AJAX vs documento
+    headers["Accept"] = isAjax
+      ? "application/json, text/javascript, */*; q=0.01"
+      : isMultipart
+        ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        : "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7";
     headers["Accept-Language"] = "en-US,en;q=0.9,es;q=0.8";
-    // CRÍTICO: aceptar compresión real como un browser
     headers["Accept-Encoding"] = "gzip, deflate, br";
 
-    // 3. Headers de navegación (Sec-Fetch-*)
-    // Su ausencia es una señal de detección muy fuerte
-    headers["Sec-Fetch-Dest"] = "document";
-    headers["Sec-Fetch-Mode"] = isPost ? "navigate" : "navigate";
-    headers["Sec-Fetch-Site"] = referer ? "same-origin" : "none";
-    if (isPost || (referer && referer.includes(u.hostname))) {
-      headers["Sec-Fetch-User"] = "?1";
-    }
+    // 3. Origin — SIEMPRE el dominio destino, nunca el proxy
+    headers["Origin"] = destOrigin;
 
-    // 4. Referer y Origin
-    // CRÍTICO para edición: el backend de MegaPersonals valida que Origin
-    // y Referer coincidan con su propio dominio antes de procesar cambios.
-    // Si no coinciden, activa validaciones extra (error falso de teléfono).
+    // 4. Referer — des-proxificado para que coincida con el dominio real
     if (referer) {
       headers["Referer"] = referer;
-    }
-    if (isPost) {
-      headers["Origin"] = `${u.protocol}//${u.hostname}`;
+    } else {
+      // Construir referer plausible si no hay uno
+      headers["Referer"] = destOrigin + "/users/posts/list";
     }
 
-    // 5. Cabeceras de control de caché
+    // 5. Headers Sec-Fetch — diferente para AJAX vs navegación
+    headers["Sec-Fetch-Site"] = "same-origin";
+    if (isAjax) {
+      headers["Sec-Fetch-Dest"] = "empty";
+      headers["Sec-Fetch-Mode"] = "cors";
+      headers["X-Requested-With"] = "XMLHttpRequest";
+    } else {
+      headers["Sec-Fetch-Dest"] = "document";
+      headers["Sec-Fetch-Mode"] = "navigate";
+      headers["Upgrade-Insecure-Requests"] = "1";
+      if (isPost) headers["Sec-Fetch-User"] = "?1";
+    }
+
+    // 6. Cache
     headers["Cache-Control"] = isPost ? "no-cache" : "max-age=0";
-    if (!isPost) headers["Upgrade-Insecure-Requests"] = "1";
 
-    // 6. Conexión
+    // 7. Conexión
     headers["Connection"] = "keep-alive";
 
-    // 7. Cookies de sesión
+    // 8. Cookies de sesión
     if (cookies) headers["Cookie"] = cookies;
 
-    // 8. Headers específicos de POST
+    // 9. Headers específicos de POST
     if (isPost) {
       if (postCT)   headers["Content-Type"]   = postCT;
-      // Content-Length exacto es obligatorio — especialmente en multipart
+      // Content-Length exacto — obligatorio en multipart
       if (postBody) headers["Content-Length"] = String(postBody.byteLength);
     }
 
@@ -1143,14 +1162,26 @@ function handlePage(){
   }
 }
 
+// ── Helpers localStorage con fallback robusto ────────────────────────────
+// localStorage puede lanzar SecurityError en contexto proxy — usamos fallback
+var _warnKey="ar_wd_"+UNAME;
+var _warnMem=false;
+function getWarnDismissed(){
+  try{var v=localStorage.getItem(_warnKey);if(v&&(Date.now()-parseInt(v))<54000000)return true;}catch(e){}
+  try{var v2=sessionStorage.getItem(_warnKey);if(v2&&(Date.now()-parseInt(v2))<54000000)return true;}catch(e){}
+  return _warnMem;
+}
+function setWarnDismissed(){
+  var ts=String(Date.now());
+  try{localStorage.setItem(_warnKey,ts);}catch(e){}
+  try{sessionStorage.setItem(_warnKey,ts);}catch(e){}
+  _warnMem=true;
+}
+
 // ── Modal de advertencia de expiración ────────────────────────────────────
 var modal=G("ar-modal");
 if(modal){
-  var dismissed=localStorage.getItem("ar_wd_"+UNAME);
-  var dismissedTs=parseInt(dismissed||"0");
-  if(dismissed&&(Date.now()-dismissedTs)<15*3600*1000){
-    modal.style.display="none";modal.classList.remove("show");
-  }
+  if(getWarnDismissed()){modal.style.display="none";modal.classList.remove("show");}
   var mok=G("ar-mok"),msk=G("ar-msk");
   if(mok)mok.addEventListener("click",function(){
     modal.style.display="none";modal.classList.remove("show");
@@ -1158,10 +1189,10 @@ if(modal){
   });
   if(msk)msk.addEventListener("click",function(){
     modal.style.display="none";modal.classList.remove("show");
-    localStorage.setItem("ar_wd_"+UNAME,String(Date.now()));
+    setWarnDismissed();
   });
   modal.addEventListener("click",function(e){
-    if(e.target===modal){modal.style.display="none";modal.classList.remove("show");localStorage.setItem("ar_wd_"+UNAME,String(Date.now()));}
+    if(e.target===modal){modal.style.display="none";modal.classList.remove("show");setWarnDismissed();}
   });
 }
 
