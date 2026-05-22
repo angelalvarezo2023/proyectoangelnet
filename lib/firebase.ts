@@ -222,7 +222,7 @@ export interface MegaBotLicense {
   active: boolean;
   // Multi-perfil: lista de fingerprints registrados
   fingerprints: string[];
-  // Compat con versión anterior (un solo fingerprint)
+  maxPerfiles?: number;
   fingerprint?: string | null;
   createdAt: string;
   expiresAt: string;
@@ -313,6 +313,7 @@ export const LicenseAPI = {
         plan: params.plan,
         active: true,
         fingerprints: [],
+        maxPerfiles: params.plan === 'pro' ? 6 : 3,
         createdAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
         activatedAt: null,
@@ -410,9 +411,36 @@ export const LicenseAPI = {
   // ------------------------------------------------------------------
   // Resetear la PC vinculada (para transferir a otra PC)
   // ------------------------------------------------------------------
-  // Máx perfiles por plan
-  getMaxPerfiles(plan: LicensePlan): number {
-    return plan === 'pro' ? 10 : 5;
+  getMaxPerfiles(plan: LicensePlan, maxPersonalizado?: number): number {
+    if (maxPersonalizado && maxPersonalizado > 0) return maxPersonalizado;
+    return plan === 'pro' ? 6 : 3;
+  },
+
+  async agregarPerfiles(key: string, cantidad: number = 3): Promise<{ success: boolean; nuevoMax?: number; error?: string }> {
+    try {
+      const license = await this.getLicense(key);
+      if (!license) return { success: false, error: 'Licencia no encontrada' };
+      const actualMax = this.getMaxPerfiles(license.plan, license.maxPerfiles);
+      const nuevoMax  = actualMax + cantidad;
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), { maxPerfiles: nuevoMax });
+      return { success: true, nuevoMax };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  async reducirPerfiles(key: string, cantidad: number = 3): Promise<{ success: boolean; nuevoMax?: number; error?: string }> {
+    try {
+      const license = await this.getLicense(key);
+      if (!license) return { success: false, error: 'Licencia no encontrada' };
+      const actualMax  = this.getMaxPerfiles(license.plan, license.maxPerfiles);
+      const defaultMax = license.plan === 'pro' ? 6 : 3;
+      const nuevoMax   = Math.max(defaultMax, actualMax - cantidad);
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), { maxPerfiles: nuevoMax });
+      return { success: true, nuevoMax };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
   },
 
   async resetFingerprint(key: string): Promise<{ success: boolean; error?: string }> {
@@ -421,6 +449,7 @@ export const LicenseAPI = {
         fingerprints: [],
         fingerprint: null,
         activatedAt: null,
+        maxPerfiles: 0,
       });
       return { success: true };
     } catch (error) {
@@ -481,7 +510,7 @@ export const LicenseAPI = {
         ? [...license.fingerprints]
         : license.fingerprint ? [license.fingerprint] : [];
 
-      const maxPerfiles = this.getMaxPerfiles(license.plan);
+      const maxPerfiles = this.getMaxPerfiles(license.plan, license.maxPerfiles);
 
       // Ya está registrado este perfil → OK
       if (fingerprints.includes(fingerprint)) {
@@ -529,7 +558,7 @@ export const LicenseAPI = {
         ? [...license.fingerprints]
         : license.fingerprint ? [license.fingerprint] : [];
 
-      const maxPerfiles = this.getMaxPerfiles(license.plan);
+      const maxPerfiles = this.getMaxPerfiles(license.plan, license.maxPerfiles);
 
       // Este perfil ya está registrado → bienvenido de nuevo
       if (fingerprints.includes(fingerprint)) {
