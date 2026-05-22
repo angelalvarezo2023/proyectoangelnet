@@ -1,7 +1,8 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { LicenseAPI } from '@/lib/firebase'
-import { VERSION } from '../version/route'
+
+// ✅ Cambia este número cada vez que lances una nueva versión
+const CURRENT_VERSION = "3.6.0"
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,11 +12,11 @@ export async function POST(req: NextRequest) {
       return json({ valid: false, reason: 'MISSING_PARAMS' })
     }
 
-    if (version !== VERSION) {
+    if (version !== CURRENT_VERSION) {
       return json({
         valid: false,
         reason: 'UPDATE_REQUIRED',
-        currentVersion: VERSION,
+        currentVersion: CURRENT_VERSION,
         updateUrl: 'https://angelrentmg.vercel.app/megabot.user.js',
       })
     }
