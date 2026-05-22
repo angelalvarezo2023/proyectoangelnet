@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         UltraBot PRO
 // @namespace    https://angelrentmg.vercel.app
-// @version      3.6.0
+// @version      2.0.0
 // @description  UltraBot — Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
