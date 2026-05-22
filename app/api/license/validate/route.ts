@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LicenseAPI } from '@/lib/firebase'
 
-const CURRENT_VERSION = "4.0.0"
+const CURRENT_VERSION = "1.0.0"
 
 export async function POST(req: NextRequest) {
   try {
