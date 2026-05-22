@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MegaBot PRO
 // @namespace    https://angelrentmg.vercel.app
-// @version      1.0.0
+// @version      2.0.0
 // @description  Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
@@ -10,25 +10,23 @@
 // ==/UserScript==
 
 // ==================== MEGABOT PRO v3.6 ====================
-// - Licencias validadas en servidor (Vercel) — seguro
+// - Licencias validadas en servidor (Vercel)
 // - 1 PC por licencia (fingerprint UUID único)
-// - Forzar actualización: si no es la última versión, no arranca
+// - Forzar actualización obligatoria
+// - Básico: 1 post | PRO: hasta 50 posts
 // =========================================================
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "1.0.0",
+  VERSION_ACTUAL: "2.0.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
 // ==================== FINGERPRINT DE PC ====================
-// UUID aleatorio generado UNA SOLA VEZ y guardado permanentemente
-// No depende de ninguna propiedad del navegador
 function getFingerprint() {
   const KEY = "megabot_install_id";
   let id = localStorage.getItem(KEY);
   if (id && id.length >= 8) return id;
-  // Generar UUID nuevo
   const arr = new Uint8Array(8);
   crypto.getRandomValues(arr);
   id = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
@@ -38,9 +36,9 @@ function getFingerprint() {
 
 // ==================== SISTEMA DE LICENCIAS ====================
 const LicenseSystem = {
-  getStoredKey()    { return localStorage.getItem("megabot_license_key"); },
-  storeKey(key)     { localStorage.setItem("megabot_license_key", key); },
-  clearKey(reason)  {
+  getStoredKey()   { return localStorage.getItem("megabot_license_key"); },
+  storeKey(key)    { localStorage.setItem("megabot_license_key", key); },
+  clearKey(reason) {
     console.warn("[MegaBot] Licencia borrada:", reason);
     localStorage.removeItem("megabot_license_key");
     if (reason === "EXPIRED" || reason === "DEACTIVATED") {
@@ -48,7 +46,6 @@ const LicenseSystem = {
     }
   },
 
-  // Cache de 5 minutos para no llamar al servidor en cada pestaña
   _cache: null,
   _cacheTime: 0,
   CACHE_MS: 5 * 60 * 1000,
@@ -57,11 +54,8 @@ const LicenseSystem = {
     const key         = this.getStoredKey();
     const fingerprint = getFingerprint();
 
-    if (!key) {
-      return { valida: false, razon: "NO_KEY" };
-    }
+    if (!key) return { valida: false, razon: "NO_KEY" };
 
-    // Usar caché si es reciente
     if (this._cache && (Date.now() - this._cacheTime) < this.CACHE_MS) {
       return this._cache;
     }
@@ -70,17 +64,12 @@ const LicenseSystem = {
       const res = await fetch(`${CONFIG.VERCEL_URL}/api/license/validate`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({
-          key,
-          fingerprint,
-          version: CONFIG.VERSION_ACTUAL
-        })
+        body:    JSON.stringify({ key, fingerprint, version: CONFIG.VERSION_ACTUAL })
       });
 
       const data = await res.json();
 
       if (data.valid) {
-        // Limpiar contadores de error y cachear resultado
         localStorage.removeItem("megabot_net_errors");
         const result = { valida: true, ...data };
         this._cache     = result;
@@ -88,7 +77,6 @@ const LicenseSystem = {
         return result;
       }
 
-      // Manejar razones específicas
       switch (data.reason) {
         case "UPDATE_REQUIRED":
           return { valida: false, razon: "UPDATE_REQUIRED", ...data };
@@ -105,7 +93,6 @@ const LicenseSystem = {
           return { valida: false, razon: "EXPIRED",
             mensaje: "Licencia expirada.\nContacta al vendedor para renovar." };
         case "INVALID_KEY":
-          // No borrar inmediatamente — esperar 3 fallos
           const fallos = parseInt(localStorage.getItem("megabot_key_fails") || "0");
           if (fallos >= 3) {
             this.clearKey("INVALID_KEY");
@@ -120,10 +107,8 @@ const LicenseSystem = {
       }
 
     } catch (err) {
-      // Error de red — no borrar licencia
       const errors = parseInt(localStorage.getItem("megabot_net_errors") || "0");
       localStorage.setItem("megabot_net_errors", (errors + 1).toString());
-      console.warn("[MegaBot] Error de red al validar:", err);
       return { valida: false, razon: "NETWORK_ERROR", networkError: true };
     }
   },
@@ -162,24 +147,153 @@ function mostrarPantallaActualizacion(data) {
     <div style="background:linear-gradient(135deg,#1e40af,#1d4ed8);
                 padding:40px;border-radius:20px;max-width:480px;
                 width:90%;text-align:center;">
-      <div style="font-size:60px;margin-bottom:16px;">🔄</div>
+      <div id="mb-upd-icon" style="font-size:60px;margin-bottom:16px;">🔄</div>
       <h1 style="color:white;font-size:26px;margin:0 0 12px;">Actualización Requerida</h1>
       <p style="color:rgba(255,255,255,0.85);font-size:14px;margin-bottom:24px;line-height:1.6;">
         Hay una nueva versión disponible (<strong>v${data.currentVersion}</strong>).<br>
         El bot no funcionará hasta que instales la actualización.
       </p>
-      <a href="${data.updateUrl}" target="_blank"
+
+      <!-- Barra de progreso (oculta al inicio) -->
+      <div id="mb-progress-container" style="display:none;margin-bottom:20px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="mb-progress-label"
+            style="color:rgba(255,255,255,0.85);font-size:13px;font-weight:bold;">
+            Descargando actualización...
+          </span>
+          <span id="mb-progress-pct"
+            style="color:#10b981;font-size:14px;font-weight:bold;">0%</span>
+        </div>
+        <!-- Barra exterior -->
+        <div style="width:100%;height:12px;background:rgba(255,255,255,0.15);
+                    border-radius:10px;overflow:hidden;">
+          <div id="mb-progress-bar"
+            style="width:0%;height:100%;
+                   background:linear-gradient(90deg,#10b981,#34d399);
+                   border-radius:10px;transition:width 0.25s ease;">
+          </div>
+        </div>
+        <!-- Mensaje de estado -->
+        <p id="mb-progress-status"
+          style="color:rgba(255,255,255,0.5);font-size:11px;margin:8px 0 0;">
+          Iniciando...
+        </p>
+      </div>
+
+      <!-- Botón instalar -->
+      <a id="mb-update-btn" href="${data.updateUrl}" target="_blank"
          style="display:block;padding:16px;background:#10b981;color:white;
                 border-radius:10px;text-decoration:none;font-size:16px;
-                font-weight:bold;margin-bottom:12px;">
+                font-weight:bold;margin-bottom:12px;cursor:pointer;transition:opacity 0.3s;">
         ⬇️ INSTALAR ACTUALIZACIÓN v${data.currentVersion}
       </a>
-      <p style="color:rgba(255,255,255,0.5);font-size:11px;margin:0;">
+
+      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">
         Tu versión actual: v${CONFIG.VERSION_ACTUAL}
       </p>
     </div>
   `;
   document.body.appendChild(overlay);
+
+  document.getElementById("mb-update-btn").addEventListener("click", () => {
+    // Ocultar botón y mostrar barra
+    document.getElementById("mb-update-btn").style.display  = "none";
+    document.getElementById("mb-progress-container").style.display = "block";
+    document.getElementById("mb-upd-icon").textContent = "⏳";
+
+    const bar    = document.getElementById("mb-progress-bar");
+    const pct    = document.getElementById("mb-progress-pct");
+    const label  = document.getElementById("mb-progress-label");
+    const status = document.getElementById("mb-progress-status");
+
+    let progreso = 0;
+
+    // Fases realistas con velocidad y mensajes distintos
+    const fases = [
+      { hasta: 12,  vel: 80,  msg: "Conectando con el servidor..." },
+      { hasta: 30,  vel: 55,  msg: "Descargando MegaBot v" + data.currentVersion + "..." },
+      { hasta: 55,  vel: 45,  msg: "Verificando archivos..." },
+      { hasta: 75,  vel: 60,  msg: "Instalando actualización..." },
+      { hasta: 90,  vel: 85,  msg: "Aplicando cambios..." },
+      { hasta: 100, vel: 180, msg: "¡Instalación completada!" },
+    ];
+
+    let faseIdx = 0;
+
+    const tick = setInterval(() => {
+      const fase = fases[faseIdx];
+      // Incremento aleatorio → se ve natural
+      const inc = Math.random() * 2.2 + 0.4;
+      progreso = Math.min(progreso + inc, fase.hasta);
+
+      bar.style.width   = progreso + "%";
+      pct.textContent   = Math.floor(progreso) + "%";
+      status.textContent = fase.msg;
+
+      // Cambiar a siguiente fase
+      if (progreso >= fase.hasta && faseIdx < fases.length - 1) {
+        faseIdx++;
+        clearInterval(tick);
+        // Pequeña pausa entre fases (más realista)
+        setTimeout(iniciarFase, Math.random() * 300 + 100);
+      }
+
+      // Llegó al 100%
+      if (progreso >= 100) {
+        clearInterval(tick);
+        finalizarDescarga();
+      }
+    }, fases[faseIdx].vel);
+
+    function iniciarFase() {
+      const fase = fases[faseIdx];
+      const nuevoTick = setInterval(() => {
+        const inc = Math.random() * 2.2 + 0.4;
+        progreso = Math.min(progreso + inc, fase.hasta);
+
+        bar.style.width    = progreso + "%";
+        pct.textContent    = Math.floor(progreso) + "%";
+        status.textContent = fase.msg;
+
+        if (progreso >= fase.hasta && faseIdx < fases.length - 1) {
+          faseIdx++;
+          clearInterval(nuevoTick);
+          setTimeout(iniciarFase, Math.random() * 300 + 100);
+        }
+
+        if (progreso >= 100) {
+          clearInterval(nuevoTick);
+          finalizarDescarga();
+        }
+      }, fase.vel);
+    }
+
+    function finalizarDescarga() {
+      bar.style.background  = "linear-gradient(90deg,#10b981,#6ee7b7)";
+      bar.style.width       = "100%";
+      pct.textContent       = "100%";
+      pct.style.color       = "#6ee7b7";
+      label.textContent     = "✅ ¡Actualización instalada!";
+      label.style.color     = "#10b981";
+      document.getElementById("mb-upd-icon").textContent = "✅";
+
+      // Cuenta regresiva
+      let cuenta = 3;
+      status.style.color    = "#fbbf24";
+      status.textContent    = `Recargando en ${cuenta} segundos...`;
+
+      const cuentaAtras = setInterval(() => {
+        cuenta--;
+        if (cuenta > 0) {
+          status.textContent = `Recargando en ${cuenta} segundo${cuenta !== 1 ? 's' : ''}...`;
+        } else {
+          clearInterval(cuentaAtras);
+          status.textContent = "¡Recargando ahora!";
+          location.reload();
+        }
+      }, 1000);
+    }
+  });
 }
 
 // ==================== PANTALLA: ACTIVAR LICENCIA ====================
@@ -291,7 +405,7 @@ let republicar = true;
 let textPrev   = "";
 let progress;
 
-// ==================== FUNCIONES PRO ====================
+// ==================== ANTI-SHADOWBAN ====================
 const AntiShadowban = {
   getRiesgo() {
     let r = parseInt(localStorage.getItem("shadowbanRiesgo") || "0");
@@ -386,8 +500,11 @@ const ModalConfig = {
     const esPro     = licenseInfo.plan === 'pro';
     const tiempoMin = TiempoConfig.getMin();
     const tiempoMax = TiempoConfig.getMax();
-    const cantidad  = localStorage.getItem("cantidadPosts")||"2";
-    const maxPosts  = esPro ? 50 : 10;
+    // ✅ Básico = 1 post máximo, PRO = hasta 50
+    const maxPosts  = esPro ? 50 : 1;
+    const cantidad  = esPro
+      ? (localStorage.getItem("cantidadPosts") || "1")
+      : "1";
 
     const modal = document.createElement("div");
     modal.id = "mb-config-modal";
@@ -445,18 +562,29 @@ const ModalConfig = {
           </div>
         </div>
 
-        <!-- POSTS -->
+        <!-- POSTS A ROTAR -->
         <div class="mb-sec">
           <h3>📊 Posts a Rotar</h3>
+          ${esPro ? `
           <div class="mb-row">
-            <span class="mb-lbl">Cantidad (máx ${maxPosts})</span>
-            <input type="number" id="mb-posts" value="${cantidad}" min="1" max="${maxPosts}"
+            <span class="mb-lbl">Cantidad (máx 50)</span>
+            <input type="number" id="mb-posts" value="${cantidad}" min="1" max="50"
               style="width:65px;padding:8px;border:none;border-radius:6px;
                      text-align:center;font-size:14px;font-weight:bold;">
           </div>
+          ` : `
+          <div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center;">
+            <p style="color:rgba(255,255,255,0.7);font-size:13px;margin:0 0 4px;font-weight:bold;">
+              📦 Plan Básico — 1 post
+            </p>
+            <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">
+              Upgrade a ⭐ PRO para rotar hasta 50 posts
+            </p>
+          </div>
+          `}
         </div>
 
-        <!-- ANTI-SHADOWBAN (solo PRO) -->
+        <!-- FUNCIONES PRO -->
         ${esPro ? `
         <div class="mb-sec">
           <h3>⭐ Funciones PRO</h3>
@@ -489,7 +617,7 @@ const ModalConfig = {
                     padding:14px;border-radius:12px;text-align:center;color:white;
                     margin-bottom:12px;">
           <div style="font-size:18px;margin-bottom:4px;">⭐ UPGRADE A PRO</div>
-          <div style="font-size:11px;opacity:0.9;margin-bottom:6px;">Anti-shadowban + más posts</div>
+          <div style="font-size:11px;opacity:0.9;margin-bottom:6px;">Rotar hasta 50 posts + Anti-shadowban</div>
           <div style="font-size:10px;opacity:0.8;">WhatsApp: ${CONFIG.WHATSAPP}</div>
         </div>
         `}
@@ -498,8 +626,7 @@ const ModalConfig = {
         <div style="background:rgba(0,0,0,0.2);padding:10px;border-radius:8px;
                     margin-bottom:12px;text-align:center;">
           <p style="color:rgba(255,255,255,0.5);font-size:10px;margin:0;">
-            👤 ${licenseInfo.cliente} | 📅 ${licenseInfo.dias} días restantes |
-            v${CONFIG.VERSION_ACTUAL}
+            👤 ${licenseInfo.cliente} | 📅 ${licenseInfo.dias} días | ${esPro ? '⭐ PRO' : '📦 Básico'} | v${CONFIG.VERSION_ACTUAL}
           </p>
         </div>
 
@@ -532,14 +659,22 @@ const ModalConfig = {
     document.getElementById("mb-cfg-save").addEventListener("click",()=>{
       const tMin = parseInt(document.getElementById("mb-t-min").value);
       const tMax = parseInt(document.getElementById("mb-t-max").value);
-      const qty  = parseInt(document.getElementById("mb-posts").value);
 
       if(tMin<10||tMin>60||tMax<10||tMax>60){ alert("⚠️ Tiempo entre 10 y 60 min"); return; }
       if(tMin>tMax){ alert("⚠️ Mínimo no puede ser mayor al máximo"); return; }
-      if(qty<1||qty>maxPosts){ alert(`⚠️ Cantidad entre 1 y ${maxPosts}`); return; }
 
       TiempoConfig.setRango(tMin,tMax);
-      localStorage.setItem("cantidadPosts", qty.toString());
+
+      // ✅ Solo guardar cantidad si es PRO
+      if(esPro){
+        const qty = parseInt(document.getElementById("mb-posts").value);
+        if(qty<1||qty>50){ alert("⚠️ Cantidad entre 1 y 50"); return; }
+        localStorage.setItem("cantidadPosts", qty.toString());
+      } else {
+        // Básico siempre 1
+        localStorage.setItem("cantidadPosts", "1");
+      }
+
       localStorage.setItem("currentPostIndex","0");
       modal.remove();
       location.reload();
@@ -620,6 +755,14 @@ const DragSystem = {
 function crearPanel(licenseInfo) {
   if(document.getElementById("mb-panel")) return;
 
+  // ✅ Guardar plan en localStorage para usarlo en el bot
+  localStorage.setItem("megabot_plan", licenseInfo.plan || "basico");
+
+  // ✅ Forzar cantidad a 1 si es básico
+  if(licenseInfo.plan !== 'pro') {
+    localStorage.setItem("cantidadPosts", "1");
+  }
+
   const panel = document.createElement("div");
   panel.id = "mb-panel";
   panel.style.cssText = `
@@ -629,10 +772,10 @@ function crearPanel(licenseInfo) {
     z-index:99999;font-family:Arial,sans-serif;color:white;transition:all 0.3s;
   `;
 
-  const isMin    = localStorage.getItem("panelMinimized")==="true";
-  const paused   = localStorage.getItem("botPausado")==="true";
-  const esPro    = licenseInfo.plan==='pro';
-  const badge    = esPro
+  const isMin  = localStorage.getItem("panelMinimized")==="true";
+  const paused = localStorage.getItem("botPausado")==="true";
+  const esPro  = licenseInfo.plan==='pro';
+  const badge  = esPro
     ? '<span style="background:#10b981;font-size:9px;padding:3px 7px;border-radius:4px;margin-left:5px;font-weight:bold;">PRO</span>'
     : '<span style="background:#94a3b8;font-size:9px;padding:3px 7px;border-radius:4px;margin-left:5px;font-weight:bold;">BÁSICO</span>';
 
@@ -658,8 +801,6 @@ function crearPanel(licenseInfo) {
     </div>
 
     <div id="mb-body" style="padding:14px;display:${isMin?'none':'block'};">
-
-      <!-- Estado -->
       <div style="background:${paused?'rgba(239,68,68,0.3)':'rgba(16,185,129,0.3)'};
                   padding:14px;border-radius:10px;margin-bottom:10px;text-align:center;">
         <div style="font-size:18px;margin-bottom:6px;">${paused?'⏸️':'▶️'}</div>
@@ -675,7 +816,6 @@ function crearPanel(licenseInfo) {
         </button>
       </div>
 
-      <!-- Config -->
       <button id="mb-btn-cfg"
         style="width:100%;padding:10px;background:rgba(255,255,255,0.15);
                color:white;border:none;border-radius:8px;
@@ -683,12 +823,10 @@ function crearPanel(licenseInfo) {
         ⚙️ Configuración
       </button>
 
-      <!-- Status -->
       <div style="background:rgba(255,255,255,0.15);padding:9px;border-radius:9px;margin-bottom:9px;">
         <p id="mb-status-text" style="margin:0;font-size:12px;text-align:center;">Esperando...</p>
       </div>
 
-      <!-- Progreso -->
       <div style="width:100%;height:5px;background:rgba(255,255,255,0.2);border-radius:10px;overflow:hidden;">
         <div id="mb-progress"
           style="width:0%;height:100%;background:#10b981;transition:width 0.8s;border-radius:10px;">
@@ -700,10 +838,8 @@ function crearPanel(licenseInfo) {
   document.body.appendChild(panel);
   progress = document.getElementById("mb-progress");
 
-  // Drag
   DragSystem.init(panel, document.getElementById("mb-header"));
 
-  // Toggle minimizar
   const body   = document.getElementById("mb-body");
   const toggle = document.getElementById("mb-btn-toggle");
   const togglePanel = () => {
@@ -717,7 +853,6 @@ function crearPanel(licenseInfo) {
     if(!e.target.closest('button')) togglePanel();
   });
 
-  // Pausar / Reanudar
   document.getElementById("mb-btn-bot").addEventListener("click",()=>{
     const isPaused = localStorage.getItem("botPausado")==="true";
     if(isPaused) localStorage.removeItem("botPausado");
@@ -725,7 +860,6 @@ function crearPanel(licenseInfo) {
     location.reload();
   });
 
-  // Config
   document.getElementById("mb-btn-cfg").addEventListener("click",()=>{
     ModalConfig.mostrar(licenseInfo);
   });
@@ -760,16 +894,24 @@ function detectarPosts() {
   return ids;
 }
 
+// ✅ Básico = máx 1 post | PRO = máx 50 posts
 function getSiguientePost() {
-  const str=localStorage.getItem("postIds"); if(!str) return null;
-  const ids   = JSON.parse(str);
-  const qty   = parseInt(localStorage.getItem("cantidadPosts")||"2");
-  const idx   = parseInt(localStorage.getItem("currentPostIndex")||"0");
-  const activos = ids.slice(0,qty);
+  const str = localStorage.getItem("postIds");
+  if(!str) return null;
+
+  const ids    = JSON.parse(str);
+  const plan   = localStorage.getItem("megabot_plan") || "basico";
+  const maxPermitido = plan === "pro" ? 50 : 1;
+  const cantidadGuardada = parseInt(localStorage.getItem("cantidadPosts") || "1");
+  const cantidadPosts = Math.min(cantidadGuardada, maxPermitido);
+
+  const idx      = parseInt(localStorage.getItem("currentPostIndex") || "0");
+  const activos  = ids.slice(0, cantidadPosts);
   if(!activos.length) return null;
-  const i = idx%activos.length;
-  localStorage.setItem("currentPostIndex",(i+1).toString());
-  addmessage(`Post ${i+1}/${activos.length}`,"white");
+
+  const i = idx % activos.length;
+  localStorage.setItem("currentPostIndex", (i+1).toString());
+  addmessage(`Post ${i+1}/${activos.length}`, "white");
   return activos[i];
 }
 
@@ -831,24 +973,20 @@ function republicarAhora() {
 // ==================== INICIO ====================
 if(location.href.includes("megapersonals.eu")) {
   (async () => {
-    // Detectar ban primero
     if(BanDetector.esPaginaBan()){
       localStorage.setItem("botPausado","true");
       BanDetector.mostrarAlerta();
       return;
     }
 
-    // Validar licencia en el servidor
     const v = await LicenseSystem.validar();
 
     if(!v.valida){
-      // Forzar actualización — bloquear completamente
       if(v.razon==="UPDATE_REQUIRED"){
         mostrarPantallaActualizacion(v);
         return;
       }
 
-      // Error de red — reintentar máximo 3 veces
       if(v.networkError){
         const reloads=parseInt(sessionStorage.getItem("mb_reloads")||"0");
         if(reloads<3){
@@ -861,12 +999,10 @@ if(location.href.includes("megapersonals.eu")) {
         return;
       }
 
-      // Pedir licencia
       mostrarPanelActivacion(v.mensaje||"Ingresa tu clave de activación");
       return;
     }
 
-    // ✅ Licencia válida — arrancar bot
     sessionStorage.removeItem("mb_reloads");
     crearPanel(v);
     setTimeout(iniciarBot, 2000);
