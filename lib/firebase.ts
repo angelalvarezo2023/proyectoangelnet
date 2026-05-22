@@ -7,6 +7,7 @@ import {
   update,
   onValue,
   push,
+  remove,
   type Database,
 } from "firebase/database";
 import { getAuth } from "firebase/auth";
@@ -152,7 +153,6 @@ export interface SearchResult {
 
 // =====================================================================
 // 🆕 INTERFACES FINANCIERAS — Pagos y Costos de Ban
-// Leídos desde /stats/weekly/{weekKey}/ (escritos por MegaBot v9.1)
 // =====================================================================
 export interface PaymentRecord {
   amount: number;
@@ -188,7 +188,6 @@ export interface WeeklyStats {
   newClients: string[];
   totalClients: number;
   totalRevenue?: number;
-  // 🆕 Financieros (desde /stats/weekly/)
   totalPayments?: number;
   totalBanCosts?: number;
   paymentCount?: number;
@@ -206,6 +205,423 @@ export interface StatsEvent {
   amount?: number;
 }
 
+// =====================================================================
+// 🆕 INTERFACES DEL SISTEMA DE LICENCIAS MEGABOT
+// Ruta en Firebase: /megabot_licenses/{licenseKey}/
+// =====================================================================
+
+export type LicensePlan = "basico" | "pro";
+export type LicenseStatus = "active" | "inactive" | "expired" | "suspended";
+
+export interface MegaBotLicense {
+  key: string;                    // Clave de activación (ej: MEGA-ANDY-001)
+  clientName: string;             // Nombre del cliente
+  whatsapp?: string;              // WhatsApp del cliente
+  email?: string;                 // Email del cliente
+  plan: LicensePlan;              // "basico" | "pro"
+  active: boolean;                // Activa o desactivada por el admin
+  fingerprint: string | null;     // ID único de la PC vinculada (null = sin vincular)
+  createdAt: string;              // Fecha de creación
+  expiresAt: string;              // Fecha de expiración
+  activatedAt: string | null;     // Fecha en que se activó en una PC
+  lastValidatedAt: string | null; // Última vez que el bot validó
+  notes?: string;                 // Notas internas del admin
+  suspendedReason?: string;       // Razón de suspensión si aplica
+}
+
+export interface CreateLicenseParams {
+  clientName: string;
+  plan: LicensePlan;
+  days: number;                   // Días de duración
+  whatsapp?: string;
+  email?: string;
+  notes?: string;
+  customKey?: string;             // Si quieres definir la clave tú mismo
+}
+
+export interface LicenseValidationResult {
+  valid: boolean;
+  reason?: "INVALID_KEY" | "DEACTIVATED" | "EXPIRED" | "WRONG_PC" | "UPDATE_REQUIRED" | "SERVER_ERROR";
+  license?: MegaBotLicense;
+  currentVersion?: string;
+  updateUrl?: string;
+}
+
+export interface LicenseStats {
+  total: number;
+  active: number;
+  inactive: number;
+  expired: number;
+  pro: number;
+  basico: number;
+  linkedToPC: number;
+  notLinked: number;
+}
+
+// =====================================================================
+// 🆕 API DE LICENCIAS MEGABOT
+// =====================================================================
+
+export const LicenseAPI = {
+
+  // ------------------------------------------------------------------
+  // Generar clave única en formato MEGA-XXXX-XXXX
+  // ------------------------------------------------------------------
+  generateKey(clientName?: string): string {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const rand = (n: number) =>
+      Array.from({ length: n }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+
+    if (clientName) {
+      // Usar las primeras 4 letras del nombre (sin espacios ni acentos)
+      const prefix = clientName
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^A-Z0-9]/gi, "")
+        .toUpperCase()
+        .substring(0, 4)
+        .padEnd(4, "X");
+      return `MEGA-${prefix}-${rand(4)}`;
+    }
+
+    return `MEGA-${rand(4)}-${rand(4)}`;
+  },
+
+  // ------------------------------------------------------------------
+  // Crear una nueva licencia
+  // ------------------------------------------------------------------
+  async createLicense(params: CreateLicenseParams): Promise<{ success: boolean; key?: string; error?: string }> {
+    try {
+      const key = params.customKey?.trim().toUpperCase() || this.generateKey(params.clientName);
+
+      // Verificar que la clave no exista ya
+      const existing = await get(ref(database, `megabot_licenses/${key}`));
+      if (existing.exists()) {
+        return { success: false, error: "Esa clave ya existe. Usa otra clave." };
+      }
+
+      const now = new Date();
+      const expiresAt = new Date(now);
+      expiresAt.setDate(expiresAt.getDate() + params.days);
+
+      const license: MegaBotLicense = {
+        key,
+        clientName: params.clientName.trim(),
+        plan: params.plan,
+        active: true,
+        fingerprint: null,
+        createdAt: now.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        activatedAt: null,
+        lastValidatedAt: null,
+        whatsapp: params.whatsapp?.trim() || "",
+        email: params.email?.trim() || "",
+        notes: params.notes?.trim() || "",
+      };
+
+      await set(ref(database, `megabot_licenses/${key}`), license);
+      return { success: true, key };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Obtener una licencia por clave
+  // ------------------------------------------------------------------
+  async getLicense(key: string): Promise<MegaBotLicense | null> {
+    try {
+      const snapshot = await get(ref(database, `megabot_licenses/${key.toUpperCase()}`));
+      return snapshot.exists() ? (snapshot.val() as MegaBotLicense) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Obtener TODAS las licencias
+  // ------------------------------------------------------------------
+  async getAllLicenses(): Promise<Record<string, MegaBotLicense>> {
+    try {
+      const snapshot = await get(ref(database, "megabot_licenses"));
+      return snapshot.val() || {};
+    } catch {
+      return {};
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Escuchar cambios en tiempo real (para el panel de admin)
+  // ------------------------------------------------------------------
+  listenToAllLicenses(callback: (licenses: Record<string, MegaBotLicense>) => void) {
+    const licensesRef = ref(database, "megabot_licenses");
+    return onValue(licensesRef, (snapshot) => {
+      callback(snapshot.val() || {});
+    });
+  },
+
+  // ------------------------------------------------------------------
+  // Activar / Desactivar una licencia
+  // ------------------------------------------------------------------
+  async setActive(key: string, active: boolean, reason?: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const updates: Partial<MegaBotLicense> = { active };
+      if (!active && reason) updates.suspendedReason = reason;
+      if (active) updates.suspendedReason = "";
+
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), updates);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Extender la expiración de una licencia (suma días a la fecha actual)
+  // ------------------------------------------------------------------
+  async extendLicense(key: string, days: number): Promise<{ success: boolean; newExpiry?: string; error?: string }> {
+    try {
+      const license = await this.getLicense(key);
+      if (!license) return { success: false, error: "Licencia no encontrada" };
+
+      // Si ya expiró, extender desde hoy; si aún vigente, extender desde la fecha actual
+      const base = new Date(license.expiresAt) > new Date()
+        ? new Date(license.expiresAt)
+        : new Date();
+
+      base.setDate(base.getDate() + days);
+      const newExpiry = base.toISOString();
+
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+        expiresAt: newExpiry,
+        active: true,             // Reactivar si estaba desactivada
+        suspendedReason: "",
+      });
+
+      return { success: true, newExpiry };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Resetear la PC vinculada (para transferir a otra PC)
+  // ------------------------------------------------------------------
+  async resetFingerprint(key: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+        fingerprint: null,
+        activatedAt: null,
+      });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Cambiar el plan de una licencia
+  // ------------------------------------------------------------------
+  async changePlan(key: string, plan: LicensePlan): Promise<{ success: boolean; error?: string }> {
+    try {
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), { plan });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Actualizar notas internas
+  // ------------------------------------------------------------------
+  async updateNotes(key: string, notes: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), { notes });
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Eliminar una licencia permanentemente
+  // ------------------------------------------------------------------
+  async deleteLicense(key: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      await remove(ref(database, `megabot_licenses/${key.toUpperCase()}`));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Validar licencia + fingerprint (llamado desde el API route de Vercel)
+  // Retorna resultado completo para que el servidor decida qué responder
+  // ------------------------------------------------------------------
+  async validateLicense(key: string, fingerprint: string): Promise<LicenseValidationResult> {
+    try {
+      const license = await this.getLicense(key);
+
+      if (!license) {
+        return { valid: false, reason: "INVALID_KEY" };
+      }
+
+      if (!license.active) {
+        return { valid: false, reason: "DEACTIVATED", license };
+      }
+
+      if (new Date(license.expiresAt) <= new Date()) {
+        return { valid: false, reason: "EXPIRED", license };
+      }
+
+      // Verificar PC vinculada
+      if (license.fingerprint && license.fingerprint !== fingerprint) {
+        return { valid: false, reason: "WRONG_PC", license };
+      }
+
+      // Primera activación: vincular fingerprint
+      if (!license.fingerprint) {
+        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+          fingerprint,
+          activatedAt: new Date().toISOString(),
+          lastValidatedAt: new Date().toISOString(),
+        });
+      } else {
+        // Actualizar última validación
+        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+          lastValidatedAt: new Date().toISOString(),
+        });
+      }
+
+      return { valid: true, license };
+    } catch (error) {
+      return { valid: false, reason: "SERVER_ERROR" };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Activar licencia desde el userscript (primera vez)
+  // ------------------------------------------------------------------
+  async activateLicense(
+    key: string,
+    fingerprint: string
+  ): Promise<{ success: boolean; message: string; license?: MegaBotLicense }> {
+    try {
+      const license = await this.getLicense(key);
+
+      if (!license) {
+        return { success: false, message: "❌ Clave no encontrada.\nVerifica que la escribiste bien." };
+      }
+
+      if (!license.active) {
+        return { success: false, message: "❌ Licencia desactivada.\nContacta al vendedor." };
+      }
+
+      if (new Date(license.expiresAt) <= new Date()) {
+        return { success: false, message: "❌ Licencia expirada.\nContacta al vendedor para renovar." };
+      }
+
+      // Ya vinculada a OTRA PC
+      if (license.fingerprint && license.fingerprint !== fingerprint) {
+        return {
+          success: false,
+          message: "❌ Esta clave ya está activada en otra PC.\nContacta al vendedor para transferirla.",
+        };
+      }
+
+      // Ya vinculada a ESTA PC
+      if (license.fingerprint === fingerprint) {
+        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+          lastValidatedAt: new Date().toISOString(),
+        });
+        return {
+          success: true,
+          message: `✅ ¡Bienvenido de nuevo, ${license.clientName}!`,
+          license,
+        };
+      }
+
+      // Primera activación
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+        fingerprint,
+        activatedAt: new Date().toISOString(),
+        lastValidatedAt: new Date().toISOString(),
+      });
+
+      return {
+        success: true,
+        message: `✅ ¡Activado!\n\nBienvenido ${license.clientName}\nEsta PC ha quedado registrada.`,
+        license,
+      };
+    } catch (error) {
+      return { success: false, message: "❌ Error del servidor. Intenta de nuevo." };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Estadísticas del panel de admin
+  // ------------------------------------------------------------------
+  async getStats(): Promise<LicenseStats> {
+    try {
+      const all = await this.getAllLicenses();
+      const now = new Date();
+      const licenses = Object.values(all);
+
+      return {
+        total:      licenses.length,
+        active:     licenses.filter(l => l.active && new Date(l.expiresAt) > now).length,
+        inactive:   licenses.filter(l => !l.active).length,
+        expired:    licenses.filter(l => new Date(l.expiresAt) <= now).length,
+        pro:        licenses.filter(l => l.plan === "pro").length,
+        basico:     licenses.filter(l => l.plan === "basico").length,
+        linkedToPC: licenses.filter(l => l.fingerprint !== null).length,
+        notLinked:  licenses.filter(l => l.fingerprint === null).length,
+      };
+    } catch {
+      return { total:0, active:0, inactive:0, expired:0, pro:0, basico:0, linkedToPC:0, notLinked:0 };
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Obtener licencias que expiran pronto (para alertas en el panel)
+  // ------------------------------------------------------------------
+  async getExpiringLicenses(withinDays: number = 3): Promise<MegaBotLicense[]> {
+    try {
+      const all = await this.getAllLicenses();
+      const now = new Date();
+      const threshold = new Date(now.getTime() + withinDays * 86400000);
+
+      return Object.values(all).filter(l => {
+        const exp = new Date(l.expiresAt);
+        return l.active && exp > now && exp <= threshold;
+      }).sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
+    } catch {
+      return [];
+    }
+  },
+
+  // ------------------------------------------------------------------
+  // Helper: días restantes de una licencia
+  // ------------------------------------------------------------------
+  getDaysRemaining(license: MegaBotLicense): number {
+    const diff = new Date(license.expiresAt).getTime() - Date.now();
+    return Math.ceil(diff / 86400000);
+  },
+
+  // ------------------------------------------------------------------
+  // Helper: estado legible de una licencia
+  // ------------------------------------------------------------------
+  getStatus(license: MegaBotLicense): LicenseStatus {
+    if (!license.active) return "suspended";
+    if (new Date(license.expiresAt) <= new Date()) return "expired";
+    return "active";
+  },
+};
+
+// =====================================================================
+// FIREBASE API (sin cambios)
+// =====================================================================
 export const FirebaseAPI = {
   calculateRentalRemaining(rentalExpiration: string): RentalRemaining {
     const diff = new Date(rentalExpiration).getTime() - new Date().getTime();
@@ -282,8 +698,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🔧 FIX: Búsqueda por coincidencia EXACTA (case-insensitive)
-  // Antes usaba .includes() que causaba que "Emi" matcheara con "Jeremi"
   async findBrowserByClientName(clientName: string): Promise<SearchResult | null> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -347,8 +761,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // 🔧 FIX: Búsqueda por coincidencia EXACTA (case-insensitive)
-  // Antes usaba .includes() que causaba que "Emi" matcheara con "Jeremi"
   async findAllBrowsersByClientName(clientName: string): Promise<SearchResult[]> {
     try {
       const snapshot = await get(ref(database, "browsers"));
@@ -499,7 +911,6 @@ export const FirebaseAPI = {
     }
   },
 
-  // ✅ CORREGIDO: Envía comandos pause/resume correctamente
   async togglePausePost(browserName: string, postId: string | undefined, newState: boolean) {
     try {
       const browserData = await this.findBrowserByName(browserName);
@@ -507,15 +918,12 @@ export const FirebaseAPI = {
         return { success: false, error: "Navegador no encontrado" };
       }
 
-      // ✅ PASO 1: Enviar comando a la extensión (pause o resume)
       const commandType = newState ? 'pause' : 'resume';
       await this.sendCommand(browserName, commandType, postId ? { postId } : {});
       
       console.log(`[FirebaseAPI]: Comando ${commandType} enviado a ${browserName}`);
 
-      // ✅ PASO 2: Actualizar Firebase inmediatamente (feedback visual para el dashboard)
       if (!browserData.isMultiPost || !postId) {
-        // Single post
         await update(ref(database, `browsers/${browserName}`), {
           isPaused: newState,
           lastUpdate: new Date().toISOString(),
@@ -523,7 +931,6 @@ export const FirebaseAPI = {
         return { success: true };
       }
 
-      // Multi-post
       await update(ref(database, `browsers/${browserName}/posts/${postId}`), {
         isPaused: newState,
         lastUpdate: new Date().toISOString(),
@@ -668,6 +1075,9 @@ export const FirebaseAPI = {
   },
 };
 
+// =====================================================================
+// STATS API (sin cambios)
+// =====================================================================
 export const StatsAPI = {
   getCurrentWeekId(): string {
     const now = new Date();
@@ -677,7 +1087,6 @@ export const StatsAPI = {
     return `${now.getFullYear()}-W${weekNumber.toString().padStart(2, '0')}`;
   },
 
-  // 🆕 Generar weekKey compatible con la extensión (misma lógica que getWeekKey() en content.js)
   getExtensionWeekKey(): string {
     const now = new Date();
     const jan1 = new Date(now.getFullYear(), 0, 1);
@@ -803,11 +1212,6 @@ export const StatsAPI = {
     }
   },
 
-  // =====================================================================
-  // 🆕 FINANCIEROS — Leer pagos y costos de ban desde /stats/weekly/
-  // (escritos por la extensión MegaBot v9.1)
-  // =====================================================================
-
   async getWeeklyFinancials(weekKey?: string): Promise<WeeklyFinancials> {
     const key = weekKey || this.getExtensionWeekKey();
     const empty: WeeklyFinancials = {
@@ -871,7 +1275,6 @@ export const StatsAPI = {
     return unsubscribe;
   },
 
-  // 🆕 Registrar pago manualmente desde el dashboard
   async recordPaymentFromDashboard(amount: number, postId?: string, clientName?: string, browserName?: string) {
     try {
       const weekKey = this.getExtensionWeekKey();
@@ -907,7 +1310,6 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Registrar costo de ban manualmente desde el dashboard
   async recordBanCostFromDashboard(amount: number, browserName?: string) {
     try {
       const weekKey = this.getExtensionWeekKey();
@@ -941,7 +1343,6 @@ export const StatsAPI = {
     }
   },
 
-  // 🆕 Obtener historial financiero de TODAS las semanas
   async getFinancialsHistory(count: number = 12): Promise<Array<{ weekKey: string; financials: WeeklyFinancials }>> {
     try {
       const snapshot = await get(ref(database, `stats/weekly`));
@@ -1006,7 +1407,6 @@ export const StatsAPI = {
         stats = this.createEmptyWeekStats(weekId);
       }
 
-      // 🆕 Enriquecer con datos financieros
       const financials = await this.getWeeklyFinancials();
       stats.totalPayments = financials.totalPayments;
       stats.totalBanCosts = financials.totalBans;
@@ -1029,7 +1429,6 @@ export const StatsAPI = {
       const weeksData = snapshot.val();
       const weeks: WeeklyStats[] = Object.values(weeksData);
 
-      // 🆕 Enriquecer cada semana con datos financieros
       const financialsHistory = await this.getFinancialsHistory(count);
       const financialsMap = new Map(financialsHistory.map(f => [f.weekKey, f.financials]));
 
