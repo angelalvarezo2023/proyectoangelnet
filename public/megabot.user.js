@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         MegaBot PRO
+// @name         UltraBot PRO
 // @namespace    https://angelrentmg.vercel.app
 // @version      3.6.0
-// @description  Sistema de Republicación Automática para MegaPersonals
+// @description  UltraBot — Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
 // @grant        GM_getValue
@@ -10,7 +10,7 @@
 // @run-at       document-end
 // ==/UserScript==
 
-// ==================== MEGABOT PRO v3.6 ====================
+// ==================== ULTRABOT PRO v3.6 ====================
 // - Licencias validadas en servidor (Vercel)
 // - 1 PC por licencia (fingerprint UUID único)
 // - Forzar actualización obligatoria
@@ -19,7 +19,7 @@
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "1.0.0",
+  VERSION_ACTUAL: "2.0.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
@@ -337,7 +337,7 @@ function mostrarPanelActivacion(mensaje = "Ingresa tu clave de activación") {
                 padding:40px;border-radius:20px;max-width:480px;
                 width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
       <div style="text-align:center;margin-bottom:28px;">
-        <h1 style="color:white;font-size:30px;margin:0 0 8px;">🚀 MegaBot PRO</h1>
+        <h1 style="color:white;font-size:30px;margin:0 0 8px;">🚀 UltraBot PRO</h1>
         <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0;">
           Sistema de Republicación Automática
         </p>
@@ -851,7 +851,7 @@ function crearPanel(licenseInfo) {
         <span style="color:#9b728088;font-size:13px;cursor:move;">⋮⋮</span>
         <div>
           <div style="display:flex;align-items:center;font-size:15px;font-weight:800;">
-            🤖 MegaBot${badge}
+            🤖 ${esPro ? "UltraBot 2.0" : "UltraBot"}${badge}
           </div>
           <p style="margin:2px 0 0;font-size:10px;color:#f5e6e888;">
             ${licenseInfo.cliente} · ${licenseInfo.dias} días
