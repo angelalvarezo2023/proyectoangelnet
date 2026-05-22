@@ -19,7 +19,7 @@
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "2.0.0",
+  VERSION_ACTUAL: "2.5.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
