@@ -214,19 +214,22 @@ export type LicensePlan = "basico" | "pro";
 export type LicenseStatus = "active" | "inactive" | "expired" | "suspended";
 
 export interface MegaBotLicense {
-  key: string;                    // Clave de activación (ej: MEGA-ANDY-001)
-  clientName: string;             // Nombre del cliente
-  whatsapp?: string;              // WhatsApp del cliente
-  email?: string;                 // Email del cliente
-  plan: LicensePlan;              // "basico" | "pro"
-  active: boolean;                // Activa o desactivada por el admin
-  fingerprint: string | null;     // ID único de la PC vinculada (null = sin vincular)
-  createdAt: string;              // Fecha de creación
-  expiresAt: string;              // Fecha de expiración
-  activatedAt: string | null;     // Fecha en que se activó en una PC
-  lastValidatedAt: string | null; // Última vez que el bot validó
-  notes?: string;                 // Notas internas del admin
-  suspendedReason?: string;       // Razón de suspensión si aplica
+  key: string;
+  clientName: string;
+  whatsapp?: string;
+  email?: string;
+  plan: LicensePlan;
+  active: boolean;
+  // Multi-perfil: lista de fingerprints registrados
+  fingerprints: string[];
+  // Compat con versión anterior (un solo fingerprint)
+  fingerprint?: string | null;
+  createdAt: string;
+  expiresAt: string;
+  activatedAt: string | null;
+  lastValidatedAt: string | null;
+  notes?: string;
+  suspendedReason?: string;
 }
 
 export interface CreateLicenseParams {
@@ -309,7 +312,7 @@ export const LicenseAPI = {
         clientName: params.clientName.trim(),
         plan: params.plan,
         active: true,
-        fingerprint: null,
+        fingerprints: [],
         createdAt: now.toISOString(),
         expiresAt: expiresAt.toISOString(),
         activatedAt: null,
@@ -407,9 +410,15 @@ export const LicenseAPI = {
   // ------------------------------------------------------------------
   // Resetear la PC vinculada (para transferir a otra PC)
   // ------------------------------------------------------------------
+  // Máx perfiles por plan
+  getMaxPerfiles(plan: LicensePlan): number {
+    return plan === 'pro' ? 10 : 5;
+  },
+
   async resetFingerprint(key: string): Promise<{ success: boolean; error?: string }> {
     try {
       await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+        fingerprints: [],
         fingerprint: null,
         activatedAt: null,
       });
@@ -463,36 +472,37 @@ export const LicenseAPI = {
     try {
       const license = await this.getLicense(key);
 
-      if (!license) {
-        return { valid: false, reason: "INVALID_KEY" };
+      if (!license) return { valid: false, reason: "INVALID_KEY" };
+      if (!license.active) return { valid: false, reason: "DEACTIVATED", license };
+      if (new Date(license.expiresAt) <= new Date()) return { valid: false, reason: "EXPIRED", license };
+
+      // Normalizar: compatibilidad con licencias antiguas (fingerprint singular)
+      const fingerprints: string[] = license.fingerprints?.length
+        ? [...license.fingerprints]
+        : license.fingerprint ? [license.fingerprint] : [];
+
+      const maxPerfiles = this.getMaxPerfiles(license.plan);
+
+      // Ya está registrado este perfil → OK
+      if (fingerprints.includes(fingerprint)) {
+        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+          lastValidatedAt: new Date().toISOString(),
+        });
+        return { valid: true, license };
       }
 
-      if (!license.active) {
-        return { valid: false, reason: "DEACTIVATED", license };
-      }
-
-      if (new Date(license.expiresAt) <= new Date()) {
-        return { valid: false, reason: "EXPIRED", license };
-      }
-
-      // Verificar PC vinculada
-      if (license.fingerprint && license.fingerprint !== fingerprint) {
+      // Límite de perfiles alcanzado
+      if (fingerprints.length >= maxPerfiles) {
         return { valid: false, reason: "WRONG_PC", license };
       }
 
-      // Primera activación: vincular fingerprint
-      if (!license.fingerprint) {
-        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
-          fingerprint,
-          activatedAt: new Date().toISOString(),
-          lastValidatedAt: new Date().toISOString(),
-        });
-      } else {
-        // Actualizar última validación
-        await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
-          lastValidatedAt: new Date().toISOString(),
-        });
-      }
+      // Nuevo perfil dentro del límite → agregar
+      fingerprints.push(fingerprint);
+      await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
+        fingerprints,
+        activatedAt: license.activatedAt || new Date().toISOString(),
+        lastValidatedAt: new Date().toISOString(),
+      });
 
       return { valid: true, license };
     } catch (error) {
@@ -510,48 +520,45 @@ export const LicenseAPI = {
     try {
       const license = await this.getLicense(key);
 
-      if (!license) {
-        return { success: false, message: "❌ Clave no encontrada.\nVerifica que la escribiste bien." };
-      }
+      if (!license) return { success: false, message: "❌ Clave no encontrada.\nVerifica que la escribiste bien." };
+      if (!license.active) return { success: false, message: "❌ Licencia desactivada.\nContacta al vendedor." };
+      if (new Date(license.expiresAt) <= new Date()) return { success: false, message: "❌ Licencia expirada.\nContacta al vendedor para renovar." };
 
-      if (!license.active) {
-        return { success: false, message: "❌ Licencia desactivada.\nContacta al vendedor." };
-      }
+      // Normalizar fingerprints (compatibilidad con licencias antiguas)
+      const fingerprints: string[] = license.fingerprints?.length
+        ? [...license.fingerprints]
+        : license.fingerprint ? [license.fingerprint] : [];
 
-      if (new Date(license.expiresAt) <= new Date()) {
-        return { success: false, message: "❌ Licencia expirada.\nContacta al vendedor para renovar." };
-      }
+      const maxPerfiles = this.getMaxPerfiles(license.plan);
 
-      // Ya vinculada a OTRA PC
-      if (license.fingerprint && license.fingerprint !== fingerprint) {
-        return {
-          success: false,
-          message: "❌ Esta clave ya está activada en otra PC.\nContacta al vendedor para transferirla.",
-        };
-      }
-
-      // Ya vinculada a ESTA PC
-      if (license.fingerprint === fingerprint) {
+      // Este perfil ya está registrado → bienvenido de nuevo
+      if (fingerprints.includes(fingerprint)) {
         await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
           lastValidatedAt: new Date().toISOString(),
         });
+        return { success: true, message: `✅ ¡Bienvenido de nuevo, ${license.clientName}!`, license };
+      }
+
+      // Límite de perfiles alcanzado
+      if (fingerprints.length >= maxPerfiles) {
         return {
-          success: true,
-          message: `✅ ¡Bienvenido de nuevo, ${license.clientName}!`,
-          license,
+          success: false,
+          message: `❌ Límite de perfiles alcanzado (${maxPerfiles}/${maxPerfiles}).\nContacta al vendedor para ampliar o transferir la licencia.`,
         };
       }
 
-      // Primera activación
+      // Nuevo perfil dentro del límite → registrar
+      fingerprints.push(fingerprint);
       await update(ref(database, `megabot_licenses/${key.toUpperCase()}`), {
-        fingerprint,
-        activatedAt: new Date().toISOString(),
+        fingerprints,
+        activatedAt: license.activatedAt || new Date().toISOString(),
         lastValidatedAt: new Date().toISOString(),
       });
 
+      const restantes = maxPerfiles - fingerprints.length;
       return {
         success: true,
-        message: `✅ ¡Activado!\n\nBienvenido ${license.clientName}\nEsta PC ha quedado registrada.`,
+        message: `✅ ¡Activado!\n\nBienvenido ${license.clientName}\nPerfil ${fingerprints.length}/${maxPerfiles} registrado.`,
         license,
       };
     } catch (error) {
@@ -575,8 +582,8 @@ export const LicenseAPI = {
         expired:    licenses.filter(l => new Date(l.expiresAt) <= now).length,
         pro:        licenses.filter(l => l.plan === "pro").length,
         basico:     licenses.filter(l => l.plan === "basico").length,
-        linkedToPC: licenses.filter(l => l.fingerprint !== null).length,
-        notLinked:  licenses.filter(l => l.fingerprint === null).length,
+        linkedToPC: licenses.filter(l => (l.fingerprints?.length ?? 0) > 0 || l.fingerprint != null).length,
+        notLinked:  licenses.filter(l => (l.fingerprints?.length ?? 0) === 0 && !l.fingerprint).length,
       };
     } catch {
       return { total:0, active:0, inactive:0, expired:0, pro:0, basico:0, linkedToPC:0, notLinked:0 };
