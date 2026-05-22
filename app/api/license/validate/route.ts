@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { LicenseAPI } from '@/lib/firebase'
 
 // ✅ Cambia este número cada vez que lances una nueva versión
-const CURRENT_VERSION = "3.0.0"
+const CURRENT_VERSION = "4.0.0"
 
 export async function POST(req: NextRequest) {
   try {
