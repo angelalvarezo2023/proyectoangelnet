@@ -1,4 +1,3 @@
-
 import { NextRequest, NextResponse } from 'next/server'
 import { LicenseAPI } from '@/lib/firebase'
 
@@ -17,8 +16,10 @@ export async function POST(req: NextRequest) {
       message: result.message,
       ...(result.license && {
         cliente: result.license.clientName,
-        plan: result.license.plan,
-        dias: Math.ceil((new Date(result.license.expiresAt).getTime() - Date.now()) / 86400000),
+        plan:    result.license.plan,
+        dias:    Math.ceil((new Date(result.license.expiresAt).getTime() - Date.now()) / 86400000),
+        perfilesUsados: result.license.fingerprints?.length ?? 1,
+        maxPerfiles:    LicenseAPI.getMaxPerfiles(result.license.plan),
       }),
     })
 
