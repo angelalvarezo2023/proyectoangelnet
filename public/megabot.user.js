@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MegaBot PRO
 // @namespace    https://angelrentmg.vercel.app
-// @version      3.7.0
+// @version      1.0.0
 // @description  Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
@@ -17,7 +17,7 @@
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "3.7.0",
+  VERSION_ACTUAL: "1.0.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
