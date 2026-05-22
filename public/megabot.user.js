@@ -10,7 +10,7 @@
 // @run-at       document-end
 // ==/UserScript==
 
-// ==================== ULTRABOT PRO v3.6 ====================
+// ==================== ULTRABOT PRO v2.0 ====================
 // - Licencias validadas en servidor (Vercel)
 // - 1 PC por licencia (fingerprint UUID único)
 // - Forzar actualización obligatoria
