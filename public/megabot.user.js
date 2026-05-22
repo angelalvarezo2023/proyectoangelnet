@@ -1,16 +1,18 @@
 // ==UserScript==
 // @name         UltraBot PRO
 // @namespace    https://angelrentmg.vercel.app
-// @version      2.6.0
+// @version      2.7.0
 // @description  UltraBot — Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @run-at       document-end
+// @updateURL    https://angelrentmg.vercel.app/megabot.user.js
+// @downloadURL  https://angelrentmg.vercel.app/megabot.user.js
 // ==/UserScript==
 
-// ==================== ULTRABOT PRO v3.6 ====================
+// ==================== ULTRABOT PRO v2.7 ====================
 // - Licencias validadas en servidor (Vercel)
 // - 1 PC por licencia (fingerprint UUID único)
 // - Forzar actualización obligatoria
@@ -19,7 +21,7 @@
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "2.6.0",
+  VERSION_ACTUAL: "2.7.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
@@ -553,7 +555,7 @@ const ModalConfig = {
         .mb-lbl{color:#f5e6e8cc;font-size:13px;}
       </style>
 
-      <div style="background:linear-gradient(135deg,#667eea,#764ba2);
+      <div style="background:#160a0d;border:1px solid #3d1a20;
                   padding:25px;border-radius:20px;max-width:440px;
                   width:90%;max-height:85vh;overflow-y:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
