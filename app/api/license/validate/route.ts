@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { LicenseAPI } from '@/lib/firebase'
 
-// ✅ Cambia este número cada vez que lances una nueva versión
 const CURRENT_VERSION = "4.0.0"
 
 export async function POST(req: NextRequest) {
@@ -29,8 +28,17 @@ export async function POST(req: NextRequest) {
 
     const l = result.license!
     const dias = Math.ceil((new Date(l.expiresAt).getTime() - Date.now()) / 86400000)
+    const maxPerfiles = LicenseAPI.getMaxPerfiles(l.plan)
+    const perfilesUsados = l.fingerprints?.length ?? 1
 
-    return json({ valid: true, cliente: l.clientName, dias, plan: l.plan })
+    return json({
+      valid: true,
+      cliente: l.clientName,
+      dias,
+      plan: l.plan,
+      perfilesUsados,
+      maxPerfiles,
+    })
 
   } catch (err) {
     console.error('[validate]', err)
