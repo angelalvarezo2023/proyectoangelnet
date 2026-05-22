@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         MegaBot PRO
 // @namespace    https://angelrentmg.vercel.app
-// @version      2.0.0
+// @version      3.0.0
 // @description  Sistema de Republicación Automática para MegaPersonals
 // @author       MegaBot
 // @match        https://megapersonals.eu/*
-// @grant        none
+// @grant        GM_getValue
+// @grant        GM_setValue
 // @run-at       document-end
 // ==/UserScript==
 
@@ -18,18 +19,39 @@
 
 const CONFIG = {
   VERCEL_URL:     "https://angelrentmg.vercel.app",
-  VERSION_ACTUAL: "2.0.0",
+  VERSION_ACTUAL: "3.0.0",
   WHATSAPP:       "+1 (829) 383-7695"
 };
 
 // ==================== FINGERPRINT DE PC ====================
+// ✅ Usa GM_getValue/GM_setValue de Tampermonkey
+// Esto comparte el UUID entre TODOS los perfiles del mismo navegador
+// (Chrome normal, Multilogin, perfiles separados, etc.)
 function getFingerprint() {
   const KEY = "megabot_install_id";
-  let id = localStorage.getItem(KEY);
-  if (id && id.length >= 8) return id;
+
+  // Primero intentar desde Tampermonkey (compartido entre perfiles)
+  let id = GM_getValue(KEY, null);
+
+  // Si no está en GM, buscar en localStorage como fallback
+  if (!id || id.length < 8) {
+    id = localStorage.getItem(KEY);
+  }
+
+  // Si ya existe en cualquiera de los dos, sincronizar y devolver
+  if (id && id.length >= 8) {
+    GM_setValue(KEY, id);          // asegurar que esté en GM
+    localStorage.setItem(KEY, id); // y en localStorage también
+    return id;
+  }
+
+  // Generar UUID nuevo
   const arr = new Uint8Array(8);
   crypto.getRandomValues(arr);
   id = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+  // Guardar en ambos sitios
+  GM_setValue(KEY, id);
   localStorage.setItem(KEY, id);
   return id;
 }
@@ -697,7 +719,18 @@ const DragSystem = {
 
   init(panel, handle) {
     const saved = this.getSavedPosition();
-    if(saved){ panel.style.left=saved.x+'px'; panel.style.top=saved.y+'px'; panel.style.bottom='auto'; }
+    if(saved){
+      panel.style.left   = saved.x+'px';
+      panel.style.top    = saved.y+'px';
+      panel.style.bottom = 'auto';
+    }
+
+    // ✅ Verificar que el panel esté visible después de renderizar
+    setTimeout(() => this.asegurarVisible(panel), 300);
+
+    // ✅ Si cambia el tamaño de ventana o el zoom, recolocar si quedó fuera
+    window.addEventListener('resize', () => this.asegurarVisible(panel));
+
     handle.style.cursor='move';
     handle.addEventListener('mousedown', e=>this.dragStart(e,panel));
     document.addEventListener('mousemove', e=>this.drag(e,panel));
@@ -705,6 +738,33 @@ const DragSystem = {
     handle.addEventListener('touchstart', e=>this.dragStart(e,panel));
     document.addEventListener('touchmove', e=>this.drag(e,panel));
     document.addEventListener('touchend',  ()=>this.dragEnd(panel));
+  },
+
+  // ✅ NUEVO: verifica que el panel esté dentro de la pantalla visible
+  asegurarVisible(panel) {
+    const w = panel.offsetWidth  || 320;
+    const h = panel.offsetHeight || 200;
+    const maxX = window.innerWidth  - w - 10;
+    const maxY = window.innerHeight - h - 10;
+
+    let x = parseInt(panel.style.left) || 20;
+    let y = parseInt(panel.style.top);
+
+    // Si no tiene top definido (usa bottom), calcular desde abajo
+    if (!panel.style.top || panel.style.top === 'auto' || isNaN(y)) {
+      y = window.innerHeight - h - 20;
+    }
+
+    // Corregir si está fuera de límites
+    const newX = Math.max(10, Math.min(x, maxX));
+    const newY = Math.max(10, Math.min(y, maxY));
+
+    if (newX !== x || newY !== y) {
+      panel.style.left   = newX + 'px';
+      panel.style.top    = newY + 'px';
+      panel.style.bottom = 'auto';
+      this.savePosition(panel);
+    }
   },
 
   dragStart(e,panel) {
@@ -748,6 +808,7 @@ const DragSystem = {
     panel.style.left='20px'; panel.style.bottom='20px';
     panel.style.top='auto'; this.xOffset=0; this.yOffset=0;
     localStorage.removeItem('panelPosition');
+    setTimeout(() => this.asegurarVisible(panel), 100);
   }
 };
 
