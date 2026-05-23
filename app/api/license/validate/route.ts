@@ -26,18 +26,17 @@ export async function POST(req: NextRequest) {
       return json({ valid: false, reason: result.reason })
     }
 
-    const l = result.license!
+    const l    = result.license!
     const dias = Math.ceil((new Date(l.expiresAt).getTime() - Date.now()) / 86400000)
-    const maxPerfiles = LicenseAPI.getMaxPerfiles(l.plan)
-    const perfilesUsados = l.fingerprints?.length ?? 1
 
     return json({
-      valid: true,
-      cliente: l.clientName,
+      valid:         true,
+      cliente:       l.clientName,
       dias,
-      plan: l.plan,
-      perfilesUsados,
-      maxPerfiles,
+      plan:          l.plan,
+      remotePaused:  (l as any).remotePaused === true,
+      remoteTimerMin: (l as any).remoteTimerMin || null,
+      remoteTimerMax: (l as any).remoteTimerMax || null,
     })
 
   } catch (err) {
