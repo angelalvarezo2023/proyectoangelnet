@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 
 // ✅ SOLO CAMBIA ESTE NÚMERO CUANDO SUBAS UNA NUEVA VERSIÓN
-export const VERSION = "3.1.0"
+export const VERSION = "3.2.0"
 
 export async function GET() {
   return NextResponse.json(
