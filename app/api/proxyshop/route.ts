@@ -9,7 +9,7 @@ import {
 
 // ─── CONFIG ───────────────────────────────────────────
 
-const TOKEN   = process.env.TELEGRAM_BOT_TOKEN!;
+const TOKEN = process.env.BOT_TOKEN!;
 const API     = `https://api.telegram.org/bot${TOKEN}`;
 const P6_KEY  = process.env.PROXY6_KEY!;
 const P6_API  = `https://px6.link/api/${P6_KEY}`;
