@@ -13,4 +13,1214 @@
 // @updateURL    https://angelrentmg.vercel.app/megabot.user.js
 // @downloadURL  https://angelrentmg.vercel.app/megabot.user.js
 // ==/UserScript==
-const CONFIG={VERCEL_URL:"https://angelrentmg.vercel.app",VERSION_ACTUAL:"3.3.0",WHATSAPP:"+1 (829) 383-7695"};function getFingerprint(){const t="megabot_install_id";let e=GM_getValue(t,null);if((!e||e.length<8)&&(e=localStorage.getItem(t)),e&&e.length>=8)return GM_setValue(t,e),localStorage.setItem(t,e),e;const n=new Uint8Array(8);return crypto.getRandomValues(n),e=Array.from(n).map(t=>t.toString(16).padStart(2,"0")).join("").toUpperCase(),GM_setValue(t,e),localStorage.setItem(t,e),e}function gmFetch(t,e={}){return new Promise((n,o)=>{GM_xmlhttpRequest({method:e.method||"GET",url:t,headers:e.headers||{},data:e.body||null,onload:t=>{n({ok:t.status>=200&&t.status<300,json:()=>Promise.resolve(JSON.parse(t.responseText)),text:()=>Promise.resolve(t.responseText)})},onerror:t=>o(new Error("GM_xmlhttpRequest error: "+t.error)),ontimeout:()=>o(new Error("GM_xmlhttpRequest timeout"))})})}const LicenseSystem={getStoredKey:()=>localStorage.getItem("megabot_license_key"),storeKey(t){localStorage.setItem("megabot_license_key",t)},clearKey(t){console.warn("[MegaBot] Licencia borrada:",t),localStorage.removeItem("megabot_license_key"),"EXPIRED"!==t&&"DEACTIVATED"!==t||localStorage.removeItem("megabot_install_id")},t:null,o:0,CACHE_MS:3e5,async validar(){const t=this.getStoredKey(),e=getFingerprint();if(!t)return{valida:!1,razon:"NO_KEY"};if(this.t&&Date.now()-this.o<this.CACHE_MS)return this.t;try{const n=await gmFetch(`${CONFIG.VERCEL_URL}/api/license/validate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:t,fingerprint:e,version:CONFIG.VERSION_ACTUAL})}),o=await n.json();if(o.valid){localStorage.removeItem("megabot_net_errors");const t={valida:!0,...o};return this.t=t,this.o=Date.now(),t}switch(o.reason){case"UPDATE_REQUIRED":return{valida:!1,razon:"UPDATE_REQUIRED",...o};case"WRONG_PC":return this.clearKey("WRONG_PC"),{valida:!1,razon:"WRONG_PC",mensaje:"Esta clave ya está activada en otra PC.\nContacta al vendedor."};case"DEACTIVATED":return this.clearKey("DEACTIVATED"),{valida:!1,razon:"DEACTIVATED",mensaje:"Licencia desactivada.\nContacta al vendedor."};case"EXPIRED":return this.clearKey("EXPIRED"),{valida:!1,razon:"EXPIRED",mensaje:"Licencia expirada.\nContacta al vendedor para renovar."};case"INVALID_KEY":const t=parseInt(localStorage.getItem("megabot_key_fails")||"0");return t>=3?(this.clearKey("INVALID_KEY"),localStorage.removeItem("megabot_key_fails"),{valida:!1,razon:"INVALID_KEY",mensaje:"Clave no válida.\nVerifica o contacta al vendedor."}):(localStorage.setItem("megabot_key_fails",(t+1).toString()),{valida:!1,razon:"RETRYING",networkError:!0});default:return{valida:!1,razon:"SERVER_ERROR",networkError:!0}}}catch(t){const e=parseInt(localStorage.getItem("megabot_net_errors")||"0");return localStorage.setItem("megabot_net_errors",(e+1).toString()),{valida:!1,razon:"NETWORK_ERROR",networkError:!0}}},async activar(t){const e=getFingerprint();try{const n=await gmFetch(`${CONFIG.VERCEL_URL}/api/license/activate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:t,fingerprint:e})}),o=await n.json();return o.success&&(this.storeKey(t),localStorage.removeItem("megabot_key_fails"),localStorage.removeItem("megabot_net_errors")),o}catch(t){return{success:!1,message:"❌ Error de conexión. Intenta de nuevo."}}}};function mostrarPantallaActualizacion(t){const e=document.createElement("div");e.style.cssText="\n    position:fixed;top:0;left:0;width:100%;height:100%;\n    background:rgba(0,0,0,0.96);z-index:9999999;\n    display:flex;justify-content:center;align-items:center;\n    font-family:Arial,sans-serif;\n  ",e.innerHTML=`\n    <div style="background:linear-gradient(135deg,#1e40af,#1d4ed8);\n                padding:40px;border-radius:20px;max-width:480px;\n                width:90%;text-align:center;">\n      <div id="mb-upd-icon" style="font-size:60px;margin-bottom:16px;">🔄</div>\n      <h1 style="color:white;font-size:26px;margin:0 0 12px;">Actualización Requerida</h1>\n      <p style="color:rgba(255,255,255,0.85);font-size:14px;margin-bottom:24px;line-height:1.6;">\n        Hay una nueva versión disponible (<strong>v${t.currentVersion}</strong>).<br>\n        El bot no funcionará hasta que instales la actualización.\n      </p>\n\n      \x3c!-- Barra de progreso (oculta al inicio) --\x3e\n      <div id="mb-progress-container" style="display:none;margin-bottom:20px;text-align:left;">\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">\n          <span id="mb-progress-label"\n            style="color:rgba(255,255,255,0.85);font-size:13px;font-weight:bold;">\n            Descargando actualización...\n          </span>\n          <span id="mb-progress-pct"\n            style="color:#10b981;font-size:14px;font-weight:bold;">0%</span>\n        </div>\n        \x3c!-- Barra exterior --\x3e\n        <div style="width:100%;height:12px;background:rgba(255,255,255,0.15);\n                    border-radius:10px;overflow:hidden;">\n          <div id="mb-progress-bar"\n            style="width:0%;height:100%;\n                   background:linear-gradient(90deg,#10b981,#34d399);\n                   border-radius:10px;transition:width 0.25s ease;">\n          </div>\n        </div>\n        \x3c!-- Mensaje de estado --\x3e\n        <p id="mb-progress-status"\n          style="color:rgba(255,255,255,0.5);font-size:11px;margin:8px 0 0;">\n          Iniciando...\n        </p>\n      </div>\n\n      \x3c!-- Botón instalar --\x3e\n      <a id="mb-update-btn" href="${t.updateUrl}" target="_blank"\n         style="display:block;padding:16px;background:#10b981;color:white;\n                border-radius:10px;text-decoration:none;font-size:16px;\n                font-weight:bold;margin-bottom:12px;cursor:pointer;transition:opacity 0.3s;">\n        ⬇️ INSTALAR ACTUALIZACIÓN v${t.currentVersion}\n      </a>\n\n      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">\n        Tu versión actual: v${CONFIG.VERSION_ACTUAL}\n      </p>\n    </div>\n  `,document.body.appendChild(e),document.getElementById("mb-update-btn").addEventListener("click",()=>{document.getElementById("mb-update-btn").style.display="none",document.getElementById("mb-progress-container").style.display="block",document.getElementById("mb-upd-icon").textContent="⏳";const e=document.getElementById("mb-progress-bar"),n=document.getElementById("mb-progress-pct"),o=document.getElementById("mb-progress-label"),a=document.getElementById("mb-progress-status");let i=0;const r=[{hasta:12,vel:80,msg:"Conectando con el servidor..."},{hasta:30,vel:55,msg:"Descargando MegaBot v"+t.currentVersion+"..."},{hasta:55,vel:45,msg:"Verificando archivos..."},{hasta:75,vel:60,msg:"Instalando actualización..."},{hasta:90,vel:85,msg:"Aplicando cambios..."},{hasta:100,vel:180,msg:"¡Instalación completada!"}];let s=0;const d=setInterval(()=>{const t=r[s],o=2.2*Math.random()+.4;i=Math.min(i+o,t.hasta),e.style.width=i+"%",n.textContent=Math.floor(i)+"%",a.textContent=t.msg,i>=t.hasta&&s<r.length-1&&(s++,clearInterval(d),setTimeout(l,300*Math.random()+100)),i>=100&&(clearInterval(d),c())},r[s].vel);function l(){const t=r[s],o=setInterval(()=>{const d=2.2*Math.random()+.4;i=Math.min(i+d,t.hasta),e.style.width=i+"%",n.textContent=Math.floor(i)+"%",a.textContent=t.msg,i>=t.hasta&&s<r.length-1&&(s++,clearInterval(o),setTimeout(l,300*Math.random()+100)),i>=100&&(clearInterval(o),c())},t.vel)}function c(){e.style.background="linear-gradient(90deg,#10b981,#6ee7b7)",e.style.width="100%",n.textContent="100%",n.style.color="#6ee7b7",o.textContent="✅ ¡Actualización instalada!",o.style.color="#10b981",document.getElementById("mb-upd-icon").textContent="✅";let t=3;a.style.color="#fbbf24",a.textContent=`Recargando en ${t} segundos...`;const i=setInterval(()=>{t--,t>0?a.textContent=`Recargando en ${t} segundo${1!==t?"s":""}...`:(clearInterval(i),a.textContent="¡Recargando ahora!",location.reload())},1e3)}})}function mostrarPanelActivacion(t="Ingresa tu clave de activación"){const e=document.getElementById("megabot-license-panel");e&&e.remove();const n=getFingerprint(),o=document.createElement("div");o.id="megabot-license-panel",o.style.cssText="\n    position:fixed;top:0;left:0;width:100%;height:100%;\n    background:rgba(0,0,0,0.95);z-index:999999;\n    display:flex;justify-content:center;align-items:center;\n    font-family:Arial,sans-serif;\n  ",o.innerHTML=`\n    <div style="background:#160a0d;border:1px solid #3d1a20;\n                padding:40px;border-radius:20px;max-width:480px;\n                width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.4);">\n      <div style="text-align:center;margin-bottom:28px;">\n        <h1 style="color:white;font-size:30px;margin:0 0 8px;">🚀 UltraBot PRO</h1>\n        <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0;">\n          Sistema de Republicación Automática\n        </p>\n      </div>\n\n      <div style="background:rgba(255,255,255,0.1);padding:20px;border-radius:14px;margin-bottom:16px;">\n        <h3 style="color:white;margin:0 0 12px;font-size:16px;">🔑 Activar Licencia</h3>\n        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:0 0 14px;line-height:1.5;">\n          ${t}\n        </p>\n        <input type="text" id="mb-key-input" placeholder="Ej: MEGA-ANDY-001"\n          style="width:100%;padding:14px;border:none;border-radius:8px;\n                 font-size:15px;text-align:center;text-transform:uppercase;\n                 box-sizing:border-box;margin-bottom:12px;">\n        <button id="mb-btn-activar"\n          style="width:100%;padding:14px;background:#10b981;color:white;\n                 border:none;border-radius:8px;font-size:15px;\n                 font-weight:bold;cursor:pointer;">\n          🔓 ACTIVAR\n        </button>\n        <div id="mb-status"\n          style="margin-top:10px;padding:10px;border-radius:8px;\n                 display:none;text-align:center;">\n          <p id="mb-status-msg"\n            style="color:white;font-size:13px;margin:0;white-space:pre-line;"></p>\n        </div>\n      </div>\n\n      <div style="background:rgba(255,255,255,0.1);padding:14px;border-radius:10px;margin-bottom:12px;">\n        <p style="color:rgba(255,255,255,0.85);font-size:12px;margin:0 0 6px;">\n          <strong>🛒 ¿No tienes clave?</strong> Contacta al vendedor\n        </p>\n        <p style="color:rgba(255,255,255,0.55);font-size:11px;margin:0;">\n          📞 WhatsApp: ${CONFIG.WHATSAPP}\n        </p>\n      </div>\n\n      <div style="background:rgba(0,0,0,0.2);padding:8px;border-radius:8px;text-align:center;">\n        <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:0;">\n          🖥️ ID de esta PC: <strong>${n}</strong>\n        </p>\n      </div>\n    </div>\n  `,document.body.appendChild(o);const a=document.getElementById("mb-btn-activar"),i=document.getElementById("mb-key-input"),r=document.getElementById("mb-status"),s=document.getElementById("mb-status-msg"),d=(t,e)=>{r.style.display="block",r.style.background=e,s.textContent=t};a.addEventListener("click",async()=>{const t=i.value.trim().toUpperCase();if(!t)return void d("⚠️ Ingresa una clave","rgba(239,68,68,0.3)");a.disabled=!0,a.textContent="⏳ Verificando...",d("Conectando con el servidor...","rgba(59,130,246,0.3)");const e=await LicenseSystem.activar(t);a.disabled=!1,a.textContent="🔓 ACTIVAR",e.success?(d(e.message,"rgba(16,185,129,0.3)"),setTimeout(()=>location.reload(),2e3)):d(e.message,"rgba(239,68,68,0.3)")}),i.addEventListener("keypress",t=>{"Enter"===t.key&&a.click()})}let progress,republicar=!0,textPrev="";const AntiShadowban={getRiesgo(){let t=parseInt(localStorage.getItem("shadowbanRiesgo")||"0");return t||(t=Math.floor(20*Math.random())+5,localStorage.setItem("shadowbanRiesgo",t.toString())),t},getEstado(){const t=this.getRiesgo();return t<30?{text:"LIMPIA",color:"#10b981",icon:"✅"}:t<60?{text:"RIESGO MEDIO",color:"#f59e0b",icon:"⚠️"}:{text:"RIESGO ALTO",color:"#ef4444",icon:"🚨"}},verificar(){localStorage.setItem("shadowbanRiesgo",(Math.floor(20*Math.random())+8).toString())},corregir(){localStorage.setItem("shadowbanRiesgo",(Math.floor(10*Math.random())+8).toString())}},TiempoConfig={getMin:()=>parseInt(localStorage.getItem("tiempoMin")||"15"),getMax:()=>parseInt(localStorage.getItem("tiempoMax")||"15"),setRango(t,e){localStorage.setItem("tiempoMin",t.toString()),localStorage.setItem("tiempoMax",e.toString())},getTiempoAleatorio(){const t=this.getMin(),e=this.getMax();return Math.floor(Math.random()*(e-t+1))+t}},BanDetector={esPaginaBan(){const t=location.href.toLowerCase();return t.includes("ban_message")||t.includes("fraud")||t.includes("blocked")||t.includes("suspended")},mostrarAlerta(){const t=document.createElement("div");t.style.cssText="\n      position:fixed;top:0;left:0;width:100%;height:100%;\n      background:rgba(0,0,0,0.95);z-index:9999999;\n      display:flex;justify-content:center;align-items:center;\n      font-family:Arial,sans-serif;\n    ",t.innerHTML='\n      <div style="background:linear-gradient(135deg,#f59e0b,#d97706);\n                  padding:40px;border-radius:20px;max-width:480px;\n                  width:90%;text-align:center;">\n        <div style="font-size:60px;margin-bottom:16px;">⚠️</div>\n        <h1 style="color:white;font-size:26px;margin:0 0 12px;">Bloqueo Detectado</h1>\n        <p style="color:rgba(255,255,255,0.9);font-size:14px;margin-bottom:20px;">\n          El bot ha sido pausado automáticamente.\n        </p>\n        <div style="background:rgba(0,0,0,0.3);padding:14px;border-radius:10px;margin-bottom:20px;">\n          <p style="color:white;font-size:12px;margin:0;line-height:1.8;">\n            • Espera al menos 30 minutos<br>\n            • Usa una VPN o cambia tu IP<br>\n            • Reduce la frecuencia de republicación\n          </p>\n        </div>\n        <button id="mb-btn-continuar"\n          style="width:100%;padding:14px;background:#10b981;color:white;\n                 border:none;border-radius:10px;font-size:15px;\n                 font-weight:bold;cursor:pointer;margin-bottom:10px;">\n          ▶️ CONTINUAR\n        </button>\n        <button id="mb-btn-pausar"\n          style="width:100%;padding:12px;background:rgba(255,255,255,0.2);\n                 color:white;border:none;border-radius:10px;\n                 font-size:13px;cursor:pointer;">\n          ⏸️ Mantener pausado\n        </button>\n      </div>\n    ',document.body.appendChild(t),document.getElementById("mb-btn-continuar").addEventListener("click",()=>{localStorage.removeItem("botPausado"),t.remove(),location.href="https://megapersonals.eu/users/posts/list"}),document.getElementById("mb-btn-pausar").addEventListener("click",()=>t.remove())}},ModalConfig={mostrar(t){const e=document.getElementById("mb-config-modal");e&&e.remove();const n="pro"===t.plan,o=TiempoConfig.getMin(),a=TiempoConfig.getMax(),i=n&&localStorage.getItem("cantidadPosts")||"1",r=document.createElement("div");r.id="mb-config-modal",r.style.cssText="\n      position:fixed;top:0;left:0;width:100%;height:100%;\n      background:rgba(0,0,0,0.85);z-index:999998;\n      display:flex;justify-content:center;align-items:center;\n      font-family:Arial,sans-serif;\n    ",r.innerHTML=`\n      <style>\n        .mb-toggle{position:relative;display:inline-block;width:50px;height:26px;}\n        .mb-toggle input{opacity:0;width:0;height:0;}\n        .mb-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;\n                   background:#94a3b8;transition:.3s;border-radius:26px;}\n        .mb-slider:before{position:absolute;content:"";height:20px;width:20px;\n                          left:3px;bottom:3px;background:white;transition:.3s;border-radius:50%;}\n        input:checked+.mb-slider{background:#10b981;}\n        input:checked+.mb-slider:before{transform:translateX(24px);}\n        .mb-sec{background:#1a080d;border:1px solid #3d1a20;padding:15px;border-radius:12px;margin-bottom:12px;}\n        .mb-sec h3{color:#f5e6e8;font-size:14px;margin:0 0 12px;}\n        .mb-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}\n        .mb-row:last-child{margin-bottom:0;}\n        .mb-lbl{color:#f5e6e8cc;font-size:13px;}\n      </style>\n\n      <div style="background:#160a0d;border:1px solid #3d1a20;\n                  padding:25px;border-radius:20px;max-width:440px;\n                  width:90%;max-height:85vh;overflow-y:auto;">\n        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">\n          <h2 style="color:#f5e6e8;font-size:20px;margin:0;">⚙️ Configuración</h2>\n          <button id="mb-cfg-close"\n            style="background:#3d1a2044;border:1px solid #3d1a20;color:#9b7280;\n                   font-size:22px;width:34px;height:34px;border-radius:8px;cursor:pointer;">×</button>\n        </div>\n\n        \x3c!-- TIEMPO --\x3e\n        <div class="mb-sec">\n          <h3>⏱️ Tiempo de Republicación</h3>\n          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">\n            <div style="flex:1;">\n              <label style="color:rgba(255,255,255,0.7);font-size:11px;display:block;margin-bottom:4px;">Mínimo</label>\n              <input type="number" id="mb-t-min" value="${o}" min="10" max="60"\n                style="width:100%;padding:10px;border:none;border-radius:8px;\n                       text-align:center;font-size:14px;font-weight:bold;box-sizing:border-box;">\n            </div>\n            <div style="color:white;padding-top:20px;">—</div>\n            <div style="flex:1;">\n              <label style="color:rgba(255,255,255,0.7);font-size:11px;display:block;margin-bottom:4px;">Máximo</label>\n              <input type="number" id="mb-t-max" value="${a}" min="10" max="60"\n                style="width:100%;padding:10px;border:none;border-radius:8px;\n                       text-align:center;font-size:14px;font-weight:bold;box-sizing:border-box;">\n            </div>\n            <div style="color:white;font-size:13px;padding-top:20px;">min</div>\n          </div>\n        </div>\n\n        \x3c!-- POSTS A ROTAR --\x3e\n        <div class="mb-sec">\n          <h3>📊 Posts a Rotar</h3>\n          ${n?`\n          <div class="mb-row">\n            <span class="mb-lbl">Cantidad (máx 50)</span>\n            <input type="number" id="mb-posts" value="${i}" min="1" max="50"\n              style="width:65px;padding:8px;border:none;border-radius:6px;\n                     text-align:center;font-size:14px;font-weight:bold;">\n          </div>\n          `:'\n          <div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center;">\n            <p style="color:rgba(255,255,255,0.7);font-size:13px;margin:0 0 4px;font-weight:bold;">\n              📦 Plan Básico — 1 post\n            </p>\n            <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">\n              Upgrade a ⭐ PRO para rotar hasta 50 posts\n            </p>\n          </div>\n          '}\n        </div>\n\n        \x3c!-- FUNCIONES PRO --\x3e\n        ${n?`\n        <div class="mb-sec">\n          <h3>⭐ Funciones PRO</h3>\n          <div style="font-size:12px;color:rgba(255,255,255,0.85);font-weight:bold;margin-bottom:8px;">\n            🔍 Anti-Shadowban\n          </div>\n          <div style="background:rgba(0,0,0,0.2);padding:8px;border-radius:6px;\n                      margin-bottom:8px;font-size:11px;color:rgba(255,255,255,0.8);">\n            Estado:\n            <span style="color:${AntiShadowban.getEstado().color};font-weight:bold;">\n              ${AntiShadowban.getEstado().icon} ${AntiShadowban.getEstado().text}\n            </span>\n            | Riesgo: ${AntiShadowban.getRiesgo()}%\n          </div>\n          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">\n            <button id="mb-sb-verify"\n              style="padding:8px;background:rgba(255,255,255,0.2);color:white;\n                     border:none;border-radius:6px;cursor:pointer;font-size:11px;">\n              🔄 Verificar\n            </button>\n            <button id="mb-sb-fix"\n              style="padding:8px;background:#10b981;color:white;\n                     border:none;border-radius:6px;cursor:pointer;font-size:11px;">\n              ✅ Corregir\n            </button>\n          </div>\n        </div>\n        `:`\n        <div style="background:linear-gradient(135deg,#f59e0b,#d97706);\n                    padding:14px;border-radius:12px;text-align:center;color:white;\n                    margin-bottom:12px;">\n          <div style="font-size:18px;margin-bottom:4px;">⭐ UPGRADE A PRO</div>\n          <div style="font-size:11px;opacity:0.9;margin-bottom:6px;">Rotar hasta 50 posts + Anti-shadowban</div>\n          <div style="font-size:10px;opacity:0.8;">WhatsApp: ${CONFIG.WHATSAPP}</div>\n        </div>\n        `}\n\n        \x3c!-- INFO LICENCIA --\x3e\n        <div style="background:#1a080d;border:1px solid #3d1a20;padding:10px;border-radius:8px;\n                    margin-bottom:12px;text-align:center;">\n          <p style="color:#9b728088;font-size:10px;margin:0;">\n            👤 ${t.cliente} | 📅 ${t.dias} días | ${n?"⭐ PRO":"📦 Básico"} | v${CONFIG.VERSION_ACTUAL}\n          </p>\n        </div>\n\n        <button id="mb-cfg-save"\n          style="width:100%;padding:14px;background:linear-gradient(135deg,#b91c3a,#6b0f1a);color:white;\n                 border:none;border-radius:10px;font-size:15px;\n                 font-weight:bold;cursor:pointer;margin-bottom:8px;box-shadow:0 3px 12px #b91c3a44;">\n          ✅ GUARDAR CAMBIOS\n        </button>\n\n        <button id="mb-cfg-reset"\n          style="width:100%;padding:10px;background:#3d1a2033;border:1px solid #3d1a20;\n                 color:#9b7280;border-radius:8px;\n                 font-size:12px;cursor:pointer;">\n          🔄 Resetear posición del panel\n        </button>\n      </div>\n    `,document.body.appendChild(r),document.getElementById("mb-cfg-close").addEventListener("click",()=>r.remove()),r.addEventListener("click",t=>{t.target===r&&r.remove()}),document.getElementById("mb-cfg-reset").addEventListener("click",()=>{const t=document.getElementById("mb-panel");t&&(DragSystem.resetPosition(t),r.remove())}),document.getElementById("mb-cfg-save").addEventListener("click",()=>{const t=parseInt(document.getElementById("mb-t-min").value),e=parseInt(document.getElementById("mb-t-max").value);if(t<10||t>60||e<10||e>60)alert("⚠️ Tiempo entre 10 y 60 min");else if(t>e)alert("⚠️ Mínimo no puede ser mayor al máximo");else{if(TiempoConfig.setRango(t,e),n){const t=parseInt(document.getElementById("mb-posts").value);if(t<1||t>50)return void alert("⚠️ Cantidad entre 1 y 50");localStorage.setItem("cantidadPosts",t.toString())}else localStorage.setItem("cantidadPosts","1");localStorage.setItem("currentPostIndex","0"),r.remove(),location.reload()}}),n&&(document.getElementById("mb-sb-verify")?.addEventListener("click",()=>{AntiShadowban.verificar(),r.remove(),location.reload()}),document.getElementById("mb-sb-fix")?.addEventListener("click",()=>{AntiShadowban.corregir(),r.remove(),location.reload()}))}},DragSystem={isDragging:!1,initialX:0,initialY:0,xOffset:0,yOffset:0,init(t,e){const n=this.getSavedPosition();n&&(t.style.left=n.x+"px",t.style.top=n.y+"px",t.style.bottom="auto"),setTimeout(()=>this.asegurarVisible(t),300),window.addEventListener("resize",()=>this.asegurarVisible(t)),e.style.cursor="move",e.addEventListener("mousedown",e=>this.dragStart(e,t)),document.addEventListener("mousemove",e=>this.drag(e,t)),document.addEventListener("mouseup",()=>this.dragEnd(t)),e.addEventListener("touchstart",e=>this.dragStart(e,t)),document.addEventListener("touchmove",e=>this.drag(e,t)),document.addEventListener("touchend",()=>this.dragEnd(t))},asegurarVisible(t){const e=t.offsetWidth||320,n=t.offsetHeight||200,o=window.innerWidth-e-10,a=window.innerHeight-n-10;let i=parseInt(t.style.left)||20,r=parseInt(t.style.top);t.style.top&&"auto"!==t.style.top&&!isNaN(r)||(r=window.innerHeight-n-20);const s=Math.max(10,Math.min(i,o)),d=Math.max(10,Math.min(r,a));s===i&&d===r||(t.style.left=s+"px",t.style.top=d+"px",t.style.bottom="auto",this.savePosition(t))},dragStart(t,e){if(t.target.closest("button")||t.target.closest("a"))return;const n="touchstart"===t.type?t.touches[0].clientX:t.clientX,o="touchstart"===t.type?t.touches[0].clientY:t.clientY;this.initialX=n-this.xOffset,this.initialY=o-this.yOffset,this.isDragging=!0,e.style.transition="none"},drag(t,e){if(!this.isDragging)return;t.preventDefault();const n="touchmove"===t.type?t.touches[0].clientX:t.clientX,o="touchmove"===t.type?t.touches[0].clientY:t.clientY;this.xOffset=n-this.initialX,this.yOffset=o-this.initialY;const a=window.innerWidth-e.offsetWidth,i=window.innerHeight-e.offsetHeight;e.style.left=Math.max(0,Math.min(this.xOffset,a))+"px",e.style.top=Math.max(0,Math.min(this.yOffset,i))+"px",e.style.bottom="auto"},dragEnd(t){this.isDragging&&this.savePosition(t),this.isDragging=!1,t.style.transition="all 0.3s"},savePosition(t){localStorage.setItem("panelPosition",JSON.stringify({x:parseInt(t.style.left),y:parseInt(t.style.top)}))},getSavedPosition(){const t=localStorage.getItem("panelPosition");return t?JSON.parse(t):null},resetPosition(t){t.style.left="20px",t.style.bottom="20px",t.style.top="auto",this.xOffset=0,this.yOffset=0,localStorage.removeItem("panelPosition"),setTimeout(()=>this.asegurarVisible(t),100)}};function crearPanel(t){if(document.getElementById("mb-panel"))return;localStorage.setItem("megabot_plan",t.plan||"basico"),"pro"!==t.plan&&localStorage.setItem("cantidadPosts","1");const e=document.createElement("div");e.id="mb-panel",e.style.cssText="\n    position:fixed;bottom:20px;left:20px;width:300px;\n    background:#160a0d;border:1px solid #3d1a20;\n    border-radius:14px;\n    box-shadow:0 8px 32px rgba(0,0,0,0.7),0 0 0 1px #8b1a2a22;\n    z-index:99999;font-family:system-ui,Arial,sans-serif;color:#f5e6e8;transition:all 0.3s;\n  ";const n="true"===localStorage.getItem("panelMinimized"),o="true"===localStorage.getItem("botPausado"),a="pro"===t.plan,i=a?'<span style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">PRO</span>':'<span style="background:#b91c3a22;color:#f5c0c8;border:1px solid #b91c3a44;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">BÁSICO</span>';e.innerHTML=`\n    <div id="mb-header"\n      style="background:linear-gradient(135deg,#8b1a2a,#6b0f1a);\n             padding:12px 14px;border-radius:13px 13px 0 0;\n             display:flex;justify-content:space-between;align-items:center;\n             user-select:none;border-bottom:1px solid #3d1a20;">\n      <div style="display:flex;align-items:center;gap:8px;">\n        <span style="color:#9b728088;font-size:13px;cursor:move;">⋮⋮</span>\n        <div>\n          <div style="display:flex;align-items:center;font-size:15px;font-weight:800;">\n            🤖 ${a?"UltraBot 2.0":"UltraBot"}${i}\n          </div>\n          <p style="margin:2px 0 0;font-size:10px;color:#f5e6e888;">\n            ${t.cliente} · ${t.dias} días\n          </p>\n        </div>\n      </div>\n      <button id="mb-btn-toggle"\n        style="background:#3d1a2055;border:1px solid #3d1a20;color:#9b7280;\n               font-size:13px;width:27px;height:27px;border-radius:7px;cursor:pointer;">\n        ${n?"▲":"▼"}\n      </button>\n    </div>\n\n    <div id="mb-body" style="padding:12px;display:${n?"none":"block"};">\n\n      <div style="background:${o?"#2a070744":"#0a2e1e44"};\n                  border:1px solid ${o?"#dc262644":"#10b98144"};\n                  padding:12px;border-radius:10px;margin-bottom:10px;text-align:center;">\n        <div style="font-size:16px;margin-bottom:4px;">${o?"⏸️":"▶️"}</div>\n        <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;margin-bottom:10px;\n                    color:${o?"#f87171":"#6ee7b7"};">\n          ${o?"BOT PAUSADO":"BOT ACTIVO"}\n        </div>\n        <button id="mb-btn-bot"\n          style="width:100%;padding:10px;\n                 background:${o?"linear-gradient(135deg,#10b981,#059669)":"linear-gradient(135deg,#b91c3a,#6b0f1a)"};\n                 color:white;border:none;border-radius:8px;\n                 cursor:pointer;font-size:13px;font-weight:700;\n                 box-shadow:${o?"0 2px 10px #10b98144":"0 2px 10px #b91c3a55"};">\n          ${o?"▶️ Reanudar":"⏸️ Pausar"}\n        </button>\n      </div>\n\n      <button id="mb-btn-cfg"\n        style="width:100%;padding:9px;background:#3d1a2033;\n               border:1px solid #3d1a20;color:#9b7280;border-radius:8px;\n               cursor:pointer;font-size:12px;font-weight:600;margin-bottom:10px;">\n        ⚙️ Configuración\n      </button>\n\n      <div style="background:#1a080d;border:1px solid #3d1a20;\n                  padding:8px 12px;border-radius:8px;margin-bottom:8px;">\n        <p id="mb-status-text" style="margin:0;font-size:12px;text-align:center;color:#9b7280;">\n          Esperando...\n        </p>\n      </div>\n\n      <div style="width:100%;height:4px;background:#3d1a20;border-radius:10px;overflow:hidden;">\n        <div id="mb-progress"\n          style="width:0%;height:100%;background:linear-gradient(90deg,#b91c3a,#f59e0b);\n                 transition:width 0.8s;border-radius:10px;">\n        </div>\n      </div>\n    </div>\n  `,document.body.appendChild(e),progress=document.getElementById("mb-progress"),DragSystem.init(e,document.getElementById("mb-header"));const r=document.getElementById("mb-body"),s=document.getElementById("mb-btn-toggle"),d=()=>{const t="none"===r.style.display;r.style.display=t?"block":"none",s.textContent=t?"▼":"▲",localStorage.setItem("panelMinimized",!t)};s.addEventListener("click",t=>{t.stopPropagation(),d()}),document.getElementById("mb-header").addEventListener("dblclick",t=>{t.target.closest("button")||d()}),document.getElementById("mb-btn-bot").addEventListener("click",()=>{"true"===localStorage.getItem("botPausado")?localStorage.removeItem("botPausado"):localStorage.setItem("botPausado","true"),location.reload()}),document.getElementById("mb-btn-cfg").addEventListener("click",()=>{ModalConfig.mostrar(t)})}async function registrarPerfilEnFirebase(t,e){const n=LicenseSystem.getStoredKey(),o=getFingerprint();if(n&&e)try{await gmFetch(`${CONFIG.VERCEL_URL}/api/license/profile`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:n,fingerprint:o,postId:t,telefono:e})})}catch(t){console.warn("[UltraBot] No se pudo registrar perfil:",t)}}function extraerTelefono(){const t=(document.body.innerText||document.body.textContent||"").match(/Phone\s*[:\s]+(\+?[\d\s\-().]{7,20})/i);return t?t[1].trim().replace(/\s+/g," "):null}function addmessage(t,e="#10b981"){if(textPrev===t)return;textPrev=t;const n=document.getElementById("mb-status-text");if(!n)return;const o=(new Date).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});n.innerHTML=`<span style="color:${e};font-weight:bold;">${t}</span>\n                <span style="font-size:10px;opacity:0.6;">${o}</span>`}function updateProgressBar(t){const e=document.getElementById("mb-progress");e&&(e.style.width=t+"%")}function detectarPosts(){const t=document.documentElement.innerHTML,e=[];[/users\/posts\/select\/([a-zA-Z0-9]+)/g,/users\/posts\/edit\/([a-zA-Z0-9]+)/g,/bump\/([a-zA-Z0-9]+)/g].forEach(n=>{let o;for(;null!==(o=n.exec(t));)e.includes(o[1])||e.push(o[1])}),e.length>0&&localStorage.setItem("postIds",JSON.stringify(e));const n=location.href.match(/posts\/select\/([a-zA-Z0-9]+)/);if(n){const t=n[1],e=extraerTelefono();if(e){localStorage.getItem("perfil_tel_"+t)!==e&&(localStorage.setItem("perfil_tel_"+t,e),registrarPerfilEnFirebase(t,e))}}return e}function getSiguientePost(){const t=localStorage.getItem("postIds");if(!t)return null;const e=JSON.parse(t),n="pro"===(localStorage.getItem("megabot_plan")||"basico")?50:1,o=parseInt(localStorage.getItem("cantidadPosts")||"1"),a=Math.min(o,n),i=parseInt(localStorage.getItem("currentPostIndex")||"0"),r=e.slice(0,a);if(!r.length)return null;const s=i%r.length;return localStorage.setItem("currentPostIndex",(s+1).toString()),addmessage(`Post ${s+1}/${r.length}`,"white"),r[s]}function iniciarBot(){if("true"===localStorage.getItem("botPausado"))return void addmessage("⏸️ Pausado","#6b7280");const t=location.href;if(t.includes("success_publish"))setTimeout(()=>{const t=getSiguientePost();t&&(location.href=`https://megapersonals.eu/users/posts/select/${t}`)},1e3);else if(t.includes("error-message"))setTimeout(()=>location.href="https://megapersonals.eu/users/posts/list",1e3);else if(t.includes("users/posts/list")||t.includes("users/posts/select")){t.includes("users/posts/list")&&detectarPosts();const e=localStorage.getItem("savedDateTime"),n=Date.now();if(!e||isNaN(parseInt(e)))return localStorage.setItem("savedDateTime",n.toString()),localStorage.setItem("currentPostIndex","0"),void republicarAhora();const o=Math.floor((n-parseInt(e))/6e4);let a=parseInt(localStorage.getItem("tiempoObjetivo"));a&&!isNaN(a)||(a=TiempoConfig.getTiempoAleatorio(),localStorage.setItem("tiempoObjetivo",a.toString())),o>=a?setTimeout(()=>{republicarAhora(),localStorage.setItem("savedDateTime",Date.now().toString()),localStorage.removeItem("tiempoObjetivo")},1e4*Math.random()+1e4):(addmessage(`⏰ ${a-o}min`,"#10b981"),updateProgressBar(Math.round((a-(a-o))/a*100)))}}function republicarAhora(){republicar&&(republicar=!1,addmessage("Republicando","#10b981"),detectarPosts(),setTimeout(()=>document.getElementById("managePublishAd")?.click(),2e3))}let _estadoAnterior=null;async function verificarCambiosRemotos(){const t=LicenseSystem.getStoredKey(),e=getFingerprint();if(t)try{const n=await gmFetch(`${CONFIG.VERCEL_URL}/api/license/validate`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({key:t,fingerprint:e,version:CONFIG.VERSION_ACTUAL})}),o=await n.json();if(!o.valid)return;const a=JSON.stringify({remotePaused:o.remotePaused,remoteTimerMin:o.remoteTimerMin,remoteTimerMax:o.remoteTimerMax});if(null===_estadoAnterior)return void(_estadoAnterior=a);a!==_estadoAnterior&&(console.log("[UltraBot] Cambio detectado desde Telegram, recargando..."),_estadoAnterior=a,o.remotePaused?localStorage.setItem("botPausado","true"):localStorage.removeItem("botPausado"),o.remoteTimerMin&&TiempoConfig.setRango(o.remoteTimerMin,o.remoteTimerMax||o.remoteTimerMin),setTimeout(()=>location.reload(),1500))}catch(t){}}location.href.includes("megapersonals.eu")&&(async()=>{if(BanDetector.esPaginaBan())return localStorage.setItem("botPausado","true"),void BanDetector.mostrarAlerta();const t=await LicenseSystem.validar();if(t.valida)sessionStorage.removeItem("mb_reloads"),setInterval(verificarCambiosRemotos,3e4),setTimeout(verificarCambiosRemotos,5e3),t.remotePaused?localStorage.setItem("botPausado","true"):t.remotePaused||"true"!==localStorage.getItem("telegramPausado")||localStorage.removeItem("botPausado"),localStorage.setItem("telegramPausado",t.remotePaused?"true":"false"),t.remoteTimerMin&&TiempoConfig.setRango(t.remoteTimerMin,t.remoteTimerMax||t.remoteTimerMin),crearPanel(t),setTimeout(iniciarBot,2e3),setInterval(iniciarBot,8e3);else{if("UPDATE_REQUIRED"===t.razon)return void mostrarPantallaActualizacion(t);if(t.networkError){const t=parseInt(sessionStorage.getItem("mb_reloads")||"0");return void(t<3?(sessionStorage.setItem("mb_reloads",(t+1).toString()),setTimeout(()=>location.reload(),4e3)):(sessionStorage.removeItem("mb_reloads"),mostrarPanelActivacion("Sin conexión al servidor.\nVerifica tu internet e ingresa tu clave.")))}mostrarPanelActivacion(t.mensaje||"Ingresa tu clave de activación")}})();
+const CONFIG = {
+  VERCEL_URL:     "https://angelrentmg.vercel.app",
+  VERSION_ACTUAL: "3.3.0",
+  WHATSAPP:       "+1 (829) 383-7695"
+};
+
+// ==================== FINGERPRINT DE PC ====================
+// ✅ Usa GM_getValue/GM_setValue de Tampermonkey
+// Esto comparte el UUID entre TODOS los perfiles del mismo navegador
+// (Chrome normal, Multilogin, perfiles separados, etc.)
+function getFingerprint() {
+  const KEY = "megabot_install_id";
+
+  // Primero intentar desde Tampermonkey (compartido entre perfiles)
+  let id = GM_getValue(KEY, null);
+
+  // Si no está en GM, buscar en localStorage como fallback
+  if (!id || id.length < 8) {
+    id = localStorage.getItem(KEY);
+  }
+
+  // Si ya existe en cualquiera de los dos, sincronizar y devolver
+  if (id && id.length >= 8) {
+    GM_setValue(KEY, id);          // asegurar que esté en GM
+    localStorage.setItem(KEY, id); // y en localStorage también
+    return id;
+  }
+
+  // Generar UUID nuevo
+  const arr = new Uint8Array(8);
+  crypto.getRandomValues(arr);
+  id = Array.from(arr).map(b => b.toString(16).padStart(2,'0')).join('').toUpperCase();
+
+  // Guardar en ambos sitios
+  GM_setValue(KEY, id);
+  localStorage.setItem(KEY, id);
+  return id;
+}
+
+
+// ==================== GM FETCH (bypasea proxy) ====================
+function gmFetch(url, options = {}) {
+  return new Promise((resolve, reject) => {
+    GM_xmlhttpRequest({
+      method:  options.method || "GET",
+      url:     url,
+      headers: options.headers || {},
+      data:    options.body || null,
+      onload:  (response) => {
+        resolve({
+          ok:   response.status >= 200 && response.status < 300,
+          json: () => Promise.resolve(JSON.parse(response.responseText)),
+          text: () => Promise.resolve(response.responseText),
+        });
+      },
+      onerror: (err) => reject(new Error("GM_xmlhttpRequest error: " + err.error)),
+      ontimeout: () => reject(new Error("GM_xmlhttpRequest timeout")),
+    });
+  });
+}
+
+// ==================== SISTEMA DE LICENCIAS ====================
+const LicenseSystem = {
+  getStoredKey()   { return localStorage.getItem("megabot_license_key"); },
+  storeKey(key)    { localStorage.setItem("megabot_license_key", key); },
+  clearKey(reason) {
+    console.warn("[MegaBot] Licencia borrada:", reason);
+    localStorage.removeItem("megabot_license_key");
+    if (reason === "EXPIRED" || reason === "DEACTIVATED") {
+      localStorage.removeItem("megabot_install_id");
+    }
+  },
+
+  _cache: null,
+  _cacheTime: 0,
+  CACHE_MS: 5 * 60 * 1000,
+
+  async validar() {
+    const key         = this.getStoredKey();
+    const fingerprint = getFingerprint();
+
+    if (!key) return { valida: false, razon: "NO_KEY" };
+
+    if (this._cache && (Date.now() - this._cacheTime) < this.CACHE_MS) {
+      return this._cache;
+    }
+
+    try {
+      const res = await gmFetch(`${CONFIG.VERCEL_URL}/api/license/validate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ key, fingerprint, version: CONFIG.VERSION_ACTUAL })
+      });
+
+      const data = await res.json();
+
+      if (data.valid) {
+        localStorage.removeItem("megabot_net_errors");
+        const result = { valida: true, ...data };
+        this._cache     = result;
+        this._cacheTime = Date.now();
+        return result;
+      }
+
+      switch (data.reason) {
+        case "UPDATE_REQUIRED":
+          return { valida: false, razon: "UPDATE_REQUIRED", ...data };
+        case "WRONG_PC":
+          this.clearKey("WRONG_PC");
+          return { valida: false, razon: "WRONG_PC",
+            mensaje: "Esta clave ya está activada en otra PC.\nContacta al vendedor." };
+        case "DEACTIVATED":
+          this.clearKey("DEACTIVATED");
+          return { valida: false, razon: "DEACTIVATED",
+            mensaje: "Licencia desactivada.\nContacta al vendedor." };
+        case "EXPIRED":
+          this.clearKey("EXPIRED");
+          return { valida: false, razon: "EXPIRED",
+            mensaje: "Licencia expirada.\nContacta al vendedor para renovar." };
+        case "INVALID_KEY":
+          const fallos = parseInt(localStorage.getItem("megabot_key_fails") || "0");
+          if (fallos >= 3) {
+            this.clearKey("INVALID_KEY");
+            localStorage.removeItem("megabot_key_fails");
+            return { valida: false, razon: "INVALID_KEY",
+              mensaje: "Clave no válida.\nVerifica o contacta al vendedor." };
+          }
+          localStorage.setItem("megabot_key_fails", (fallos + 1).toString());
+          return { valida: false, razon: "RETRYING", networkError: true };
+        default:
+          return { valida: false, razon: "SERVER_ERROR", networkError: true };
+      }
+
+    } catch (err) {
+      const errors = parseInt(localStorage.getItem("megabot_net_errors") || "0");
+      localStorage.setItem("megabot_net_errors", (errors + 1).toString());
+      return { valida: false, razon: "NETWORK_ERROR", networkError: true };
+    }
+  },
+
+  async activar(key) {
+    const fingerprint = getFingerprint();
+    try {
+      const res = await gmFetch(`${CONFIG.VERCEL_URL}/api/license/activate`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ key, fingerprint })
+      });
+      const data = await res.json();
+      if (data.success) {
+        this.storeKey(key);
+        localStorage.removeItem("megabot_key_fails");
+        localStorage.removeItem("megabot_net_errors");
+      }
+      return data;
+    } catch (err) {
+      return { success: false, message: "❌ Error de conexión. Intenta de nuevo." };
+    }
+  }
+};
+
+// ==================== PANTALLA: ACTUALIZACIÓN REQUERIDA ====================
+function mostrarPantallaActualizacion(data) {
+  const overlay = document.createElement("div");
+  overlay.style.cssText = `
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.96);z-index:9999999;
+    display:flex;justify-content:center;align-items:center;
+    font-family:Arial,sans-serif;
+  `;
+  overlay.innerHTML = `
+    <div style="background:linear-gradient(135deg,#1e40af,#1d4ed8);
+                padding:40px;border-radius:20px;max-width:480px;
+                width:90%;text-align:center;">
+      <div id="mb-upd-icon" style="font-size:60px;margin-bottom:16px;">🔄</div>
+      <h1 style="color:white;font-size:26px;margin:0 0 12px;">Actualización Requerida</h1>
+      <p style="color:rgba(255,255,255,0.85);font-size:14px;margin-bottom:24px;line-height:1.6;">
+        Hay una nueva versión disponible (<strong>v${data.currentVersion}</strong>).<br>
+        El bot no funcionará hasta que instales la actualización.
+      </p>
+
+      <!-- Barra de progreso (oculta al inicio) -->
+      <div id="mb-progress-container" style="display:none;margin-bottom:20px;text-align:left;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span id="mb-progress-label"
+            style="color:rgba(255,255,255,0.85);font-size:13px;font-weight:bold;">
+            Descargando actualización...
+          </span>
+          <span id="mb-progress-pct"
+            style="color:#10b981;font-size:14px;font-weight:bold;">0%</span>
+        </div>
+        <!-- Barra exterior -->
+        <div style="width:100%;height:12px;background:rgba(255,255,255,0.15);
+                    border-radius:10px;overflow:hidden;">
+          <div id="mb-progress-bar"
+            style="width:0%;height:100%;
+                   background:linear-gradient(90deg,#10b981,#34d399);
+                   border-radius:10px;transition:width 0.25s ease;">
+          </div>
+        </div>
+        <!-- Mensaje de estado -->
+        <p id="mb-progress-status"
+          style="color:rgba(255,255,255,0.5);font-size:11px;margin:8px 0 0;">
+          Iniciando...
+        </p>
+      </div>
+
+      <!-- Botón instalar -->
+      <a id="mb-update-btn" href="${data.updateUrl}" target="_blank"
+         style="display:block;padding:16px;background:#10b981;color:white;
+                border-radius:10px;text-decoration:none;font-size:16px;
+                font-weight:bold;margin-bottom:12px;cursor:pointer;transition:opacity 0.3s;">
+        ⬇️ INSTALAR ACTUALIZACIÓN v${data.currentVersion}
+      </a>
+
+      <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">
+        Tu versión actual: v${CONFIG.VERSION_ACTUAL}
+      </p>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("mb-update-btn").addEventListener("click", () => {
+    // Ocultar botón y mostrar barra
+    document.getElementById("mb-update-btn").style.display  = "none";
+    document.getElementById("mb-progress-container").style.display = "block";
+    document.getElementById("mb-upd-icon").textContent = "⏳";
+
+    const bar    = document.getElementById("mb-progress-bar");
+    const pct    = document.getElementById("mb-progress-pct");
+    const label  = document.getElementById("mb-progress-label");
+    const status = document.getElementById("mb-progress-status");
+
+    let progreso = 0;
+
+    // Fases realistas con velocidad y mensajes distintos
+    const fases = [
+      { hasta: 12,  vel: 80,  msg: "Conectando con el servidor..." },
+      { hasta: 30,  vel: 55,  msg: "Descargando MegaBot v" + data.currentVersion + "..." },
+      { hasta: 55,  vel: 45,  msg: "Verificando archivos..." },
+      { hasta: 75,  vel: 60,  msg: "Instalando actualización..." },
+      { hasta: 90,  vel: 85,  msg: "Aplicando cambios..." },
+      { hasta: 100, vel: 180, msg: "¡Instalación completada!" },
+    ];
+
+    let faseIdx = 0;
+
+    const tick = setInterval(() => {
+      const fase = fases[faseIdx];
+      // Incremento aleatorio → se ve natural
+      const inc = Math.random() * 2.2 + 0.4;
+      progreso = Math.min(progreso + inc, fase.hasta);
+
+      bar.style.width   = progreso + "%";
+      pct.textContent   = Math.floor(progreso) + "%";
+      status.textContent = fase.msg;
+
+      // Cambiar a siguiente fase
+      if (progreso >= fase.hasta && faseIdx < fases.length - 1) {
+        faseIdx++;
+        clearInterval(tick);
+        // Pequeña pausa entre fases (más realista)
+        setTimeout(iniciarFase, Math.random() * 300 + 100);
+      }
+
+      // Llegó al 100%
+      if (progreso >= 100) {
+        clearInterval(tick);
+        finalizarDescarga();
+      }
+    }, fases[faseIdx].vel);
+
+    function iniciarFase() {
+      const fase = fases[faseIdx];
+      const nuevoTick = setInterval(() => {
+        const inc = Math.random() * 2.2 + 0.4;
+        progreso = Math.min(progreso + inc, fase.hasta);
+
+        bar.style.width    = progreso + "%";
+        pct.textContent    = Math.floor(progreso) + "%";
+        status.textContent = fase.msg;
+
+        if (progreso >= fase.hasta && faseIdx < fases.length - 1) {
+          faseIdx++;
+          clearInterval(nuevoTick);
+          setTimeout(iniciarFase, Math.random() * 300 + 100);
+        }
+
+        if (progreso >= 100) {
+          clearInterval(nuevoTick);
+          finalizarDescarga();
+        }
+      }, fase.vel);
+    }
+
+    function finalizarDescarga() {
+      bar.style.background  = "linear-gradient(90deg,#10b981,#6ee7b7)";
+      bar.style.width       = "100%";
+      pct.textContent       = "100%";
+      pct.style.color       = "#6ee7b7";
+      label.textContent     = "✅ ¡Actualización instalada!";
+      label.style.color     = "#10b981";
+      document.getElementById("mb-upd-icon").textContent = "✅";
+
+      // Cuenta regresiva
+      let cuenta = 3;
+      status.style.color    = "#fbbf24";
+      status.textContent    = `Recargando en ${cuenta} segundos...`;
+
+      const cuentaAtras = setInterval(() => {
+        cuenta--;
+        if (cuenta > 0) {
+          status.textContent = `Recargando en ${cuenta} segundo${cuenta !== 1 ? 's' : ''}...`;
+        } else {
+          clearInterval(cuentaAtras);
+          status.textContent = "¡Recargando ahora!";
+          location.reload();
+        }
+      }, 1000);
+    }
+  });
+}
+
+// ==================== PANTALLA: ACTIVAR LICENCIA ====================
+function mostrarPanelActivacion(mensaje = "Ingresa tu clave de activación") {
+  const existing = document.getElementById("megabot-license-panel");
+  if (existing) existing.remove();
+
+  const fingerprint = getFingerprint();
+  const panel = document.createElement("div");
+  panel.id = "megabot-license-panel";
+  panel.style.cssText = `
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    background:rgba(0,0,0,0.95);z-index:999999;
+    display:flex;justify-content:center;align-items:center;
+    font-family:Arial,sans-serif;
+  `;
+  panel.innerHTML = `
+    <div style="background:#160a0d;border:1px solid #3d1a20;
+                padding:40px;border-radius:20px;max-width:480px;
+                width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+      <div style="text-align:center;margin-bottom:28px;">
+        <h1 style="color:white;font-size:30px;margin:0 0 8px;">🚀 UltraBot PRO</h1>
+        <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:0;">
+          Sistema de Republicación Automática
+        </p>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.1);padding:20px;border-radius:14px;margin-bottom:16px;">
+        <h3 style="color:white;margin:0 0 12px;font-size:16px;">🔑 Activar Licencia</h3>
+        <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:0 0 14px;line-height:1.5;">
+          ${mensaje}
+        </p>
+        <input type="text" id="mb-key-input" placeholder="Ej: MEGA-ANDY-001"
+          style="width:100%;padding:14px;border:none;border-radius:8px;
+                 font-size:15px;text-align:center;text-transform:uppercase;
+                 box-sizing:border-box;margin-bottom:12px;">
+        <button id="mb-btn-activar"
+          style="width:100%;padding:14px;background:#10b981;color:white;
+                 border:none;border-radius:8px;font-size:15px;
+                 font-weight:bold;cursor:pointer;">
+          🔓 ACTIVAR
+        </button>
+        <div id="mb-status"
+          style="margin-top:10px;padding:10px;border-radius:8px;
+                 display:none;text-align:center;">
+          <p id="mb-status-msg"
+            style="color:white;font-size:13px;margin:0;white-space:pre-line;"></p>
+        </div>
+      </div>
+
+      <div style="background:rgba(255,255,255,0.1);padding:14px;border-radius:10px;margin-bottom:12px;">
+        <p style="color:rgba(255,255,255,0.85);font-size:12px;margin:0 0 6px;">
+          <strong>🛒 ¿No tienes clave?</strong> Contacta al vendedor
+        </p>
+        <p style="color:rgba(255,255,255,0.55);font-size:11px;margin:0;">
+          📞 WhatsApp: ${CONFIG.WHATSAPP}
+        </p>
+      </div>
+
+      <div style="background:rgba(0,0,0,0.2);padding:8px;border-radius:8px;text-align:center;">
+        <p style="color:rgba(255,255,255,0.4);font-size:10px;margin:0;">
+          🖥️ ID de esta PC: <strong>${fingerprint}</strong>
+        </p>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+
+  const btn    = document.getElementById("mb-btn-activar");
+  const input  = document.getElementById("mb-key-input");
+  const status = document.getElementById("mb-status");
+  const msg    = document.getElementById("mb-status-msg");
+
+  const showStatus = (texto, color) => {
+    status.style.display = "block";
+    status.style.background = color;
+    msg.textContent = texto;
+  };
+
+  btn.addEventListener("click", async () => {
+    const key = input.value.trim().toUpperCase();
+    if (!key) { showStatus("⚠️ Ingresa una clave", "rgba(239,68,68,0.3)"); return; }
+
+    btn.disabled = true;
+    btn.textContent = "⏳ Verificando...";
+    showStatus("Conectando con el servidor...", "rgba(59,130,246,0.3)");
+
+    const result = await LicenseSystem.activar(key);
+
+    btn.disabled = false;
+    btn.textContent = "🔓 ACTIVAR";
+
+    if (result.success) {
+      showStatus(result.message, "rgba(16,185,129,0.3)");
+      setTimeout(() => location.reload(), 2000);
+    } else {
+      showStatus(result.message, "rgba(239,68,68,0.3)");
+    }
+  });
+
+  input.addEventListener("keypress", e => {
+    if (e.key === "Enter") btn.click();
+  });
+}
+
+// ==================== VARIABLES GLOBALES ====================
+let republicar = true;
+let textPrev   = "";
+let progress;
+
+// ==================== ANTI-SHADOWBAN ====================
+const AntiShadowban = {
+  getRiesgo() {
+    let r = parseInt(localStorage.getItem("shadowbanRiesgo") || "0");
+    if (!r) { r = Math.floor(Math.random()*20)+5; localStorage.setItem("shadowbanRiesgo", r.toString()); }
+    return r;
+  },
+  getEstado() {
+    const r = this.getRiesgo();
+    if (r<30) return {text:"LIMPIA",       color:"#10b981", icon:"✅"};
+    if (r<60) return {text:"RIESGO MEDIO", color:"#f59e0b", icon:"⚠️"};
+    return          {text:"RIESGO ALTO",  color:"#ef4444", icon:"🚨"};
+  },
+  verificar() { localStorage.setItem("shadowbanRiesgo",(Math.floor(Math.random()*20)+8).toString()); },
+  corregir()  { localStorage.setItem("shadowbanRiesgo",(Math.floor(Math.random()*10)+8).toString()); }
+};
+
+// ==================== CONFIGURACIÓN DE TIEMPO ====================
+const TiempoConfig = {
+  getMin() { return parseInt(localStorage.getItem("tiempoMin")||"15"); },
+  getMax() { return parseInt(localStorage.getItem("tiempoMax")||"15"); },
+  setRango(min,max) {
+    localStorage.setItem("tiempoMin",min.toString());
+    localStorage.setItem("tiempoMax",max.toString());
+  },
+  getTiempoAleatorio() {
+    const min=this.getMin(), max=this.getMax();
+    return Math.floor(Math.random()*(max-min+1))+min;
+  }
+};
+
+// ==================== DETECTOR DE BAN ====================
+const BanDetector = {
+  esPaginaBan() {
+    const url = location.href.toLowerCase();
+    return url.includes('ban_message')||url.includes('fraud')||
+           url.includes('blocked')||url.includes('suspended');
+  },
+  mostrarAlerta() {
+    const overlay = document.createElement("div");
+    overlay.style.cssText = `
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.95);z-index:9999999;
+      display:flex;justify-content:center;align-items:center;
+      font-family:Arial,sans-serif;
+    `;
+    overlay.innerHTML = `
+      <div style="background:linear-gradient(135deg,#f59e0b,#d97706);
+                  padding:40px;border-radius:20px;max-width:480px;
+                  width:90%;text-align:center;">
+        <div style="font-size:60px;margin-bottom:16px;">⚠️</div>
+        <h1 style="color:white;font-size:26px;margin:0 0 12px;">Bloqueo Detectado</h1>
+        <p style="color:rgba(255,255,255,0.9);font-size:14px;margin-bottom:20px;">
+          El bot ha sido pausado automáticamente.
+        </p>
+        <div style="background:rgba(0,0,0,0.3);padding:14px;border-radius:10px;margin-bottom:20px;">
+          <p style="color:white;font-size:12px;margin:0;line-height:1.8;">
+            • Espera al menos 30 minutos<br>
+            • Usa una VPN o cambia tu IP<br>
+            • Reduce la frecuencia de republicación
+          </p>
+        </div>
+        <button id="mb-btn-continuar"
+          style="width:100%;padding:14px;background:#10b981;color:white;
+                 border:none;border-radius:10px;font-size:15px;
+                 font-weight:bold;cursor:pointer;margin-bottom:10px;">
+          ▶️ CONTINUAR
+        </button>
+        <button id="mb-btn-pausar"
+          style="width:100%;padding:12px;background:rgba(255,255,255,0.2);
+                 color:white;border:none;border-radius:10px;
+                 font-size:13px;cursor:pointer;">
+          ⏸️ Mantener pausado
+        </button>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById("mb-btn-continuar").addEventListener("click",()=>{
+      localStorage.removeItem("botPausado");
+      overlay.remove();
+      location.href="https://megapersonals.eu/users/posts/list";
+    });
+    document.getElementById("mb-btn-pausar").addEventListener("click",()=>overlay.remove());
+  }
+};
+
+// ==================== MODAL DE CONFIGURACIÓN ====================
+const ModalConfig = {
+  mostrar(licenseInfo) {
+    const existing = document.getElementById("mb-config-modal");
+    if (existing) existing.remove();
+
+    const esPro     = licenseInfo.plan === 'pro';
+    const tiempoMin = TiempoConfig.getMin();
+    const tiempoMax = TiempoConfig.getMax();
+    // ✅ Básico = 1 post máximo, PRO = hasta 50
+    const maxPosts  = esPro ? 50 : 1;
+    const cantidad  = esPro
+      ? (localStorage.getItem("cantidadPosts") || "1")
+      : "1";
+
+    const modal = document.createElement("div");
+    modal.id = "mb-config-modal";
+    modal.style.cssText = `
+      position:fixed;top:0;left:0;width:100%;height:100%;
+      background:rgba(0,0,0,0.85);z-index:999998;
+      display:flex;justify-content:center;align-items:center;
+      font-family:Arial,sans-serif;
+    `;
+    modal.innerHTML = `
+      <style>
+        .mb-toggle{position:relative;display:inline-block;width:50px;height:26px;}
+        .mb-toggle input{opacity:0;width:0;height:0;}
+        .mb-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;
+                   background:#94a3b8;transition:.3s;border-radius:26px;}
+        .mb-slider:before{position:absolute;content:"";height:20px;width:20px;
+                          left:3px;bottom:3px;background:white;transition:.3s;border-radius:50%;}
+        input:checked+.mb-slider{background:#10b981;}
+        input:checked+.mb-slider:before{transform:translateX(24px);}
+        .mb-sec{background:#1a080d;border:1px solid #3d1a20;padding:15px;border-radius:12px;margin-bottom:12px;}
+        .mb-sec h3{color:#f5e6e8;font-size:14px;margin:0 0 12px;}
+        .mb-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;}
+        .mb-row:last-child{margin-bottom:0;}
+        .mb-lbl{color:#f5e6e8cc;font-size:13px;}
+      </style>
+
+      <div style="background:#160a0d;border:1px solid #3d1a20;
+                  padding:25px;border-radius:20px;max-width:440px;
+                  width:90%;max-height:85vh;overflow-y:auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <h2 style="color:#f5e6e8;font-size:20px;margin:0;">⚙️ Configuración</h2>
+          <button id="mb-cfg-close"
+            style="background:#3d1a2044;border:1px solid #3d1a20;color:#9b7280;
+                   font-size:22px;width:34px;height:34px;border-radius:8px;cursor:pointer;">×</button>
+        </div>
+
+        <!-- TIEMPO -->
+        <div class="mb-sec">
+          <h3>⏱️ Tiempo de Republicación</h3>
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+            <div style="flex:1;">
+              <label style="color:rgba(255,255,255,0.7);font-size:11px;display:block;margin-bottom:4px;">Mínimo</label>
+              <input type="number" id="mb-t-min" value="${tiempoMin}" min="10" max="60"
+                style="width:100%;padding:10px;border:none;border-radius:8px;
+                       text-align:center;font-size:14px;font-weight:bold;box-sizing:border-box;">
+            </div>
+            <div style="color:white;padding-top:20px;">—</div>
+            <div style="flex:1;">
+              <label style="color:rgba(255,255,255,0.7);font-size:11px;display:block;margin-bottom:4px;">Máximo</label>
+              <input type="number" id="mb-t-max" value="${tiempoMax}" min="10" max="60"
+                style="width:100%;padding:10px;border:none;border-radius:8px;
+                       text-align:center;font-size:14px;font-weight:bold;box-sizing:border-box;">
+            </div>
+            <div style="color:white;font-size:13px;padding-top:20px;">min</div>
+          </div>
+        </div>
+
+        <!-- POSTS A ROTAR -->
+        <div class="mb-sec">
+          <h3>📊 Posts a Rotar</h3>
+          ${esPro ? `
+          <div class="mb-row">
+            <span class="mb-lbl">Cantidad (máx 50)</span>
+            <input type="number" id="mb-posts" value="${cantidad}" min="1" max="50"
+              style="width:65px;padding:8px;border:none;border-radius:6px;
+                     text-align:center;font-size:14px;font-weight:bold;">
+          </div>
+          ` : `
+          <div style="background:rgba(0,0,0,0.2);padding:12px;border-radius:8px;text-align:center;">
+            <p style="color:rgba(255,255,255,0.7);font-size:13px;margin:0 0 4px;font-weight:bold;">
+              📦 Plan Básico — 1 post
+            </p>
+            <p style="color:rgba(255,255,255,0.4);font-size:11px;margin:0;">
+              Upgrade a ⭐ PRO para rotar hasta 50 posts
+            </p>
+          </div>
+          `}
+        </div>
+
+        <!-- FUNCIONES PRO -->
+        ${esPro ? `
+        <div class="mb-sec">
+          <h3>⭐ Funciones PRO</h3>
+          <div style="font-size:12px;color:rgba(255,255,255,0.85);font-weight:bold;margin-bottom:8px;">
+            🔍 Anti-Shadowban
+          </div>
+          <div style="background:rgba(0,0,0,0.2);padding:8px;border-radius:6px;
+                      margin-bottom:8px;font-size:11px;color:rgba(255,255,255,0.8);">
+            Estado:
+            <span style="color:${AntiShadowban.getEstado().color};font-weight:bold;">
+              ${AntiShadowban.getEstado().icon} ${AntiShadowban.getEstado().text}
+            </span>
+            | Riesgo: ${AntiShadowban.getRiesgo()}%
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <button id="mb-sb-verify"
+              style="padding:8px;background:rgba(255,255,255,0.2);color:white;
+                     border:none;border-radius:6px;cursor:pointer;font-size:11px;">
+              🔄 Verificar
+            </button>
+            <button id="mb-sb-fix"
+              style="padding:8px;background:#10b981;color:white;
+                     border:none;border-radius:6px;cursor:pointer;font-size:11px;">
+              ✅ Corregir
+            </button>
+          </div>
+        </div>
+        ` : `
+        <div style="background:linear-gradient(135deg,#f59e0b,#d97706);
+                    padding:14px;border-radius:12px;text-align:center;color:white;
+                    margin-bottom:12px;">
+          <div style="font-size:18px;margin-bottom:4px;">⭐ UPGRADE A PRO</div>
+          <div style="font-size:11px;opacity:0.9;margin-bottom:6px;">Rotar hasta 50 posts + Anti-shadowban</div>
+          <div style="font-size:10px;opacity:0.8;">WhatsApp: ${CONFIG.WHATSAPP}</div>
+        </div>
+        `}
+
+        <!-- INFO LICENCIA -->
+        <div style="background:#1a080d;border:1px solid #3d1a20;padding:10px;border-radius:8px;
+                    margin-bottom:12px;text-align:center;">
+          <p style="color:#9b728088;font-size:10px;margin:0;">
+            👤 ${licenseInfo.cliente} | 📅 ${licenseInfo.dias} días | ${esPro ? '⭐ PRO' : '📦 Básico'} | v${CONFIG.VERSION_ACTUAL}
+          </p>
+        </div>
+
+        <button id="mb-cfg-save"
+          style="width:100%;padding:14px;background:linear-gradient(135deg,#b91c3a,#6b0f1a);color:white;
+                 border:none;border-radius:10px;font-size:15px;
+                 font-weight:bold;cursor:pointer;margin-bottom:8px;box-shadow:0 3px 12px #b91c3a44;">
+          ✅ GUARDAR CAMBIOS
+        </button>
+
+        <button id="mb-cfg-reset"
+          style="width:100%;padding:10px;background:#3d1a2033;border:1px solid #3d1a20;
+                 color:#9b7280;border-radius:8px;
+                 font-size:12px;cursor:pointer;">
+          🔄 Resetear posición del panel
+        </button>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    document.getElementById("mb-cfg-close").addEventListener("click",()=>modal.remove());
+    modal.addEventListener("click",e=>{ if(e.target===modal) modal.remove(); });
+
+    document.getElementById("mb-cfg-reset").addEventListener("click",()=>{
+      const p = document.getElementById("mb-panel");
+      if(p){ DragSystem.resetPosition(p); modal.remove(); }
+    });
+
+    document.getElementById("mb-cfg-save").addEventListener("click",()=>{
+      const tMin = parseInt(document.getElementById("mb-t-min").value);
+      const tMax = parseInt(document.getElementById("mb-t-max").value);
+
+      if(tMin<10||tMin>60||tMax<10||tMax>60){ alert("⚠️ Tiempo entre 10 y 60 min"); return; }
+      if(tMin>tMax){ alert("⚠️ Mínimo no puede ser mayor al máximo"); return; }
+
+      TiempoConfig.setRango(tMin,tMax);
+
+      // ✅ Solo guardar cantidad si es PRO
+      if(esPro){
+        const qty = parseInt(document.getElementById("mb-posts").value);
+        if(qty<1||qty>50){ alert("⚠️ Cantidad entre 1 y 50"); return; }
+        localStorage.setItem("cantidadPosts", qty.toString());
+      } else {
+        // Básico siempre 1
+        localStorage.setItem("cantidadPosts", "1");
+      }
+
+      localStorage.setItem("currentPostIndex","0");
+      modal.remove();
+      location.reload();
+    });
+
+    if(esPro){
+      document.getElementById("mb-sb-verify")?.addEventListener("click",()=>{
+        AntiShadowban.verificar(); modal.remove(); location.reload();
+      });
+      document.getElementById("mb-sb-fix")?.addEventListener("click",()=>{
+        AntiShadowban.corregir(); modal.remove(); location.reload();
+      });
+    }
+  }
+};
+
+// ==================== SISTEMA DE ARRASTRE ====================
+const DragSystem = {
+  isDragging:false, initialX:0, initialY:0, xOffset:0, yOffset:0,
+
+  init(panel, handle) {
+    const saved = this.getSavedPosition();
+    if(saved){
+      panel.style.left   = saved.x+'px';
+      panel.style.top    = saved.y+'px';
+      panel.style.bottom = 'auto';
+    }
+
+    // ✅ Verificar que el panel esté visible después de renderizar
+    setTimeout(() => this.asegurarVisible(panel), 300);
+
+    // ✅ Si cambia el tamaño de ventana o el zoom, recolocar si quedó fuera
+    window.addEventListener('resize', () => this.asegurarVisible(panel));
+
+    handle.style.cursor='move';
+    handle.addEventListener('mousedown', e=>this.dragStart(e,panel));
+    document.addEventListener('mousemove', e=>this.drag(e,panel));
+    document.addEventListener('mouseup',  ()=>this.dragEnd(panel));
+    handle.addEventListener('touchstart', e=>this.dragStart(e,panel));
+    document.addEventListener('touchmove', e=>this.drag(e,panel));
+    document.addEventListener('touchend',  ()=>this.dragEnd(panel));
+  },
+
+  // ✅ NUEVO: verifica que el panel esté dentro de la pantalla visible
+  asegurarVisible(panel) {
+    const w = panel.offsetWidth  || 320;
+    const h = panel.offsetHeight || 200;
+    const maxX = window.innerWidth  - w - 10;
+    const maxY = window.innerHeight - h - 10;
+
+    let x = parseInt(panel.style.left) || 20;
+    let y = parseInt(panel.style.top);
+
+    // Si no tiene top definido (usa bottom), calcular desde abajo
+    if (!panel.style.top || panel.style.top === 'auto' || isNaN(y)) {
+      y = window.innerHeight - h - 20;
+    }
+
+    // Corregir si está fuera de límites
+    const newX = Math.max(10, Math.min(x, maxX));
+    const newY = Math.max(10, Math.min(y, maxY));
+
+    if (newX !== x || newY !== y) {
+      panel.style.left   = newX + 'px';
+      panel.style.top    = newY + 'px';
+      panel.style.bottom = 'auto';
+      this.savePosition(panel);
+    }
+  },
+
+  dragStart(e,panel) {
+    if(e.target.closest('button')||e.target.closest('a')) return;
+    const cx = e.type==='touchstart'?e.touches[0].clientX:e.clientX;
+    const cy = e.type==='touchstart'?e.touches[0].clientY:e.clientY;
+    this.initialX=cx-this.xOffset; this.initialY=cy-this.yOffset;
+    this.isDragging=true; panel.style.transition='none';
+  },
+
+  drag(e,panel) {
+    if(!this.isDragging) return;
+    e.preventDefault();
+    const cx = e.type==='touchmove'?e.touches[0].clientX:e.clientX;
+    const cy = e.type==='touchmove'?e.touches[0].clientY:e.clientY;
+    this.xOffset=cx-this.initialX; this.yOffset=cy-this.initialY;
+    const maxX=window.innerWidth-panel.offsetWidth;
+    const maxY=window.innerHeight-panel.offsetHeight;
+    panel.style.left=Math.max(0,Math.min(this.xOffset,maxX))+'px';
+    panel.style.top =Math.max(0,Math.min(this.yOffset,maxY))+'px';
+    panel.style.bottom='auto';
+  },
+
+  dragEnd(panel) {
+    if(this.isDragging) this.savePosition(panel);
+    this.isDragging=false; panel.style.transition='all 0.3s';
+  },
+
+  savePosition(panel) {
+    localStorage.setItem('panelPosition',JSON.stringify({
+      x:parseInt(panel.style.left), y:parseInt(panel.style.top)
+    }));
+  },
+
+  getSavedPosition() {
+    const s=localStorage.getItem('panelPosition');
+    return s?JSON.parse(s):null;
+  },
+
+  resetPosition(panel) {
+    panel.style.left='20px'; panel.style.bottom='20px';
+    panel.style.top='auto'; this.xOffset=0; this.yOffset=0;
+    localStorage.removeItem('panelPosition');
+    setTimeout(() => this.asegurarVisible(panel), 100);
+  }
+};
+
+// ==================== PANEL PRINCIPAL ====================
+function crearPanel(licenseInfo) {
+  if(document.getElementById("mb-panel")) return;
+
+  // ✅ Guardar plan en localStorage para usarlo en el bot
+  localStorage.setItem("megabot_plan", licenseInfo.plan || "basico");
+
+  // ✅ Forzar cantidad a 1 si es básico
+  if(licenseInfo.plan !== 'pro') {
+    localStorage.setItem("cantidadPosts", "1");
+  }
+
+  const panel = document.createElement("div");
+  panel.id = "mb-panel";
+  panel.style.cssText = `
+    position:fixed;bottom:20px;left:20px;width:300px;
+    background:#160a0d;border:1px solid #3d1a20;
+    border-radius:14px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.7),0 0 0 1px #8b1a2a22;
+    z-index:99999;font-family:system-ui,Arial,sans-serif;color:#f5e6e8;transition:all 0.3s;
+  `;
+
+  const isMin  = localStorage.getItem("panelMinimized")==="true";
+  const paused = localStorage.getItem("botPausado")==="true";
+  const esPro  = licenseInfo.plan==='pro';
+  const badge  = esPro
+    ? '<span style="background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">PRO</span>'
+    : '<span style="background:#b91c3a22;color:#f5c0c8;border:1px solid #b91c3a44;font-size:9px;padding:2px 7px;border-radius:4px;margin-left:6px;font-weight:700;">BÁSICO</span>';
+
+  panel.innerHTML = `
+    <div id="mb-header"
+      style="background:linear-gradient(135deg,#8b1a2a,#6b0f1a);
+             padding:12px 14px;border-radius:13px 13px 0 0;
+             display:flex;justify-content:space-between;align-items:center;
+             user-select:none;border-bottom:1px solid #3d1a20;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="color:#9b728088;font-size:13px;cursor:move;">⋮⋮</span>
+        <div>
+          <div style="display:flex;align-items:center;font-size:15px;font-weight:800;">
+            🤖 ${esPro ? "UltraBot 2.0" : "UltraBot"}${badge}
+          </div>
+          <p style="margin:2px 0 0;font-size:10px;color:#f5e6e888;">
+            ${licenseInfo.cliente} · ${licenseInfo.dias} días
+          </p>
+        </div>
+      </div>
+      <button id="mb-btn-toggle"
+        style="background:#3d1a2055;border:1px solid #3d1a20;color:#9b7280;
+               font-size:13px;width:27px;height:27px;border-radius:7px;cursor:pointer;">
+        ${isMin?'▲':'▼'}
+      </button>
+    </div>
+
+    <div id="mb-body" style="padding:12px;display:${isMin?'none':'block'};">
+
+      <div style="background:${paused?'#2a070744':'#0a2e1e44'};
+                  border:1px solid ${paused?'#dc262644':'#10b98144'};
+                  padding:12px;border-radius:10px;margin-bottom:10px;text-align:center;">
+        <div style="font-size:16px;margin-bottom:4px;">${paused?'⏸️':'▶️'}</div>
+        <div style="font-size:13px;font-weight:800;letter-spacing:0.5px;margin-bottom:10px;
+                    color:${paused?'#f87171':'#6ee7b7'};">
+          ${paused?'BOT PAUSADO':'BOT ACTIVO'}
+        </div>
+        <button id="mb-btn-bot"
+          style="width:100%;padding:10px;
+                 background:${paused?'linear-gradient(135deg,#10b981,#059669)':'linear-gradient(135deg,#b91c3a,#6b0f1a)'};
+                 color:white;border:none;border-radius:8px;
+                 cursor:pointer;font-size:13px;font-weight:700;
+                 box-shadow:${paused?'0 2px 10px #10b98144':'0 2px 10px #b91c3a55'};">
+          ${paused?'▶️ Reanudar':'⏸️ Pausar'}
+        </button>
+      </div>
+
+      <button id="mb-btn-cfg"
+        style="width:100%;padding:9px;background:#3d1a2033;
+               border:1px solid #3d1a20;color:#9b7280;border-radius:8px;
+               cursor:pointer;font-size:12px;font-weight:600;margin-bottom:10px;">
+        ⚙️ Configuración
+      </button>
+
+      <div style="background:#1a080d;border:1px solid #3d1a20;
+                  padding:8px 12px;border-radius:8px;margin-bottom:8px;">
+        <p id="mb-status-text" style="margin:0;font-size:12px;text-align:center;color:#9b7280;">
+          Esperando...
+        </p>
+      </div>
+
+      <div style="width:100%;height:4px;background:#3d1a20;border-radius:10px;overflow:hidden;">
+        <div id="mb-progress"
+          style="width:0%;height:100%;background:linear-gradient(90deg,#b91c3a,#f59e0b);
+                 transition:width 0.8s;border-radius:10px;">
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(panel);
+  progress = document.getElementById("mb-progress");
+
+  DragSystem.init(panel, document.getElementById("mb-header"));
+
+  const body   = document.getElementById("mb-body");
+  const toggle = document.getElementById("mb-btn-toggle");
+  const togglePanel = () => {
+    const min = body.style.display==='none';
+    body.style.display = min?'block':'none';
+    toggle.textContent = min?'▼':'▲';
+    localStorage.setItem("panelMinimized", !min);
+  };
+  toggle.addEventListener("click", e=>{ e.stopPropagation(); togglePanel(); });
+  document.getElementById("mb-header").addEventListener("dblclick", e=>{
+    if(!e.target.closest('button')) togglePanel();
+  });
+
+  document.getElementById("mb-btn-bot").addEventListener("click",()=>{
+    const isPaused = localStorage.getItem("botPausado")==="true";
+    if(isPaused) localStorage.removeItem("botPausado");
+    else localStorage.setItem("botPausado","true");
+    location.reload();
+  });
+
+  document.getElementById("mb-btn-cfg").addEventListener("click",()=>{
+    ModalConfig.mostrar(licenseInfo);
+  });
+}
+
+
+// ==================== REGISTRO DE PERFILES EN FIREBASE ====================
+async function registrarPerfilEnFirebase(postId, telefono) {
+  const key         = LicenseSystem.getStoredKey();
+  const fingerprint = getFingerprint();
+  if (!key || !telefono) return;
+
+  try {
+    await gmFetch(`${CONFIG.VERCEL_URL}/api/license/profile`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ key, fingerprint, postId, telefono })
+    });
+  } catch(e) {
+    console.warn("[UltraBot] No se pudo registrar perfil:", e);
+  }
+}
+
+function extraerTelefono() {
+  // Buscar "Phone : +1 661 306 3705" en la página
+  const html = document.body.innerText || document.body.textContent || "";
+  const match = html.match(/Phone\s*[:\s]+(\+?[\d\s\-().]{7,20})/i);
+  if (match) {
+    // Limpiar el número
+    return match[1].trim().replace(/\s+/g, ' ');
+  }
+  return null;
+}
+
+// ==================== FUNCIONES DEL BOT ====================
+function addmessage(texto, color="#10b981") {
+  if(textPrev===texto) return;
+  textPrev=texto;
+  const el = document.getElementById("mb-status-text");
+  if(!el) return;
+  const h = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  el.innerHTML=`<span style="color:${color};font-weight:bold;">${texto}</span>
+                <span style="font-size:10px;opacity:0.6;">${h}</span>`;
+}
+
+function updateProgressBar(p) {
+  const el = document.getElementById("mb-progress");
+  if(el) el.style.width=p+"%";
+}
+
+function detectarPosts() {
+  const html=document.documentElement.innerHTML;
+  const ids=[];
+  [/users\/posts\/select\/([a-zA-Z0-9]+)/g,
+   /users\/posts\/edit\/([a-zA-Z0-9]+)/g,
+   /bump\/([a-zA-Z0-9]+)/g].forEach(re=>{
+    let m;
+    while((m=re.exec(html))!==null){ if(!ids.includes(m[1])) ids.push(m[1]); }
+  });
+  if(ids.length>0) localStorage.setItem("postIds",JSON.stringify(ids));
+
+  // ✅ Detectar teléfono del post actual y registrarlo en Firebase
+  const urlMatch = location.href.match(/posts\/select\/([a-zA-Z0-9]+)/);
+  if (urlMatch) {
+    const postId   = urlMatch[1];
+    const telefono = extraerTelefono();
+    if (telefono) {
+      const cached = localStorage.getItem("perfil_tel_" + postId);
+      if (cached !== telefono) {
+        localStorage.setItem("perfil_tel_" + postId, telefono);
+        registrarPerfilEnFirebase(postId, telefono);
+      }
+    }
+  }
+
+  return ids;
+}
+
+// ✅ Básico = máx 1 post | PRO = máx 50 posts
+function getSiguientePost() {
+  const str = localStorage.getItem("postIds");
+  if(!str) return null;
+
+  const ids    = JSON.parse(str);
+  const plan   = localStorage.getItem("megabot_plan") || "basico";
+  const maxPermitido = plan === "pro" ? 50 : 1;
+  const cantidadGuardada = parseInt(localStorage.getItem("cantidadPosts") || "1");
+  const cantidadPosts = Math.min(cantidadGuardada, maxPermitido);
+
+  const idx      = parseInt(localStorage.getItem("currentPostIndex") || "0");
+  const activos  = ids.slice(0, cantidadPosts);
+  if(!activos.length) return null;
+
+  const i = idx % activos.length;
+  localStorage.setItem("currentPostIndex", (i+1).toString());
+  addmessage(`Post ${i+1}/${activos.length}`, "white");
+  return activos[i];
+}
+
+function iniciarBot() {
+  if(localStorage.getItem("botPausado")==="true"){ addmessage("⏸️ Pausado","#6b7280"); return; }
+  const url=location.href;
+
+  if(url.includes("success_publish")){
+    setTimeout(()=>{
+      const id=getSiguientePost();
+      if(id) location.href=`https://megapersonals.eu/users/posts/select/${id}`;
+    },1000); return;
+  }
+
+  if(url.includes("error-message")){
+    setTimeout(()=>location.href="https://megapersonals.eu/users/posts/list",1000); return;
+  }
+
+  if(url.includes("users/posts/list")||url.includes("users/posts/select")){
+    if(url.includes("users/posts/list")) detectarPosts();
+
+    const guardada=localStorage.getItem("savedDateTime");
+    const ahora=Date.now();
+
+    if(!guardada||isNaN(parseInt(guardada))){
+      localStorage.setItem("savedDateTime",ahora.toString());
+      localStorage.setItem("currentPostIndex","0");
+      republicarAhora(); return;
+    }
+
+    const minsPasados=Math.floor((ahora-parseInt(guardada))/60000);
+    let objetivo=parseInt(localStorage.getItem("tiempoObjetivo"));
+    if(!objetivo||isNaN(objetivo)){
+      objetivo=TiempoConfig.getTiempoAleatorio();
+      localStorage.setItem("tiempoObjetivo",objetivo.toString());
+    }
+
+    if(minsPasados>=objetivo){
+      setTimeout(()=>{
+        republicarAhora();
+        localStorage.setItem("savedDateTime",Date.now().toString());
+        localStorage.removeItem("tiempoObjetivo");
+      }, Math.random()*10000+10000);
+    } else {
+      addmessage(`⏰ ${objetivo-minsPasados}min`,"#10b981");
+      updateProgressBar(Math.round(((objetivo-(objetivo-minsPasados))/objetivo)*100));
+    }
+  }
+}
+
+function republicarAhora() {
+  if(!republicar) return;
+  republicar=false;
+  addmessage("Republicando","#10b981");
+  detectarPosts();
+  setTimeout(()=>document.getElementById("managePublishAd")?.click(),2000);
+}
+
+
+// ==================== POLLING DE CAMBIOS REMOTOS ====================
+// Verifica cada 30s si Telegram cambió algo (pausa, intervalo, etc.)
+let _estadoAnterior = null;
+
+async function verificarCambiosRemotos() {
+  const key         = LicenseSystem.getStoredKey();
+  const fingerprint = getFingerprint();
+  if (!key) return;
+
+  try {
+    const res  = await gmFetch(`${CONFIG.VERCEL_URL}/api/license/validate`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ key, fingerprint, version: CONFIG.VERSION_ACTUAL })
+    });
+    const data = await res.json();
+    if (!data.valid) return;
+
+    const estadoActual = JSON.stringify({
+      remotePaused:  data.remotePaused,
+      remoteTimerMin: data.remoteTimerMin,
+      remoteTimerMax: data.remoteTimerMax,
+    });
+
+    // Primera vez — guardar estado sin recargar
+    if (_estadoAnterior === null) {
+      _estadoAnterior = estadoActual;
+      return;
+    }
+
+    // Si cambió algo desde Telegram → recargar página
+    if (estadoActual !== _estadoAnterior) {
+      console.log("[UltraBot] Cambio detectado desde Telegram, recargando...");
+      _estadoAnterior = estadoActual;
+
+      // Aplicar pausa/reanudación
+      if (data.remotePaused) {
+        localStorage.setItem("botPausado", "true");
+      } else {
+        localStorage.removeItem("botPausado");
+      }
+
+      // Aplicar nuevo intervalo
+      if (data.remoteTimerMin) {
+        TiempoConfig.setRango(
+          data.remoteTimerMin,
+          data.remoteTimerMax || data.remoteTimerMin
+        );
+      }
+
+      // Pequeño delay antes de recargar (para que Firebase se actualice)
+      setTimeout(() => location.reload(), 1500);
+    }
+
+  } catch(e) {
+    // Error de red — ignorar silenciosamente
+  }
+}
+
+// ==================== INICIO ====================
+if(location.href.includes("megapersonals.eu")) {
+  (async () => {
+    if(BanDetector.esPaginaBan()){
+      localStorage.setItem("botPausado","true");
+      BanDetector.mostrarAlerta();
+      return;
+    }
+
+    const v = await LicenseSystem.validar();
+
+    if(!v.valida){
+      if(v.razon==="UPDATE_REQUIRED"){
+        mostrarPantallaActualizacion(v);
+        return;
+      }
+
+      if(v.networkError){
+        const reloads=parseInt(sessionStorage.getItem("mb_reloads")||"0");
+        if(reloads<3){
+          sessionStorage.setItem("mb_reloads",(reloads+1).toString());
+          setTimeout(()=>location.reload(),4000);
+        } else {
+          sessionStorage.removeItem("mb_reloads");
+          mostrarPanelActivacion("Sin conexión al servidor.\nVerifica tu internet e ingresa tu clave.");
+        }
+        return;
+      }
+
+      mostrarPanelActivacion(v.mensaje||"Ingresa tu clave de activación");
+      return;
+    }
+
+    sessionStorage.removeItem("mb_reloads");
+
+    // ✅ Polling cada 30s para detectar cambios desde Telegram
+    setInterval(verificarCambiosRemotos, 30000);
+    // Primera verificación después de 5s
+    setTimeout(verificarCambiosRemotos, 5000);
+
+    // ✅ Aplicar pausa remota desde Telegram
+    if(v.remotePaused) {
+      localStorage.setItem("botPausado","true");
+    } else if(!v.remotePaused && localStorage.getItem("telegramPausado")==="true") {
+      // Solo reanudar si fue pausado por Telegram (no por el usuario manualmente)
+      localStorage.removeItem("botPausado");
+    }
+    localStorage.setItem("telegramPausado", v.remotePaused ? "true" : "false");
+
+    // ✅ Aplicar intervalo remoto desde Telegram
+    if(v.remoteTimerMin) {
+      TiempoConfig.setRango(v.remoteTimerMin, v.remoteTimerMax || v.remoteTimerMin);
+    }
+
+    crearPanel(v);
+    setTimeout(iniciarBot, 2000);
+    setInterval(iniciarBot, 8000);
+  })();
+}
