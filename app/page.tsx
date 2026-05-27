@@ -90,19 +90,23 @@ export default function Home() {
 
   const formatTime = (timestamp: number) => {
     const diff = timestamp - now;
-    if (diff <= 0) return { value: "Ahora", unit: "" };
+    if (diff <= 0) return { mins: "00", secs: "00", total: 0 };
 
     const totalSecs = Math.floor(diff / 1000);
     const mins = Math.floor(totalSecs / 60);
     const secs = totalSecs % 60;
 
-    if (mins > 0) return { value: `${mins}:${secs.toString().padStart(2, "0")}`, unit: "min" };
-    return { value: `${secs}`, unit: "seg" };
+    return {
+      mins: mins.toString().padStart(2, "0"),
+      secs: secs.toString().padStart(2, "0"),
+      total: totalSecs,
+    };
   };
 
-  const getProgress = (nextBumpAt: number, addedAt: number) => {
-    const total = nextBumpAt - addedAt;
-    const elapsed = now - addedAt;
+  const getProgress = (post: PostData) => {
+    const start = post.lastBumpAt || post.addedAt;
+    const total = post.nextBumpAt - start;
+    const elapsed = now - start;
     if (total <= 0) return 100;
     return Math.min(100, Math.max(0, (elapsed / total) * 100));
   };
@@ -118,85 +122,87 @@ export default function Home() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-          --bg: #050508;
-          --bg-2: #0a0a12;
-          --card: #0f0f1a;
-          --card-2: #161624;
-          --card-hover: #1c1c2e;
+          --bg-0: #030305;
+          --bg-1: #07070d;
+          --bg-2: #0a0a14;
+          --bg-3: #0f0f1c;
+          --surface: rgba(255,255,255,0.03);
+          --surface-2: rgba(255,255,255,0.05);
           --primary: #c41e3a;
-          --primary-light: #ff3859;
-          --gold: #d4af5f;
-          --gold-light: #ffd47a;
-          --white: #f5f5fa;
-          --muted: #6b6b85;
-          --border: rgba(255,255,255,0.08);
-          --border-light: rgba(255,255,255,0.12);
+          --primary-2: #ff3859;
+          --primary-glow: rgba(196,30,58,0.35);
+          --accent: #d4af5f;
+          --accent-2: #ffd47a;
+          --white: #fafafa;
+          --gray-50: #f5f5f7;
+          --gray-300: #a0a0b0;
+          --gray-500: #6b6b85;
+          --gray-700: #3a3a4a;
+          --border: rgba(255,255,255,0.06);
+          --border-2: rgba(255,255,255,0.1);
           --success: #10b981;
           --success-glow: rgba(16,185,129,0.4);
           --danger: #ef4444;
           --danger-glow: rgba(239,68,68,0.4);
         }
 
-        html, body { background: var(--bg); color: var(--white); min-height: 100vh; }
+        html, body { background: var(--bg-0); color: var(--white); min-height: 100vh; }
 
         .page {
           min-height: 100vh;
           font-family: 'DM Sans', sans-serif;
-          padding: 24px;
+          padding: 32px 24px;
           position: relative;
-          overflow: hidden;
+          overflow-x: hidden;
         }
 
+        /* Animated mesh background */
         .page::before {
           content: '';
           position: fixed;
           inset: 0;
+          background:
+            radial-gradient(at 20% 30%, rgba(196,30,58,0.15) 0%, transparent 50%),
+            radial-gradient(at 80% 70%, rgba(212,175,95,0.08) 0%, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(196,30,58,0.05) 0%, transparent 60%);
+          pointer-events: none;
+          z-index: 0;
+          animation: meshMove 20s ease-in-out infinite;
+        }
+
+        @keyframes meshMove {
+          0%, 100% { transform: scale(1) rotate(0deg); }
+          50% { transform: scale(1.1) rotate(2deg); }
+        }
+
+        .page::after {
+          content: '';
+          position: fixed;
+          inset: 0;
           background-image:
-            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-          background-size: 56px 56px;
+            linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+          background-size: 64px 64px;
           pointer-events: none;
           z-index: 0;
           mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
         }
 
-        .glow-1 {
-          position: fixed;
-          top: -150px;
-          left: -150px;
-          width: 500px;
-          height: 500px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(196,30,58,0.18) 0%, transparent 70%);
-          pointer-events: none;
-          z-index: 0;
-        }
-
-        .glow-2 {
-          position: fixed;
-          bottom: -100px;
-          right: -100px;
-          width: 400px;
-          height: 400px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(212,175,95,0.12) 0%, transparent 70%);
-          pointer-events: none;
-          z-index: 0;
-        }
-
         .content {
           position: relative;
           z-index: 1;
-          max-width: 1240px;
+          max-width: 1320px;
           margin: 0 auto;
         }
 
-        /* ============ SEARCH SCREEN ============ */
+        /* ============================================
+           SEARCH SCREEN
+           ============================================ */
         .search-container {
           min-height: 88vh;
           display: flex;
@@ -205,16 +211,19 @@ export default function Home() {
         }
 
         .search-card {
-          background: linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
+          position: relative;
+          background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
           border: 1px solid var(--border);
-          border-radius: 28px;
-          padding: 52px 44px;
-          max-width: 460px;
+          border-radius: 32px;
+          padding: 56px 48px;
+          max-width: 480px;
           width: 100%;
           text-align: center;
-          box-shadow: 0 0 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
+          box-shadow:
+            0 0 120px rgba(0,0,0,0.5),
+            0 1px 0 rgba(255,255,255,0.04) inset,
+            0 0 0 1px var(--border) inset;
           animation: fadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
-          position: relative;
         }
 
         .search-card::before {
@@ -222,111 +231,130 @@ export default function Home() {
           position: absolute;
           top: 0; left: 50%;
           transform: translateX(-50%);
-          width: 70%;
+          width: 80%;
           height: 1px;
           background: linear-gradient(90deg, transparent, var(--primary), transparent);
+          opacity: 0.6;
         }
 
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(30px); }
+          from { opacity: 0; transform: translateY(40px); }
           to { opacity: 1; transform: translateY(0); }
         }
 
         .logo-orb {
-          width: 90px;
-          height: 90px;
+          width: 96px;
+          height: 96px;
           border-radius: 50%;
-          background: radial-gradient(circle at 30% 30%, rgba(196,30,58,0.4), rgba(196,30,58,0.05));
+          background: radial-gradient(circle at 30% 30%, rgba(196,30,58,0.5), rgba(196,30,58,0.05));
           border: 1.5px solid rgba(196,30,58,0.4);
           display: flex;
           align-items: center;
           justify-content: center;
-          margin: 0 auto 30px;
+          margin: 0 auto 32px;
           position: relative;
-          box-shadow: 0 0 60px rgba(196,30,58,0.25), inset 0 0 20px rgba(196,30,58,0.1);
+          box-shadow:
+            0 0 80px rgba(196,30,58,0.3),
+            inset 0 0 24px rgba(196,30,58,0.15);
         }
 
         .logo-orb::after {
           content: '';
           position: absolute;
-          inset: -8px;
+          inset: -10px;
           border-radius: 50%;
           border: 1px solid rgba(196,30,58,0.15);
+          animation: pulse 3s ease-in-out infinite;
         }
 
-        .logo-orb span { font-size: 36px; }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.4; transform: scale(1); }
+          50% { opacity: 0.8; transform: scale(1.05); }
+        }
+
+        .logo-orb span { font-size: 40px; }
 
         .brand {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          font-size: 30px;
-          letter-spacing: -0.5px;
-          margin-bottom: 8px;
+          font-size: 34px;
+          letter-spacing: -0.8px;
+          margin-bottom: 10px;
         }
 
-        .brand span { color: var(--primary); }
+        .brand span {
+          background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
 
         .tagline {
           font-size: 14px;
-          color: var(--muted);
-          margin-bottom: 40px;
-          letter-spacing: 0.3px;
+          color: var(--gray-500);
+          margin-bottom: 44px;
+          letter-spacing: 0.5px;
+          font-weight: 500;
         }
 
         .input-group {
           display: flex;
           flex-direction: column;
           gap: 10px;
-          margin-bottom: 20px;
+          margin-bottom: 24px;
           text-align: left;
         }
 
         .input-label {
           font-size: 11px;
-          color: var(--muted);
+          color: var(--gray-300);
           text-transform: uppercase;
-          letter-spacing: 1.8px;
-          font-weight: 600;
+          letter-spacing: 2px;
+          font-weight: 700;
         }
 
         .search-input {
           width: 100%;
-          padding: 18px 22px;
-          background: var(--bg-2);
-          border: 1px solid var(--border);
-          border-radius: 14px;
+          padding: 20px 24px;
+          background: var(--bg-3);
+          border: 1.5px solid var(--border);
+          border-radius: 16px;
           color: var(--white);
           font-size: 16px;
           font-family: inherit;
           outline: none;
-          transition: all 0.2s;
+          transition: all 0.3s;
         }
 
         .search-input:focus {
           border-color: var(--primary);
           box-shadow: 0 0 0 4px rgba(196,30,58,0.12);
+          background: var(--bg-2);
         }
 
         .btn-primary {
           width: 100%;
-          padding: 18px;
-          background: var(--primary);
+          padding: 20px;
+          background: linear-gradient(135deg, var(--primary) 0%, var(--primary-2) 100%);
           color: white;
           border: none;
-          border-radius: 14px;
+          border-radius: 16px;
           font-size: 15px;
           font-weight: 600;
           font-family: inherit;
           cursor: pointer;
           transition: all 0.2s;
-          box-shadow: 0 8px 32px rgba(196,30,58,0.35);
+          box-shadow:
+            0 8px 32px rgba(196,30,58,0.4),
+            0 1px 0 rgba(255,255,255,0.15) inset;
           letter-spacing: 0.3px;
         }
 
         .btn-primary:hover:not(:disabled) {
-          background: var(--primary-light);
           transform: translateY(-2px);
-          box-shadow: 0 12px 40px rgba(196,30,58,0.45);
+          box-shadow:
+            0 12px 40px rgba(196,30,58,0.5),
+            0 1px 0 rgba(255,255,255,0.2) inset;
         }
 
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -334,45 +362,60 @@ export default function Home() {
         .error-msg {
           color: var(--danger);
           font-size: 13px;
-          margin-top: 4px;
+          margin-top: -16px;
+          margin-bottom: 16px;
+          padding: 12px 16px;
+          background: rgba(239,68,68,0.08);
+          border: 1px solid rgba(239,68,68,0.2);
+          border-radius: 10px;
         }
 
-        /* ============ CARDS SCREEN ============ */
-        .header-bar {
+        /* ============================================
+           HEADER OF DASHBOARD
+           ============================================ */
+        .dash-header {
           display: flex;
           justify-content: space-between;
-          align-items: flex-end;
-          margin-bottom: 40px;
-          padding-bottom: 28px;
-          border-bottom: 1px solid var(--border);
+          align-items: center;
+          margin-bottom: 48px;
+          padding: 24px 28px;
+          background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%);
+          border: 1px solid var(--border);
+          border-radius: 24px;
+          backdrop-filter: blur(20px);
           flex-wrap: wrap;
-          gap: 20px;
+          gap: 16px;
         }
 
-        .header-info h1 {
+        .dash-greeting h1 {
           font-family: 'Syne', sans-serif;
-          font-size: 32px;
+          font-size: 30px;
           font-weight: 800;
-          margin-bottom: 6px;
           letter-spacing: -0.5px;
+          margin-bottom: 4px;
         }
 
-        .header-info h1 span { color: var(--primary); }
+        .dash-greeting h1 span {
+          background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
 
-        .header-info p {
-          color: var(--muted);
+        .dash-greeting p {
+          color: var(--gray-500);
           font-size: 14px;
           font-weight: 500;
         }
 
         .btn-back {
           padding: 12px 22px;
-          background: var(--card);
-          border: 1px solid var(--border);
+          background: var(--surface);
+          border: 1px solid var(--border-2);
           color: var(--white);
           border-radius: 12px;
           font-size: 13px;
-          font-weight: 500;
+          font-weight: 600;
           cursor: pointer;
           font-family: inherit;
           display: flex;
@@ -382,336 +425,385 @@ export default function Home() {
         }
 
         .btn-back:hover {
-          background: var(--card-hover);
+          background: var(--surface-2);
           border-color: var(--primary);
-          transform: translateX(-2px);
+          transform: translateX(-3px);
         }
 
-        /* ============ STATS ============ */
+        /* ============================================
+           STATS PILLS - Pill-shaped premium stats
+           ============================================ */
         .stats-row {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-          gap: 16px;
+          display: flex;
+          gap: 14px;
           margin-bottom: 40px;
+          flex-wrap: wrap;
         }
 
-        .stat-card {
-          background: linear-gradient(135deg, var(--card) 0%, var(--bg-2) 100%);
+        .stat-pill {
+          flex: 1;
+          min-width: 180px;
+          padding: 18px 24px;
+          background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%);
           border: 1px solid var(--border);
           border-radius: 18px;
-          padding: 22px;
           position: relative;
           overflow: hidden;
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          transition: all 0.3s;
         }
 
-        .stat-card::before {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 1px;
-          background: linear-gradient(90deg, transparent, currentColor, transparent);
-          opacity: 0.4;
+        .stat-pill:hover {
+          border-color: var(--border-2);
+          transform: translateY(-2px);
         }
 
-        .stat-card.gold { color: var(--gold); }
-        .stat-card.green { color: var(--success); }
-        .stat-card.red { color: var(--danger); }
+        .stat-pill-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: 12px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 20px;
+          flex-shrink: 0;
+        }
 
-        .stat-card .stat-label {
+        .stat-pill.total .stat-pill-icon {
+          background: linear-gradient(135deg, rgba(212,175,95,0.2) 0%, rgba(212,175,95,0.05) 100%);
+          border: 1px solid rgba(212,175,95,0.2);
+        }
+
+        .stat-pill.active .stat-pill-icon {
+          background: linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.05) 100%);
+          border: 1px solid rgba(16,185,129,0.2);
+        }
+
+        .stat-pill.paused .stat-pill-icon {
+          background: linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.05) 100%);
+          border: 1px solid rgba(239,68,68,0.2);
+        }
+
+        .stat-pill-info { flex: 1; min-width: 0; }
+
+        .stat-pill-label {
           font-size: 11px;
-          color: var(--muted);
+          color: var(--gray-500);
           text-transform: uppercase;
           letter-spacing: 1.5px;
-          font-weight: 600;
-          margin-bottom: 10px;
+          font-weight: 700;
+          margin-bottom: 4px;
         }
 
-        .stat-card .stat-value {
+        .stat-pill-value {
           font-family: 'Syne', sans-serif;
-          font-size: 38px;
+          font-size: 28px;
           font-weight: 800;
           line-height: 1;
+          letter-spacing: -0.5px;
         }
 
-        /* ============ POST CARDS - PRODUCT STYLE ============ */
+        .stat-pill.total .stat-pill-value { color: var(--accent); }
+        .stat-pill.active .stat-pill-value { color: var(--success); }
+        .stat-pill.paused .stat-pill-value { color: var(--danger); }
+
+        /* ============================================
+           PREMIUM POST CARDS - Stripe/Apple style
+           ============================================ */
         .posts-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
           gap: 24px;
         }
 
         .post-card {
-          background: linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
-          border: 1px solid var(--border);
-          border-radius: 24px;
-          overflow: hidden;
           position: relative;
-          transition: all 0.4s cubic-bezier(0.22,1,0.36,1);
-          animation: fadeUp 0.5s ease-out both;
-          display: flex;
-          flex-direction: column;
+          background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+          border: 1px solid var(--border);
+          border-radius: 28px;
+          overflow: hidden;
+          transition: all 0.5s cubic-bezier(0.22,1,0.36,1);
+          animation: fadeUp 0.6s ease-out both;
         }
 
-        .post-card:hover {
-          border-color: var(--border-light);
-          transform: translateY(-6px);
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
-        }
-
-        .post-card.active:hover {
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.3);
-        }
-
-        .post-card.paused {
-          opacity: 0.85;
-        }
-
-        .post-card.paused:hover {
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(239,68,68,0.3);
-        }
-
-        /* Top accent line */
         .post-card::before {
           content: '';
           position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 3px;
-          background: linear-gradient(90deg, var(--success), transparent);
-          opacity: 0.8;
-        }
-
-        .post-card.paused::before {
-          background: linear-gradient(90deg, var(--danger), transparent);
-        }
-
-        /* Glow effect when active */
-        .post-card.active::after {
-          content: '';
-          position: absolute;
-          top: -1px;
-          right: -1px;
-          width: 120px;
-          height: 120px;
-          background: radial-gradient(circle, rgba(16,185,129,0.15), transparent 70%);
+          inset: -1px;
+          border-radius: 28px;
+          padding: 1px;
+          background: linear-gradient(135deg, var(--success) 0%, transparent 50%);
+          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+          -webkit-mask-composite: xor;
+          mask-composite: exclude;
+          opacity: 0.5;
           pointer-events: none;
         }
 
-        /* HEADER OF CARD */
-        .pc-header {
-          padding: 24px 24px 20px;
+        .post-card.paused::before {
+          background: linear-gradient(135deg, var(--danger) 0%, transparent 50%);
+        }
+
+        .post-card:hover {
+          transform: translateY(-8px);
+          box-shadow:
+            0 30px 60px rgba(0,0,0,0.6),
+            0 0 0 1px rgba(255,255,255,0.05);
+        }
+
+        .post-card.active:hover::before { opacity: 1; }
+        .post-card.paused { opacity: 0.92; }
+
+        /* TOP MESH HEADER */
+        .pc-mesh {
+          position: relative;
+          height: 110px;
+          background:
+            radial-gradient(at 20% 30%, rgba(196,30,58,0.25) 0%, transparent 50%),
+            radial-gradient(at 80% 50%, rgba(212,175,95,0.15) 0%, transparent 50%),
+            radial-gradient(at 50% 100%, rgba(196,30,58,0.1) 0%, transparent 50%);
+          overflow: hidden;
+        }
+
+        .post-card.paused .pc-mesh {
+          background:
+            radial-gradient(at 20% 30%, rgba(239,68,68,0.15) 0%, transparent 50%),
+            radial-gradient(at 80% 50%, rgba(107,107,133,0.1) 0%, transparent 50%);
+          filter: grayscale(0.3);
+        }
+
+        .pc-mesh::after {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background:
+            linear-gradient(180deg, transparent 60%, var(--bg-2) 100%);
+        }
+
+        .pc-mesh-content {
+          position: relative;
+          z-index: 1;
+          padding: 20px 24px;
           display: flex;
           justify-content: space-between;
           align-items: flex-start;
-          gap: 16px;
+          height: 100%;
         }
 
-        .pc-icon {
-          width: 56px;
-          height: 56px;
-          border-radius: 16px;
-          background: linear-gradient(135deg, rgba(196,30,58,0.25) 0%, rgba(212,175,95,0.1) 100%);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 26px;
-          border: 1px solid rgba(196,30,58,0.25);
-          flex-shrink: 0;
+        .pc-id-block { display: flex; flex-direction: column; }
+
+        .pc-id-tiny {
+          font-size: 10px;
+          color: var(--gray-300);
+          text-transform: uppercase;
+          letter-spacing: 2.5px;
+          font-weight: 700;
+          margin-bottom: 6px;
+          opacity: 0.7;
         }
+
+        .pc-id-big {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 22px;
+          font-weight: 700;
+          letter-spacing: -0.5px;
+          color: var(--white);
+        }
+
+        .pc-id-big .hash { color: var(--gray-500); }
 
         .pc-badge {
-          font-size: 10px;
-          padding: 6px 12px;
-          border-radius: 100px;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.8px;
           display: inline-flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
+          padding: 8px 14px;
+          background: rgba(0,0,0,0.4);
+          backdrop-filter: blur(10px);
+          border-radius: 100px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
         }
 
         .pc-badge.active {
-          background: rgba(16,185,129,0.12);
           color: var(--success);
           border: 1px solid rgba(16,185,129,0.3);
         }
 
         .pc-badge.paused {
-          background: rgba(239,68,68,0.12);
           color: var(--danger);
           border: 1px solid rgba(239,68,68,0.3);
         }
 
-        .pc-badge .dot {
+        .pc-badge-dot {
           width: 6px;
           height: 6px;
           border-radius: 50%;
           background: currentColor;
         }
 
-        .pc-badge.active .dot {
-          box-shadow: 0 0 8px currentColor;
-          animation: pulse 1.5s infinite;
+        .pc-badge.active .pc-badge-dot {
+          box-shadow: 0 0 12px currentColor;
+          animation: dotPulse 1.5s infinite;
         }
 
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
+        @keyframes dotPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.5; transform: scale(0.85); }
         }
 
-        /* TITLE */
-        .pc-title {
-          padding: 0 24px;
-          margin-bottom: 4px;
-        }
-
-        .pc-title .pc-id {
-          font-family: 'Syne', sans-serif;
-          font-size: 22px;
-          font-weight: 800;
-          letter-spacing: -0.5px;
-          margin-bottom: 4px;
-        }
-
-        .pc-title .pc-id .hash {
-          color: var(--muted);
-          font-weight: 600;
-        }
-
-        .pc-title .pc-subtitle {
-          font-size: 12px;
-          color: var(--muted);
-          letter-spacing: 0.5px;
-        }
-
-        /* TIMER SECTION - PRODUCT STYLE */
-        .pc-timer {
-          margin: 24px;
-          padding: 24px;
-          background: rgba(255,255,255,0.02);
-          border: 1px solid var(--border);
-          border-radius: 18px;
-          position: relative;
-          overflow: hidden;
-        }
-
-        .pc-timer.paused {
-          background: rgba(239,68,68,0.04);
-          border-color: rgba(239,68,68,0.15);
-        }
-
-        .pc-timer-label {
-          font-size: 10px;
-          color: var(--muted);
-          text-transform: uppercase;
-          letter-spacing: 2px;
-          font-weight: 700;
-          margin-bottom: 12px;
-        }
-
-        .pc-timer-value {
+        /* CIRCULAR TIMER - The hero element */
+        .pc-timer-section {
+          padding: 4px 24px 28px;
           display: flex;
-          align-items: baseline;
-          gap: 8px;
-          margin-bottom: 16px;
+          flex-direction: column;
+          align-items: center;
         }
 
-        .pc-timer-value .num {
+        .pc-ring-container {
+          position: relative;
+          width: 200px;
+          height: 200px;
+          margin-bottom: 20px;
+        }
+
+        .pc-ring-svg {
+          width: 100%;
+          height: 100%;
+          transform: rotate(-90deg);
+        }
+
+        .pc-ring-bg {
+          fill: none;
+          stroke: rgba(255,255,255,0.05);
+          stroke-width: 8;
+        }
+
+        .pc-ring-progress {
+          fill: none;
+          stroke-width: 8;
+          stroke-linecap: round;
+          transition: stroke-dashoffset 1s linear;
+        }
+
+        .post-card.active .pc-ring-progress {
+          stroke: url(#gradActive);
+        }
+
+        .post-card.paused .pc-ring-progress {
+          stroke: url(#gradPaused);
+          opacity: 0.5;
+        }
+
+        .pc-ring-center {
+          position: absolute;
+          top: 0; left: 0; right: 0; bottom: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .pc-time-value {
           font-family: 'Syne', sans-serif;
           font-size: 44px;
           font-weight: 800;
+          letter-spacing: -2px;
           line-height: 1;
-          color: var(--gold);
           font-variant-numeric: tabular-nums;
-          letter-spacing: -1px;
+          background: linear-gradient(135deg, var(--white) 0%, var(--gray-300) 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
         }
 
-        .pc-timer-value .unit {
-          font-size: 14px;
-          color: var(--muted);
-          font-weight: 500;
+        .post-card.paused .pc-time-value {
+          background: linear-gradient(135deg, var(--gray-500) 0%, var(--gray-700) 100%);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
         }
 
-        .pc-timer.paused .pc-timer-value .num {
-          color: var(--danger);
+        .pc-time-divider {
+          font-family: 'Syne', sans-serif;
+          font-size: 44px;
+          font-weight: 800;
+          color: var(--gray-700);
+          margin: 0 2px;
+          animation: blink 1s infinite;
         }
 
-        /* Progress bar */
-        .pc-progress {
-          width: 100%;
-          height: 6px;
-          background: rgba(255,255,255,0.05);
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.3; }
+        }
+
+        .pc-time-label {
+          font-size: 10px;
+          color: var(--gray-500);
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          font-weight: 700;
+          margin-top: 8px;
+        }
+
+        .pc-time-row {
+          display: flex;
+          align-items: flex-end;
+        }
+
+        .pc-time-status {
+          font-size: 11px;
+          color: var(--gray-300);
+          text-transform: uppercase;
+          letter-spacing: 2.5px;
+          font-weight: 600;
+          padding: 6px 14px;
+          background: rgba(255,255,255,0.04);
           border-radius: 100px;
-          overflow: hidden;
-          position: relative;
+          border: 1px solid var(--border);
         }
 
-        .pc-progress-fill {
-          height: 100%;
-          background: linear-gradient(90deg, var(--success), var(--gold));
-          border-radius: 100px;
-          transition: width 1s linear;
-          position: relative;
-        }
-
-        .pc-progress-fill::after {
-          content: '';
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-          animation: shimmer 2s infinite;
-        }
-
-        @keyframes shimmer {
-          0% { transform: translateX(-100%); }
-          100% { transform: translateX(100%); }
-        }
-
-        .pc-progress.paused .pc-progress-fill {
-          background: var(--danger);
-          opacity: 0.3;
-        }
-
-        .pc-progress.paused .pc-progress-fill::after {
-          display: none;
-        }
-
-        /* META INFO */
-        .pc-meta {
-          padding: 0 24px;
-          margin-bottom: 20px;
+        /* META GRID */
+        .pc-meta-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
+          padding: 0 24px;
+          margin-bottom: 20px;
         }
 
-        .pc-meta-item {
-          background: rgba(255,255,255,0.02);
+        .pc-meta-cell {
+          padding: 14px 16px;
+          background: var(--surface);
           border: 1px solid var(--border);
-          border-radius: 12px;
-          padding: 12px 14px;
+          border-radius: 14px;
+          transition: all 0.2s;
         }
 
-        .pc-meta-item .label {
+        .pc-meta-cell:hover {
+          background: var(--surface-2);
+          border-color: var(--border-2);
+        }
+
+        .pc-meta-label {
           font-size: 10px;
-          color: var(--muted);
+          color: var(--gray-500);
           text-transform: uppercase;
-          letter-spacing: 1px;
-          font-weight: 600;
-          margin-bottom: 4px;
+          letter-spacing: 1.2px;
+          font-weight: 700;
+          margin-bottom: 6px;
         }
 
-        .pc-meta-item .value {
-          font-size: 13px;
+        .pc-meta-value {
+          font-size: 14px;
           color: var(--white);
           font-weight: 600;
+          font-variant-numeric: tabular-nums;
         }
 
         /* ACTIONS */
@@ -719,15 +811,14 @@ export default function Home() {
           padding: 0 24px 24px;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 10px;
-          margin-top: auto;
+          gap: 12px;
         }
 
         .action-btn {
-          padding: 14px 16px;
+          padding: 16px 20px;
           border: none;
-          border-radius: 12px;
-          font-size: 13px;
+          border-radius: 14px;
+          font-size: 14px;
           font-weight: 600;
           font-family: inherit;
           cursor: pointer;
@@ -736,75 +827,97 @@ export default function Home() {
           align-items: center;
           justify-content: center;
           gap: 8px;
-          letter-spacing: 0.2px;
+          letter-spacing: 0.3px;
+          position: relative;
+          overflow: hidden;
         }
+
+        .action-btn::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+
+        .action-btn:hover::before { opacity: 1; }
 
         .btn-pause {
-          background: var(--danger);
+          background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
           color: white;
-          box-shadow: 0 4px 16px rgba(239,68,68,0.25);
+          box-shadow:
+            0 8px 24px rgba(239,68,68,0.35),
+            0 1px 0 rgba(255,255,255,0.15) inset;
         }
 
-        .btn-pause:hover {
-          background: #dc2626;
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(239,68,68,0.35);
-        }
+        .btn-pause:hover { transform: translateY(-2px); }
 
         .btn-resume {
-          background: var(--success);
+          background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
           color: white;
-          box-shadow: 0 4px 16px rgba(16,185,129,0.25);
+          box-shadow:
+            0 8px 24px rgba(16,185,129,0.35),
+            0 1px 0 rgba(255,255,255,0.15) inset;
         }
 
-        .btn-resume:hover {
-          background: #059669;
-          transform: translateY(-1px);
-          box-shadow: 0 6px 20px rgba(16,185,129,0.35);
-        }
+        .btn-resume:hover { transform: translateY(-2px); }
 
         .btn-edit {
-          background: var(--card-2);
+          background: var(--surface-2);
           color: var(--white);
-          border: 1px solid var(--border-light);
+          border: 1px solid var(--border-2);
         }
 
         .btn-edit:hover {
-          border-color: var(--gold);
-          color: var(--gold);
-          background: rgba(212,175,95,0.05);
+          border-color: var(--accent);
+          color: var(--accent);
+          background: rgba(212,175,95,0.06);
         }
 
-        /* Empty state */
+        /* EMPTY STATE */
         .empty-state {
           grid-column: 1 / -1;
           text-align: center;
-          padding: 80px 20px;
-          color: var(--muted);
-          background: var(--card);
-          border: 1px dashed var(--border-light);
-          border-radius: 24px;
+          padding: 100px 20px;
+          color: var(--gray-500);
+          background: var(--bg-2);
+          border: 1px dashed var(--border-2);
+          border-radius: 28px;
         }
 
-        .empty-state-icon { font-size: 56px; margin-bottom: 20px; }
-        .empty-state-text { font-size: 16px; font-weight: 500; margin-bottom: 8px; color: var(--white); }
-        .empty-state-sub { font-size: 13px; }
+        .empty-state-icon { font-size: 64px; margin-bottom: 24px; }
+        .empty-state-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--white); }
+        .empty-state-sub { font-size: 14px; color: var(--gray-500); }
 
-        /* Mobile */
+        /* MOBILE */
         @media (max-width: 640px) {
-          .page { padding: 16px; }
-          .header-bar { flex-direction: column; align-items: flex-start; }
-          .header-info h1 { font-size: 24px; }
+          .page { padding: 20px 16px; }
+          .dash-header { flex-direction: column; align-items: flex-start; padding: 20px; }
+          .dash-greeting h1 { font-size: 24px; }
           .posts-grid { grid-template-columns: 1fr; gap: 16px; }
-          .stat-card .stat-value { font-size: 28px; }
-          .pc-timer-value .num { font-size: 36px; }
+          .pc-ring-container { width: 180px; height: 180px; }
+          .pc-time-value, .pc-time-divider { font-size: 38px; }
+          .stat-pill { min-width: 100%; }
         }
       `}</style>
 
-      <div className="page">
-        <div className="glow-1" />
-        <div className="glow-2" />
+      {/* SVG Gradients */}
+      <svg width="0" height="0" style={{ position: "absolute" }}>
+        <defs>
+          <linearGradient id="gradActive" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="50%" stopColor="#d4af5f" />
+            <stop offset="100%" stopColor="#c41e3a" />
+          </linearGradient>
+          <linearGradient id="gradPaused" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#ef4444" />
+            <stop offset="100%" stopColor="#6b6b85" />
+          </linearGradient>
+        </defs>
+      </svg>
 
+      <div className="page">
         <div className="content">
           {step === "search" && (
             <div className="search-container">
@@ -816,7 +929,7 @@ export default function Home() {
                 <div className="brand">
                   Angel<span>Vercel</span>
                 </div>
-                <div className="tagline">Panel de control de publicaciones</div>
+                <div className="tagline">Panel premium de control</div>
 
                 <div className="input-group">
                   <label className="input-label">Nombre del cliente</label>
@@ -833,12 +946,7 @@ export default function Home() {
 
                 {error && <div className="error-msg">{error}</div>}
 
-                <button
-                  className="btn-primary"
-                  onClick={searchClient}
-                  disabled={loading}
-                  style={{ marginTop: 12 }}
-                >
+                <button className="btn-primary" onClick={searchClient} disabled={loading}>
                   {loading ? "Buscando..." : "Acceder al panel"}
                 </button>
               </div>
@@ -847,33 +955,42 @@ export default function Home() {
 
           {step === "cards" && clientData && (
             <div>
-              <div className="header-bar">
-                <div className="header-info">
+              <div className="dash-header">
+                <div className="dash-greeting">
                   <h1>
                     Hola, <span>{clientData.displayName}</span>
                   </h1>
-                  <p>{Object.keys(clientData.posts || {}).length} publicaciones en tu panel</p>
+                  <p>Panel de control de publicaciones</p>
                 </div>
                 <button className="btn-back" onClick={goBack}>
-                  ← Salir
+                  ← Cerrar sesión
                 </button>
               </div>
 
               <div className="stats-row">
-                <div className="stat-card gold">
-                  <div className="stat-label">Total publicaciones</div>
-                  <div className="stat-value">{Object.keys(clientData.posts || {}).length}</div>
-                </div>
-                <div className="stat-card green">
-                  <div className="stat-label">Activas</div>
-                  <div className="stat-value">
-                    {Object.values(clientData.posts || {}).filter((p) => p.status === "active").length}
+                <div className="stat-pill total">
+                  <div className="stat-pill-icon">📊</div>
+                  <div className="stat-pill-info">
+                    <div className="stat-pill-label">Total</div>
+                    <div className="stat-pill-value">{Object.keys(clientData.posts || {}).length}</div>
                   </div>
                 </div>
-                <div className="stat-card red">
-                  <div className="stat-label">Pausadas</div>
-                  <div className="stat-value">
-                    {Object.values(clientData.posts || {}).filter((p) => p.status === "paused").length}
+                <div className="stat-pill active">
+                  <div className="stat-pill-icon">✨</div>
+                  <div className="stat-pill-info">
+                    <div className="stat-pill-label">Activas</div>
+                    <div className="stat-pill-value">
+                      {Object.values(clientData.posts || {}).filter((p) => p.status === "active").length}
+                    </div>
+                  </div>
+                </div>
+                <div className="stat-pill paused">
+                  <div className="stat-pill-icon">⏸️</div>
+                  <div className="stat-pill-info">
+                    <div className="stat-pill-label">Pausadas</div>
+                    <div className="stat-pill-value">
+                      {Object.values(clientData.posts || {}).filter((p) => p.status === "paused").length}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -889,43 +1006,68 @@ export default function Home() {
                   Object.entries(clientData.posts).map(([postId, post]) => {
                     const isPaused = post.status === "paused";
                     const time = formatTime(post.nextBumpAt);
-                    const progress = isPaused ? 0 : getProgress(post.nextBumpAt, post.lastBumpAt || post.addedAt);
+                    const progress = isPaused ? 0 : getProgress(post);
+
+                    // Ring calculations
+                    const radius = 90;
+                    const circumference = 2 * Math.PI * radius;
+                    const offset = circumference - (progress / 100) * circumference;
 
                     return (
                       <div key={postId} className={`post-card ${isPaused ? "paused" : "active"}`}>
-                        <div className="pc-header">
-                          <div className="pc-icon">📌</div>
-                          <span className={`pc-badge ${isPaused ? "paused" : "active"}`}>
-                            <span className="dot"></span>
-                            {isPaused ? "Pausado" : "Activo"}
-                          </span>
-                        </div>
-
-                        <div className="pc-title">
-                          <div className="pc-id">
-                            <span className="hash">#</span>
-                            {postId}
-                          </div>
-                          <div className="pc-subtitle">Publicación clasificada</div>
-                        </div>
-
-                        <div className={`pc-timer ${isPaused ? "paused" : ""}`}>
-                          <div className="pc-timer-label">
-                            {isPaused ? "⏸️ Publicación pausada" : "⏰ Próximo bump en"}
-                          </div>
-                          <div className="pc-timer-value">
-                            <span className="num">{isPaused ? "—" : time.value}</span>
-                            <span className="unit">{!isPaused && time.unit}</span>
-                          </div>
-                          <div className={`pc-progress ${isPaused ? "paused" : ""}`}>
-                            <div className="pc-progress-fill" style={{ width: `${progress}%` }} />
+                        <div className="pc-mesh">
+                          <div className="pc-mesh-content">
+                            <div className="pc-id-block">
+                              <div className="pc-id-tiny">Publicación</div>
+                              <div className="pc-id-big">
+                                <span className="hash">#</span>
+                                {postId}
+                              </div>
+                            </div>
+                            <span className={`pc-badge ${isPaused ? "paused" : "active"}`}>
+                              <span className="pc-badge-dot"></span>
+                              {isPaused ? "Pausado" : "En vivo"}
+                            </span>
                           </div>
                         </div>
 
-                        <div className="pc-meta">
-                          <div className="pc-meta-item">
-                            <div className="label">Último bump</div>
-                            <div className="value">
+                        <div className="pc-timer-section">
+                          <div className="pc-ring-container">
+                            <svg className="pc-ring-svg" viewBox="0 0 200 200">
+                              <circle className="pc-ring-bg" cx="100" cy="100" r={radius} />
+                              <circle
+                                className="pc-ring-progress"
+                                cx="100"
+                                cy="100"
+                                r={radius}
+                                strokeDasharray={circumference}
+                                strokeDashoffset={offset}
+                              />
+                            </svg>
+                            <div className="pc-ring-center">
+                              {isPaused ? (
+                                <>
+                                  <div className="pc-time-value">⏸</div>
+                                  <div className="pc-time-label">Pausado</div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="pc-time-row">
+                                    <span className="pc-time-value">{time.mins}</span>
+                                    <span className="pc-time-divider">:</span>
+                                    <span className="pc-time-value">{time.secs}</span>
+                                  </div>
+                                  <div className="pc-time-label">Próximo bump</div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pc-meta-grid">
+                          <div className="pc-meta-cell">
+                            <div className="pc-meta-label">Último bump</div>
+                            <div className="pc-meta-value">
                               {post.lastBumpAt
                                 ? new Date(post.lastBumpAt).toLocaleTimeString([], {
                                     hour: "2-digit",
@@ -934,9 +1076,9 @@ export default function Home() {
                                 : "—"}
                             </div>
                           </div>
-                          <div className="pc-meta-item">
-                            <div className="label">Registrado</div>
-                            <div className="value">
+                          <div className="pc-meta-cell">
+                            <div className="pc-meta-label">Registrado</div>
+                            <div className="pc-meta-value">
                               {new Date(post.addedAt).toLocaleDateString([], { day: "2-digit", month: "short" })}
                             </div>
                           </div>
