@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 
-const FB_URL = "https://megapersonals-4f24c-default-rtdb.firebaseio.com";
+const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 
 interface PostData {
   status: "active" | "paused";
