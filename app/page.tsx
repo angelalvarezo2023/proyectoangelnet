@@ -25,13 +25,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
 
-  // Actualizar tiempo cada segundo
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // Polling cada 5 segundos para actualizar datos
   useEffect(() => {
     if (step !== "cards" || !clientKey) return;
     const interval = setInterval(async () => {
@@ -62,7 +60,7 @@ export default function Home() {
         setClientData(data);
         setStep("cards");
       } else {
-        setError("No encontramos posts para este cliente");
+        setError("No encontramos publicaciones para este cliente");
       }
     } catch (e) {
       setError("Error de conexión");
@@ -90,15 +88,23 @@ export default function Home() {
     });
   };
 
-  const formatTimeRemaining = (timestamp: number) => {
+  const formatTime = (timestamp: number) => {
     const diff = timestamp - now;
-    if (diff <= 0) return "Ahora";
+    if (diff <= 0) return { value: "Ahora", unit: "" };
 
-    const mins = Math.floor(diff / 60000);
-    const secs = Math.floor((diff % 60000) / 1000);
+    const totalSecs = Math.floor(diff / 1000);
+    const mins = Math.floor(totalSecs / 60);
+    const secs = totalSecs % 60;
 
-    if (mins > 0) return `${mins}m ${secs}s`;
-    return `${secs}s`;
+    if (mins > 0) return { value: `${mins}:${secs.toString().padStart(2, "0")}`, unit: "min" };
+    return { value: `${secs}`, unit: "seg" };
+  };
+
+  const getProgress = (nextBumpAt: number, addedAt: number) => {
+    const total = nextBumpAt - addedAt;
+    const elapsed = now - addedAt;
+    if (total <= 0) return 100;
+    return Math.min(100, Math.max(0, (elapsed / total) * 100));
   };
 
   const goBack = () => {
@@ -112,23 +118,28 @@ export default function Home() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600;700&display=swap');
 
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-          --bg: #09090f;
-          --card: #111118;
-          --card-light: #1a1a24;
+          --bg: #050508;
+          --bg-2: #0a0a12;
+          --card: #0f0f1a;
+          --card-2: #161624;
+          --card-hover: #1c1c2e;
           --primary: #c41e3a;
-          --primary-glow: rgba(196, 30, 58, 0.25);
+          --primary-light: #ff3859;
           --gold: #d4af5f;
-          --white: #f0f0f5;
-          --muted: #6b6b80;
-          --border: rgba(255,255,255,0.07);
+          --gold-light: #ffd47a;
+          --white: #f5f5fa;
+          --muted: #6b6b85;
+          --border: rgba(255,255,255,0.08);
+          --border-light: rgba(255,255,255,0.12);
           --success: #10b981;
-          --warning: #f59e0b;
+          --success-glow: rgba(16,185,129,0.4);
           --danger: #ef4444;
+          --danger-glow: rgba(239,68,68,0.4);
         }
 
         html, body { background: var(--bg); color: var(--white); min-height: 100vh; }
@@ -136,7 +147,7 @@ export default function Home() {
         .page {
           min-height: 100vh;
           font-family: 'DM Sans', sans-serif;
-          padding: 20px;
+          padding: 24px;
           position: relative;
           overflow: hidden;
         }
@@ -146,55 +157,63 @@ export default function Home() {
           position: fixed;
           inset: 0;
           background-image:
-            linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-          background-size: 48px 48px;
+            linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+          background-size: 56px 56px;
+          pointer-events: none;
+          z-index: 0;
+          mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+        }
+
+        .glow-1 {
+          position: fixed;
+          top: -150px;
+          left: -150px;
+          width: 500px;
+          height: 500px;
+          border-radius: 50%;
+          background: radial-gradient(circle, rgba(196,30,58,0.18) 0%, transparent 70%);
           pointer-events: none;
           z-index: 0;
         }
 
-        .glow-tl {
-          position: fixed;
-          top: -120px;
-          left: -120px;
-          width: 480px;
-          height: 480px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(196,30,58,0.15) 0%, transparent 70%);
-          pointer-events: none;
-        }
-
-        .glow-br {
+        .glow-2 {
           position: fixed;
           bottom: -100px;
           right: -100px;
-          width: 380px;
-          height: 380px;
+          width: 400px;
+          height: 400px;
           border-radius: 50%;
-          background: radial-gradient(circle, rgba(212,175,95,0.08) 0%, transparent 70%);
+          background: radial-gradient(circle, rgba(212,175,95,0.12) 0%, transparent 70%);
           pointer-events: none;
+          z-index: 0;
         }
 
-        .content { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; }
+        .content {
+          position: relative;
+          z-index: 1;
+          max-width: 1240px;
+          margin: 0 auto;
+        }
 
-        /* SEARCH SCREEN */
+        /* ============ SEARCH SCREEN ============ */
         .search-container {
-          min-height: 80vh;
+          min-height: 88vh;
           display: flex;
           align-items: center;
           justify-content: center;
         }
 
         .search-card {
-          background: var(--card);
+          background: linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
           border: 1px solid var(--border);
-          border-radius: 24px;
-          padding: 48px 40px;
+          border-radius: 28px;
+          padding: 52px 44px;
           max-width: 460px;
           width: 100%;
           text-align: center;
-          box-shadow: 0 0 80px rgba(0,0,0,0.6);
-          animation: fadeUp 0.6s cubic-bezier(0.22,1,0.36,1) both;
+          box-shadow: 0 0 100px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03) inset;
+          animation: fadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
           position: relative;
         }
 
@@ -203,397 +222,594 @@ export default function Home() {
           position: absolute;
           top: 0; left: 50%;
           transform: translateX(-50%);
-          width: 60%;
+          width: 70%;
           height: 1px;
           background: linear-gradient(90deg, transparent, var(--primary), transparent);
         }
 
         @keyframes fadeUp {
-          from { opacity: 0; transform: translateY(28px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(30px); }
+          to { opacity: 1; transform: translateY(0); }
         }
 
-        .logo-ring {
-          width: 80px;
-          height: 80px;
+        .logo-orb {
+          width: 90px;
+          height: 90px;
           border-radius: 50%;
+          background: radial-gradient(circle at 30% 30%, rgba(196,30,58,0.4), rgba(196,30,58,0.05));
           border: 1.5px solid rgba(196,30,58,0.4);
           display: flex;
           align-items: center;
           justify-content: center;
-          margin: 0 auto 28px;
+          margin: 0 auto 30px;
           position: relative;
-          background: rgba(196,30,58,0.06);
+          box-shadow: 0 0 60px rgba(196,30,58,0.25), inset 0 0 20px rgba(196,30,58,0.1);
         }
 
-        .logo-ring::after {
+        .logo-orb::after {
           content: '';
           position: absolute;
-          inset: -6px;
+          inset: -8px;
           border-radius: 50%;
-          border: 1px solid rgba(196,30,58,0.12);
+          border: 1px solid rgba(196,30,58,0.15);
         }
 
-        .logo-ring span { font-size: 32px; }
+        .logo-orb span { font-size: 36px; }
 
         .brand {
           font-family: 'Syne', sans-serif;
           font-weight: 800;
-          font-size: 28px;
+          font-size: 30px;
           letter-spacing: -0.5px;
-          margin-bottom: 6px;
+          margin-bottom: 8px;
         }
 
         .brand span { color: var(--primary); }
 
         .tagline {
-          font-size: 13px;
+          font-size: 14px;
           color: var(--muted);
-          margin-bottom: 36px;
+          margin-bottom: 40px;
+          letter-spacing: 0.3px;
         }
 
         .input-group {
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 10px;
           margin-bottom: 20px;
+          text-align: left;
         }
 
         .input-label {
-          font-size: 12px;
+          font-size: 11px;
           color: var(--muted);
           text-transform: uppercase;
-          letter-spacing: 1.5px;
-          text-align: left;
+          letter-spacing: 1.8px;
+          font-weight: 600;
         }
 
         .search-input {
           width: 100%;
-          padding: 16px 20px;
-          background: var(--card-light);
+          padding: 18px 22px;
+          background: var(--bg-2);
           border: 1px solid var(--border);
-          border-radius: 12px;
+          border-radius: 14px;
           color: var(--white);
           font-size: 16px;
           font-family: inherit;
           outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
+          transition: all 0.2s;
         }
 
         .search-input:focus {
           border-color: var(--primary);
-          box-shadow: 0 0 0 3px rgba(196,30,58,0.15);
+          box-shadow: 0 0 0 4px rgba(196,30,58,0.12);
         }
 
         .btn-primary {
           width: 100%;
-          padding: 16px;
+          padding: 18px;
           background: var(--primary);
           color: white;
           border: none;
-          border-radius: 12px;
+          border-radius: 14px;
           font-size: 15px;
-          font-weight: 500;
+          font-weight: 600;
           font-family: inherit;
           cursor: pointer;
           transition: all 0.2s;
-          box-shadow: 0 4px 24px rgba(196,30,58,0.3);
+          box-shadow: 0 8px 32px rgba(196,30,58,0.35);
+          letter-spacing: 0.3px;
         }
 
         .btn-primary:hover:not(:disabled) {
-          background: #a51830;
-          transform: translateY(-1px);
+          background: var(--primary-light);
+          transform: translateY(-2px);
+          box-shadow: 0 12px 40px rgba(196,30,58,0.45);
         }
 
-        .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 
         .error-msg {
           color: var(--danger);
           font-size: 13px;
-          margin-top: 8px;
+          margin-top: 4px;
         }
 
-        /* CARDS SCREEN */
+        /* ============ CARDS SCREEN ============ */
         .header-bar {
           display: flex;
           justify-content: space-between;
-          align-items: center;
-          margin-bottom: 32px;
-          padding-bottom: 20px;
+          align-items: flex-end;
+          margin-bottom: 40px;
+          padding-bottom: 28px;
           border-bottom: 1px solid var(--border);
+          flex-wrap: wrap;
+          gap: 20px;
         }
 
         .header-info h1 {
           font-family: 'Syne', sans-serif;
-          font-size: 26px;
-          font-weight: 700;
-          margin-bottom: 4px;
+          font-size: 32px;
+          font-weight: 800;
+          margin-bottom: 6px;
+          letter-spacing: -0.5px;
         }
 
-        .header-info p { color: var(--muted); font-size: 13px; }
+        .header-info h1 span { color: var(--primary); }
+
+        .header-info p {
+          color: var(--muted);
+          font-size: 14px;
+          font-weight: 500;
+        }
 
         .btn-back {
-          padding: 10px 20px;
+          padding: 12px 22px;
           background: var(--card);
           border: 1px solid var(--border);
           color: var(--white);
-          border-radius: 10px;
+          border-radius: 12px;
           font-size: 13px;
+          font-weight: 500;
           cursor: pointer;
           font-family: inherit;
           display: flex;
           align-items: center;
-          gap: 6px;
+          gap: 8px;
           transition: all 0.2s;
         }
 
         .btn-back:hover {
-          background: var(--card-light);
+          background: var(--card-hover);
           border-color: var(--primary);
+          transform: translateX(-2px);
         }
 
+        /* ============ STATS ============ */
         .stats-row {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+          grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
           gap: 16px;
-          margin-bottom: 32px;
+          margin-bottom: 40px;
         }
 
         .stat-card {
-          background: var(--card);
+          background: linear-gradient(135deg, var(--card) 0%, var(--bg-2) 100%);
           border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 20px;
+          border-radius: 18px;
+          padding: 22px;
+          position: relative;
+          overflow: hidden;
         }
+
+        .stat-card::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 1px;
+          background: linear-gradient(90deg, transparent, currentColor, transparent);
+          opacity: 0.4;
+        }
+
+        .stat-card.gold { color: var(--gold); }
+        .stat-card.green { color: var(--success); }
+        .stat-card.red { color: var(--danger); }
 
         .stat-card .stat-label {
           font-size: 11px;
           color: var(--muted);
           text-transform: uppercase;
-          letter-spacing: 1px;
-          margin-bottom: 8px;
+          letter-spacing: 1.5px;
+          font-weight: 600;
+          margin-bottom: 10px;
         }
 
         .stat-card .stat-value {
           font-family: 'Syne', sans-serif;
-          font-size: 32px;
+          font-size: 38px;
           font-weight: 800;
+          line-height: 1;
         }
 
-        .stat-card.green .stat-value { color: var(--success); }
-        .stat-card.red .stat-value { color: var(--danger); }
-        .stat-card.gold .stat-value { color: var(--gold); }
-
-        /* POST CARDS */
+        /* ============ POST CARDS - PRODUCT STYLE ============ */
         .posts-grid {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+          gap: 24px;
         }
 
         .post-card {
-          background: var(--card);
+          background: linear-gradient(180deg, var(--card) 0%, var(--bg-2) 100%);
           border: 1px solid var(--border);
-          border-radius: 20px;
-          padding: 24px;
-          display: grid;
-          grid-template-columns: auto 1fr auto;
-          gap: 24px;
-          align-items: center;
-          transition: all 0.3s;
-          animation: fadeUp 0.4s ease-out both;
-          position: relative;
+          border-radius: 24px;
           overflow: hidden;
+          position: relative;
+          transition: all 0.4s cubic-bezier(0.22,1,0.36,1);
+          animation: fadeUp 0.5s ease-out both;
+          display: flex;
+          flex-direction: column;
         }
 
+        .post-card:hover {
+          border-color: var(--border-light);
+          transform: translateY(-6px);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+
+        .post-card.active:hover {
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(16,185,129,0.3);
+        }
+
+        .post-card.paused {
+          opacity: 0.85;
+        }
+
+        .post-card.paused:hover {
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 0 1px rgba(239,68,68,0.3);
+        }
+
+        /* Top accent line */
         .post-card::before {
           content: '';
           position: absolute;
-          top: 0; left: 0;
-          width: 4px;
-          height: 100%;
-          background: var(--success);
-          transition: background 0.3s;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 3px;
+          background: linear-gradient(90deg, var(--success), transparent);
+          opacity: 0.8;
         }
 
-        .post-card.paused::before { background: var(--danger); }
-
-        .post-card:hover {
-          border-color: rgba(196,30,58,0.3);
-          transform: translateY(-2px);
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        .post-card.paused::before {
+          background: linear-gradient(90deg, var(--danger), transparent);
         }
 
-        .post-icon-box {
-          width: 70px;
-          height: 70px;
+        /* Glow effect when active */
+        .post-card.active::after {
+          content: '';
+          position: absolute;
+          top: -1px;
+          right: -1px;
+          width: 120px;
+          height: 120px;
+          background: radial-gradient(circle, rgba(16,185,129,0.15), transparent 70%);
+          pointer-events: none;
+        }
+
+        /* HEADER OF CARD */
+        .pc-header {
+          padding: 24px 24px 20px;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          gap: 16px;
+        }
+
+        .pc-icon {
+          width: 56px;
+          height: 56px;
           border-radius: 16px;
-          background: linear-gradient(135deg, rgba(196,30,58,0.2) 0%, rgba(212,175,95,0.1) 100%);
+          background: linear-gradient(135deg, rgba(196,30,58,0.25) 0%, rgba(212,175,95,0.1) 100%);
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 32px;
-          border: 1px solid rgba(196,30,58,0.2);
+          font-size: 26px;
+          border: 1px solid rgba(196,30,58,0.25);
+          flex-shrink: 0;
         }
 
-        .post-info { min-width: 0; }
-
-        .post-id-row {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          margin-bottom: 8px;
-          flex-wrap: wrap;
-        }
-
-        .post-id {
-          font-family: 'Syne', sans-serif;
-          font-size: 18px;
-          font-weight: 700;
-        }
-
-        .badge {
+        .pc-badge {
           font-size: 10px;
-          padding: 4px 10px;
+          padding: 6px 12px;
           border-radius: 100px;
-          font-weight: 600;
+          font-weight: 700;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
-        }
-
-        .badge-active {
-          background: rgba(16,185,129,0.15);
-          color: var(--success);
-          border: 1px solid rgba(16,185,129,0.3);
-        }
-
-        .badge-paused {
-          background: rgba(239,68,68,0.15);
-          color: var(--danger);
-          border: 1px solid rgba(239,68,68,0.3);
-        }
-
-        .post-meta {
-          display: flex;
-          gap: 24px;
-          color: var(--muted);
-          font-size: 13px;
-          flex-wrap: wrap;
-        }
-
-        .meta-item {
-          display: flex;
+          letter-spacing: 0.8px;
+          display: inline-flex;
           align-items: center;
           gap: 6px;
         }
 
-        .meta-item strong {
-          color: var(--white);
+        .pc-badge.active {
+          background: rgba(16,185,129,0.12);
+          color: var(--success);
+          border: 1px solid rgba(16,185,129,0.3);
+        }
+
+        .pc-badge.paused {
+          background: rgba(239,68,68,0.12);
+          color: var(--danger);
+          border: 1px solid rgba(239,68,68,0.3);
+        }
+
+        .pc-badge .dot {
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: currentColor;
+        }
+
+        .pc-badge.active .dot {
+          box-shadow: 0 0 8px currentColor;
+          animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+
+        /* TITLE */
+        .pc-title {
+          padding: 0 24px;
+          margin-bottom: 4px;
+        }
+
+        .pc-title .pc-id {
+          font-family: 'Syne', sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: -0.5px;
+          margin-bottom: 4px;
+        }
+
+        .pc-title .pc-id .hash {
+          color: var(--muted);
+          font-weight: 600;
+        }
+
+        .pc-title .pc-subtitle {
+          font-size: 12px;
+          color: var(--muted);
+          letter-spacing: 0.5px;
+        }
+
+        /* TIMER SECTION - PRODUCT STYLE */
+        .pc-timer {
+          margin: 24px;
+          padding: 24px;
+          background: rgba(255,255,255,0.02);
+          border: 1px solid var(--border);
+          border-radius: 18px;
+          position: relative;
+          overflow: hidden;
+        }
+
+        .pc-timer.paused {
+          background: rgba(239,68,68,0.04);
+          border-color: rgba(239,68,68,0.15);
+        }
+
+        .pc-timer-label {
+          font-size: 10px;
+          color: var(--muted);
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          font-weight: 700;
+          margin-bottom: 12px;
+        }
+
+        .pc-timer-value {
+          display: flex;
+          align-items: baseline;
+          gap: 8px;
+          margin-bottom: 16px;
+        }
+
+        .pc-timer-value .num {
+          font-family: 'Syne', sans-serif;
+          font-size: 44px;
+          font-weight: 800;
+          line-height: 1;
+          color: var(--gold);
+          font-variant-numeric: tabular-nums;
+          letter-spacing: -1px;
+        }
+
+        .pc-timer-value .unit {
+          font-size: 14px;
+          color: var(--muted);
           font-weight: 500;
         }
 
-        .meta-item.timer strong {
-          color: var(--gold);
-          font-family: 'Syne', sans-serif;
-          font-weight: 700;
+        .pc-timer.paused .pc-timer-value .num {
+          color: var(--danger);
         }
 
-        .post-actions {
-          display: flex;
-          gap: 8px;
-          flex-shrink: 0;
+        /* Progress bar */
+        .pc-progress {
+          width: 100%;
+          height: 6px;
+          background: rgba(255,255,255,0.05);
+          border-radius: 100px;
+          overflow: hidden;
+          position: relative;
+        }
+
+        .pc-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--success), var(--gold));
+          border-radius: 100px;
+          transition: width 1s linear;
+          position: relative;
+        }
+
+        .pc-progress-fill::after {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+          animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+
+        .pc-progress.paused .pc-progress-fill {
+          background: var(--danger);
+          opacity: 0.3;
+        }
+
+        .pc-progress.paused .pc-progress-fill::after {
+          display: none;
+        }
+
+        /* META INFO */
+        .pc-meta {
+          padding: 0 24px;
+          margin-bottom: 20px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
+
+        .pc-meta-item {
+          background: rgba(255,255,255,0.02);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          padding: 12px 14px;
+        }
+
+        .pc-meta-item .label {
+          font-size: 10px;
+          color: var(--muted);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          font-weight: 600;
+          margin-bottom: 4px;
+        }
+
+        .pc-meta-item .value {
+          font-size: 13px;
+          color: var(--white);
+          font-weight: 600;
+        }
+
+        /* ACTIONS */
+        .pc-actions {
+          padding: 0 24px 24px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: auto;
         }
 
         .action-btn {
-          padding: 10px 16px;
+          padding: 14px 16px;
           border: none;
-          border-radius: 10px;
+          border-radius: 12px;
           font-size: 13px;
-          font-weight: 500;
+          font-weight: 600;
           font-family: inherit;
           cursor: pointer;
           transition: all 0.2s;
           display: flex;
           align-items: center;
-          gap: 6px;
+          justify-content: center;
+          gap: 8px;
+          letter-spacing: 0.2px;
         }
 
-        .btn-toggle-active {
+        .btn-pause {
           background: var(--danger);
           color: white;
+          box-shadow: 0 4px 16px rgba(239,68,68,0.25);
         }
 
-        .btn-toggle-active:hover { background: #dc2626; }
+        .btn-pause:hover {
+          background: #dc2626;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(239,68,68,0.35);
+        }
 
-        .btn-toggle-paused {
+        .btn-resume {
           background: var(--success);
           color: white;
+          box-shadow: 0 4px 16px rgba(16,185,129,0.25);
         }
 
-        .btn-toggle-paused:hover { background: #059669; }
+        .btn-resume:hover {
+          background: #059669;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 20px rgba(16,185,129,0.35);
+        }
 
         .btn-edit {
-          background: var(--card-light);
-          color: var(--muted);
-          border: 1px solid var(--border);
+          background: var(--card-2);
+          color: var(--white);
+          border: 1px solid var(--border-light);
         }
 
         .btn-edit:hover {
           border-color: var(--gold);
           color: var(--gold);
+          background: rgba(212,175,95,0.05);
         }
 
+        /* Empty state */
         .empty-state {
+          grid-column: 1 / -1;
           text-align: center;
-          padding: 60px 20px;
+          padding: 80px 20px;
           color: var(--muted);
-        }
-
-        .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
-
-        /* Tooltip / Toast */
-        .toast {
-          position: fixed;
-          bottom: 30px;
-          left: 50%;
-          transform: translateX(-50%);
           background: var(--card);
-          border: 1px solid var(--border);
-          padding: 14px 24px;
-          border-radius: 12px;
-          z-index: 1000;
-          box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-          animation: slideUp 0.3s ease-out;
+          border: 1px dashed var(--border-light);
+          border-radius: 24px;
         }
 
-        @keyframes slideUp {
-          from { transform: translate(-50%, 20px); opacity: 0; }
-          to { transform: translate(-50%, 0); opacity: 1; }
-        }
+        .empty-state-icon { font-size: 56px; margin-bottom: 20px; }
+        .empty-state-text { font-size: 16px; font-weight: 500; margin-bottom: 8px; color: var(--white); }
+        .empty-state-sub { font-size: 13px; }
 
         /* Mobile */
-        @media (max-width: 768px) {
-          .post-card {
-            grid-template-columns: 1fr;
-            text-align: center;
-            gap: 16px;
-          }
-          .post-icon-box { margin: 0 auto; }
-          .post-meta { justify-content: center; }
-          .post-actions { justify-content: center; flex-wrap: wrap; }
-          .stat-card .stat-value { font-size: 26px; }
+        @media (max-width: 640px) {
+          .page { padding: 16px; }
+          .header-bar { flex-direction: column; align-items: flex-start; }
+          .header-info h1 { font-size: 24px; }
+          .posts-grid { grid-template-columns: 1fr; gap: 16px; }
+          .stat-card .stat-value { font-size: 28px; }
+          .pc-timer-value .num { font-size: 36px; }
         }
       `}</style>
 
       <div className="page">
-        <div className="glow-tl" />
-        <div className="glow-br" />
+        <div className="glow-1" />
+        <div className="glow-2" />
 
         <div className="content">
           {step === "search" && (
             <div className="search-container">
               <div className="search-card">
-                <div className="logo-ring">
+                <div className="logo-orb">
                   <span>🔍</span>
                 </div>
 
@@ -623,7 +839,7 @@ export default function Home() {
                   disabled={loading}
                   style={{ marginTop: 12 }}
                 >
-                  {loading ? "Buscando..." : "🔓 Acceder"}
+                  {loading ? "Buscando..." : "Acceder al panel"}
                 </button>
               </div>
             </div>
@@ -633,8 +849,10 @@ export default function Home() {
             <div>
               <div className="header-bar">
                 <div className="header-info">
-                  <h1>👋 Hola, {clientData.displayName}</h1>
-                  <p>{Object.keys(clientData.posts || {}).length} publicaciones activas</p>
+                  <h1>
+                    Hola, <span>{clientData.displayName}</span>
+                  </h1>
+                  <p>{Object.keys(clientData.posts || {}).length} publicaciones en tu panel</p>
                 </div>
                 <button className="btn-back" onClick={goBack}>
                   ← Salir
@@ -643,17 +861,17 @@ export default function Home() {
 
               <div className="stats-row">
                 <div className="stat-card gold">
-                  <div className="stat-label">📋 Total</div>
+                  <div className="stat-label">Total publicaciones</div>
                   <div className="stat-value">{Object.keys(clientData.posts || {}).length}</div>
                 </div>
                 <div className="stat-card green">
-                  <div className="stat-label">▶️ Activos</div>
+                  <div className="stat-label">Activas</div>
                   <div className="stat-value">
                     {Object.values(clientData.posts || {}).filter((p) => p.status === "active").length}
                   </div>
                 </div>
                 <div className="stat-card red">
-                  <div className="stat-label">⏸️ Pausados</div>
+                  <div className="stat-label">Pausadas</div>
                   <div className="stat-value">
                     {Object.values(clientData.posts || {}).filter((p) => p.status === "paused").length}
                   </div>
@@ -664,49 +882,75 @@ export default function Home() {
                 {Object.entries(clientData.posts || {}).length === 0 ? (
                   <div className="empty-state">
                     <div className="empty-state-icon">📭</div>
-                    <div>No tienes publicaciones registradas</div>
+                    <div className="empty-state-text">Sin publicaciones</div>
+                    <div className="empty-state-sub">Aún no hay publicaciones registradas</div>
                   </div>
                 ) : (
                   Object.entries(clientData.posts).map(([postId, post]) => {
                     const isPaused = post.status === "paused";
-                    const timeText = isPaused ? "Pausado" : formatTimeRemaining(post.nextBumpAt);
+                    const time = formatTime(post.nextBumpAt);
+                    const progress = isPaused ? 0 : getProgress(post.nextBumpAt, post.lastBumpAt || post.addedAt);
 
                     return (
-                      <div key={postId} className={`post-card ${isPaused ? "paused" : ""}`}>
-                        <div className="post-icon-box">📌</div>
+                      <div key={postId} className={`post-card ${isPaused ? "paused" : "active"}`}>
+                        <div className="pc-header">
+                          <div className="pc-icon">📌</div>
+                          <span className={`pc-badge ${isPaused ? "paused" : "active"}`}>
+                            <span className="dot"></span>
+                            {isPaused ? "Pausado" : "Activo"}
+                          </span>
+                        </div>
 
-                        <div className="post-info">
-                          <div className="post-id-row">
-                            <div className="post-id">Post #{postId}</div>
-                            <span className={`badge ${isPaused ? "badge-paused" : "badge-active"}`}>
-                              {isPaused ? "Pausado" : "Activo"}
-                            </span>
+                        <div className="pc-title">
+                          <div className="pc-id">
+                            <span className="hash">#</span>
+                            {postId}
                           </div>
+                          <div className="pc-subtitle">Publicación clasificada</div>
+                        </div>
 
-                          <div className="post-meta">
-                            <div className="meta-item timer">
-                              ⏰ Próximo bump: <strong>{timeText}</strong>
-                            </div>
-                            {post.lastBumpAt && (
-                              <div className="meta-item">
-                                Último: <strong>{new Date(post.lastBumpAt).toLocaleTimeString()}</strong>
-                              </div>
-                            )}
+                        <div className={`pc-timer ${isPaused ? "paused" : ""}`}>
+                          <div className="pc-timer-label">
+                            {isPaused ? "⏸️ Publicación pausada" : "⏰ Próximo bump en"}
+                          </div>
+                          <div className="pc-timer-value">
+                            <span className="num">{isPaused ? "—" : time.value}</span>
+                            <span className="unit">{!isPaused && time.unit}</span>
+                          </div>
+                          <div className={`pc-progress ${isPaused ? "paused" : ""}`}>
+                            <div className="pc-progress-fill" style={{ width: `${progress}%` }} />
                           </div>
                         </div>
 
-                        <div className="post-actions">
+                        <div className="pc-meta">
+                          <div className="pc-meta-item">
+                            <div className="label">Último bump</div>
+                            <div className="value">
+                              {post.lastBumpAt
+                                ? new Date(post.lastBumpAt).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : "—"}
+                            </div>
+                          </div>
+                          <div className="pc-meta-item">
+                            <div className="label">Registrado</div>
+                            <div className="value">
+                              {new Date(post.addedAt).toLocaleDateString([], { day: "2-digit", month: "short" })}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pc-actions">
                           <button
-                            className={`action-btn ${isPaused ? "btn-toggle-paused" : "btn-toggle-active"}`}
+                            className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
                             onClick={() => togglePostStatus(postId, post.status)}
                           >
-                            {isPaused ? "▶️ Reanudar" : "⏸️ Pausar"}
+                            {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
                           </button>
-                          <button
-                            className="action-btn btn-edit"
-                            onClick={() => alert("✨ Próximamente disponible!")}
-                          >
-                            ✏️ Editar
+                          <button className="action-btn btn-edit" onClick={() => alert("✨ Próximamente disponible!")}>
+                            ✏ Editar
                           </button>
                         </div>
                       </div>
