@@ -18,11 +18,15 @@ interface ClientData {
   posts: Record<string, PostData>;
 }
 
+type Step = "search" | "admin-list" | "cards";
+
 export default function Home() {
-  const [step, setStep] = useState<"search" | "cards">("search");
+  const [step, setStep] = useState<Step>("search");
   const [searchName, setSearchName] = useState("");
   const [clientKey, setClientKey] = useState("");
   const [clientData, setClientData] = useState<ClientData | null>(null);
+  const [allClients, setAllClients] = useState<Record<string, ClientData>>({});
+  const [adminFilter, setAdminFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -42,6 +46,8 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== "undefined" && localStorage.getItem("isAdmin") === "true") {
       setIsAdmin(true);
+      setStep("admin-list");
+      loadAllClients();
     }
   }, []);
 
@@ -54,6 +60,22 @@ export default function Home() {
     }, 5000);
     return () => clearInterval(interval);
   }, [step, clientKey]);
+
+  useEffect(() => {
+    if (step !== "admin-list" || !isAdmin) return;
+    const interval = setInterval(() => loadAllClients(), 10000);
+    return () => clearInterval(interval);
+  }, [step, isAdmin]);
+
+  const loadAllClients = async () => {
+    try {
+      const res = await fetch(`${FB_URL}/clients.json`);
+      const data = await res.json();
+      setAllClients(data || {});
+    } catch (e) {
+      console.error("Error loading clients", e);
+    }
+  };
 
   const searchClient = async () => {
     if (!searchName.trim()) {
@@ -84,6 +106,12 @@ export default function Home() {
     setLoading(false);
   };
 
+  const selectClient = (key: string, data: ClientData) => {
+    setClientKey(key);
+    setClientData(data);
+    setStep("cards");
+  };
+
   const togglePostStatus = async (postId: string, currentStatus: string) => {
     if (!clientData) return;
 
@@ -110,6 +138,8 @@ export default function Home() {
       setShowAdminLogin(false);
       setAdminPass("");
       setAdminError("");
+      setStep("admin-list");
+      loadAllClients();
     } else {
       setAdminError("Contraseña incorrecta");
     }
@@ -118,6 +148,9 @@ export default function Home() {
   const logoutAdmin = () => {
     setIsAdmin(false);
     localStorage.removeItem("isAdmin");
+    setStep("search");
+    setClientData(null);
+    setClientKey("");
   };
 
   const verAnuncio = (postId: string) => {
@@ -129,7 +162,7 @@ export default function Home() {
 
     const post = clientData.posts[postId];
     const currentExpiry = post.rentExpiresAt && post.rentExpiresAt > now ? post.rentExpiresAt : now;
-    const newExpiry = currentExpiry + 7 * 24 * 60 * 60 * 1000; // +7 días
+    const newExpiry = currentExpiry + 7 * 24 * 60 * 60 * 1000;
 
     await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/rentExpiresAt.json`, {
       method: "PUT",
@@ -239,12 +272,44 @@ export default function Home() {
   };
 
   const goBack = () => {
-    setStep("search");
-    setSearchName("");
-    setClientData(null);
-    setClientKey("");
-    setError("");
+    if (isAdmin) {
+      setStep("admin-list");
+      setClientData(null);
+      setClientKey("");
+    } else {
+      setStep("search");
+      setSearchName("");
+      setClientData(null);
+      setClientKey("");
+      setError("");
+    }
   };
+
+  // Stats globales para admin
+  const getGlobalStats = () => {
+    let totalPosts = 0;
+    let activePosts = 0;
+    let pausedPosts = 0;
+    let totalClients = Object.keys(allClients).length;
+
+    Object.values(allClients).forEach((client) => {
+      if (client.posts) {
+        const posts = Object.values(client.posts);
+        totalPosts += posts.length;
+        activePosts += posts.filter((p) => p.status === "active").length;
+        pausedPosts += posts.filter((p) => p.status === "paused").length;
+      }
+    });
+
+    return { totalClients, totalPosts, activePosts, pausedPosts };
+  };
+
+  // Filtrar clientes por nombre
+  const filteredClients = Object.entries(allClients).filter(([key, data]) => {
+    if (!adminFilter) return true;
+    const query = adminFilter.toLowerCase();
+    return data.displayName?.toLowerCase().includes(query) || key.includes(query);
+  });
 
   return (
     <>
@@ -506,13 +571,13 @@ export default function Home() {
         .admin-link button:hover { color: var(--accent-2); }
 
         /* ============================================
-           DASHBOARD HEADER
+           HEADERS
            ============================================ */
         .dash-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 48px;
+          margin-bottom: 32px;
           padding: 24px 28px;
           background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%);
           border: 1px solid var(--border);
@@ -560,11 +625,7 @@ export default function Home() {
           letter-spacing: 1px;
         }
 
-        .header-actions {
-          display: flex;
-          gap: 10px;
-          align-items: center;
-        }
+        .header-actions { display: flex; gap: 10px; align-items: center; }
 
         .btn-back, .btn-secondary {
           padding: 12px 22px;
@@ -582,21 +643,14 @@ export default function Home() {
           transition: all 0.2s;
         }
 
-        .btn-back:hover {
-          background: var(--surface-2);
-          border-color: var(--primary);
-        }
-
-        .btn-secondary:hover {
-          background: var(--surface-2);
-          border-color: var(--accent);
-        }
+        .btn-back:hover { background: var(--surface-2); border-color: var(--primary); }
+        .btn-secondary:hover { background: var(--surface-2); border-color: var(--accent); }
 
         /* STATS */
         .stats-row {
           display: flex;
           gap: 14px;
-          margin-bottom: 40px;
+          margin-bottom: 32px;
           flex-wrap: wrap;
         }
 
@@ -613,10 +667,7 @@ export default function Home() {
           transition: all 0.3s;
         }
 
-        .stat-pill:hover {
-          border-color: var(--border-2);
-          transform: translateY(-2px);
-        }
+        .stat-pill:hover { border-color: var(--border-2); transform: translateY(-2px); }
 
         .stat-pill-icon {
           width: 44px;
@@ -629,6 +680,10 @@ export default function Home() {
           flex-shrink: 0;
         }
 
+        .stat-pill.clients .stat-pill-icon {
+          background: linear-gradient(135deg, rgba(59,130,246,0.2) 0%, rgba(59,130,246,0.05) 100%);
+          border: 1px solid rgba(59,130,246,0.2);
+        }
         .stat-pill.total .stat-pill-icon {
           background: linear-gradient(135deg, rgba(212,175,95,0.2) 0%, rgba(212,175,95,0.05) 100%);
           border: 1px solid rgba(212,175,95,0.2);
@@ -658,12 +713,185 @@ export default function Home() {
           line-height: 1;
           letter-spacing: -0.5px;
         }
+        .stat-pill.clients .stat-pill-value { color: var(--info); }
         .stat-pill.total .stat-pill-value { color: var(--accent); }
         .stat-pill.active .stat-pill-value { color: var(--success); }
         .stat-pill.paused .stat-pill-value { color: var(--danger); }
 
         /* ============================================
-           POST CARDS
+           ADMIN LIST - Lista de clientes
+           ============================================ */
+        .admin-filter-bar {
+          margin-bottom: 24px;
+          display: flex;
+          gap: 12px;
+          align-items: center;
+        }
+
+        .admin-filter-bar input {
+          flex: 1;
+          padding: 16px 22px;
+          background: var(--bg-2);
+          border: 1px solid var(--border);
+          border-radius: 14px;
+          color: var(--white);
+          font-size: 14px;
+          font-family: inherit;
+          outline: none;
+          transition: all 0.2s;
+        }
+
+        .admin-filter-bar input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 4px rgba(212,175,95,0.1);
+        }
+
+        .clients-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+          gap: 18px;
+        }
+
+        .client-card {
+          position: relative;
+          padding: 24px;
+          background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%);
+          border: 1px solid var(--border);
+          border-radius: 22px;
+          cursor: pointer;
+          transition: all 0.3s cubic-bezier(0.22,1,0.36,1);
+          overflow: hidden;
+          animation: fadeUp 0.5s ease-out both;
+        }
+
+        .client-card::before {
+          content: '';
+          position: absolute;
+          top: 0; left: 0;
+          width: 100%;
+          height: 3px;
+          background: linear-gradient(90deg, var(--primary), var(--accent), transparent);
+          opacity: 0.6;
+        }
+
+        .client-card:hover {
+          transform: translateY(-6px);
+          border-color: var(--accent);
+          box-shadow: 0 20px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(212,175,95,0.2);
+        }
+
+        .client-card-header {
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+
+        .client-avatar {
+          width: 52px;
+          height: 52px;
+          border-radius: 14px;
+          background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-family: 'Syne', sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          color: white;
+          flex-shrink: 0;
+          box-shadow: 0 6px 20px rgba(196,30,58,0.3);
+        }
+
+        .client-info { flex: 1; min-width: 0; }
+
+        .client-name {
+          font-family: 'Syne', sans-serif;
+          font-size: 20px;
+          font-weight: 700;
+          letter-spacing: -0.3px;
+          margin-bottom: 4px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .client-handle {
+          font-size: 12px;
+          color: var(--gray-500);
+          font-family: 'JetBrains Mono', monospace;
+        }
+
+        .client-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 8px;
+          margin-bottom: 18px;
+        }
+
+        .client-stat {
+          padding: 10px 8px;
+          background: var(--surface);
+          border-radius: 10px;
+          text-align: center;
+        }
+
+        .client-stat-value {
+          font-family: 'Syne', sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          line-height: 1;
+          margin-bottom: 4px;
+        }
+
+        .client-stat.total .client-stat-value { color: var(--accent); }
+        .client-stat.active .client-stat-value { color: var(--success); }
+        .client-stat.paused .client-stat-value { color: var(--danger); }
+
+        .client-stat-label {
+          font-size: 9px;
+          color: var(--gray-500);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          font-weight: 700;
+        }
+
+        .client-action {
+          width: 100%;
+          padding: 12px;
+          background: var(--surface-2);
+          border: 1px solid var(--border-2);
+          color: var(--white);
+          border-radius: 12px;
+          font-size: 13px;
+          font-weight: 600;
+          font-family: inherit;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+        }
+
+        .client-card:hover .client-action {
+          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+          border-color: var(--accent);
+          color: #1a1a1a;
+        }
+
+        .clients-empty {
+          grid-column: 1 / -1;
+          text-align: center;
+          padding: 80px 20px;
+          color: var(--gray-500);
+          background: var(--bg-2);
+          border: 1px dashed var(--border-2);
+          border-radius: 24px;
+        }
+
+        /* ============================================
+           POST CARDS (same as before)
            ============================================ */
         .posts-grid {
           display: grid;
@@ -688,7 +916,6 @@ export default function Home() {
 
         .post-card.paused { opacity: 0.92; }
 
-        /* MESH HEADER */
         .pc-mesh {
           position: relative;
           height: 110px;
@@ -762,12 +989,7 @@ export default function Home() {
         .pc-badge.active { color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
         .pc-badge.paused { color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
 
-        .pc-badge-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: currentColor;
-        }
+        .pc-badge-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
         .pc-badge.active .pc-badge-dot {
           box-shadow: 0 0 12px currentColor;
@@ -779,7 +1001,6 @@ export default function Home() {
           50% { opacity: 0.5; transform: scale(0.85); }
         }
 
-        /* TIMER */
         .pc-timer-section {
           padding: 4px 24px 20px;
           display: flex;
@@ -794,17 +1015,9 @@ export default function Home() {
           margin-bottom: 8px;
         }
 
-        .pc-ring-svg {
-          width: 100%;
-          height: 100%;
-          transform: rotate(-90deg);
-        }
+        .pc-ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 
-        .pc-ring-bg {
-          fill: none;
-          stroke: rgba(255,255,255,0.05);
-          stroke-width: 8;
-        }
+        .pc-ring-bg { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 8; }
 
         .pc-ring-progress {
           fill: none;
@@ -814,10 +1027,7 @@ export default function Home() {
         }
 
         .post-card.active .pc-ring-progress { stroke: url(#gradActive); }
-        .post-card.paused .pc-ring-progress {
-          stroke: url(#gradPaused);
-          opacity: 0.5;
-        }
+        .post-card.paused .pc-ring-progress { stroke: url(#gradPaused); opacity: 0.5; }
 
         .pc-ring-center {
           position: absolute;
@@ -873,7 +1083,6 @@ export default function Home() {
 
         .pc-time-row { display: flex; align-items: flex-end; }
 
-        /* RENT SECTION */
         .pc-rent {
           margin: 0 24px 20px;
           padding: 16px 18px;
@@ -935,9 +1144,6 @@ export default function Home() {
           cursor: pointer;
           font-family: inherit;
           transition: all 0.2s;
-          display: flex;
-          align-items: center;
-          gap: 4px;
         }
 
         .rent-btn:hover { border-color: var(--accent); color: var(--accent); }
@@ -952,12 +1158,8 @@ export default function Home() {
           background: linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(16,185,129,0.1) 100%);
         }
 
-        .rent-btn.remove:hover {
-          border-color: var(--danger);
-          color: var(--danger);
-        }
+        .rent-btn.remove:hover { border-color: var(--danger); color: var(--danger); }
 
-        /* META */
         .pc-meta-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -989,7 +1191,6 @@ export default function Home() {
           font-variant-numeric: tabular-nums;
         }
 
-        /* ACTIONS */
         .pc-actions {
           padding: 0 24px 24px;
           display: grid;
@@ -1059,13 +1260,8 @@ export default function Home() {
           border: 1px solid var(--border-2);
         }
 
-        .btn-edit:hover {
-          border-color: var(--accent);
-          color: var(--accent);
-          background: rgba(212,175,95,0.06);
-        }
+        .btn-edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(212,175,95,0.06); }
 
-        /* EMPTY */
         .empty-state {
           grid-column: 1 / -1;
           text-align: center;
@@ -1094,10 +1290,7 @@ export default function Home() {
           animation: fadeIn 0.2s ease-out;
         }
 
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
         .modal-card {
           background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
@@ -1192,12 +1385,11 @@ export default function Home() {
 
         .modal-btn-secondary:hover { background: var(--bg-3); }
 
-        /* MOBILE */
         @media (max-width: 640px) {
           .page { padding: 20px 16px; }
           .dash-header { flex-direction: column; align-items: flex-start; padding: 20px; }
           .dash-greeting h1 { font-size: 24px; }
-          .posts-grid { grid-template-columns: 1fr; gap: 16px; }
+          .posts-grid, .clients-grid { grid-template-columns: 1fr; gap: 16px; }
           .pc-ring-container { width: 180px; height: 180px; }
           .pc-time-value, .pc-time-divider { font-size: 38px; }
           .stat-pill { min-width: 100%; }
@@ -1223,6 +1415,7 @@ export default function Home() {
 
       <div className="page">
         <div className="content">
+          {/* ============ SEARCH SCREEN (cliente normal) ============ */}
           {step === "search" && (
             <div className="search-container">
               <div className="search-card">
@@ -1233,9 +1426,7 @@ export default function Home() {
                 <div className="brand">
                   Angel<span>Vercel</span>
                 </div>
-                <div className="tagline">
-                  {isAdmin ? "🔐 Panel Administrador" : "Panel premium de control"}
-                </div>
+                <div className="tagline">Panel premium de control</div>
 
                 <div className="input-group">
                   <label className="input-label">Nombre del cliente</label>
@@ -1257,38 +1448,151 @@ export default function Home() {
                 </button>
 
                 <div className="admin-link">
-                  {isAdmin ? (
-                    <>
-                      ✓ Modo administrador activado · <button onClick={logoutAdmin}>Salir</button>
-                    </>
-                  ) : (
-                    <button onClick={() => setShowAdminLogin(true)}>🔐 Acceso administrador</button>
-                  )}
+                  <button onClick={() => setShowAdminLogin(true)}>🔐 Acceso administrador</button>
                 </div>
               </div>
             </div>
           )}
 
+          {/* ============ ADMIN LIST - Lista de todos los clientes ============ */}
+          {step === "admin-list" && isAdmin && (
+            <div>
+              <div className="dash-header">
+                <div className="dash-greeting">
+                  <h1>
+                    Panel <span>Administrador</span>
+                  </h1>
+                  <p>
+                    Lista completa de clientes
+                    <span className="admin-badge">⚡ ADMIN</span>
+                  </p>
+                </div>
+                <div className="header-actions">
+                  <button className="btn-secondary" onClick={loadAllClients}>
+                    🔄 Actualizar
+                  </button>
+                  <button className="btn-back" onClick={logoutAdmin}>
+                    🔓 Salir
+                  </button>
+                </div>
+              </div>
+
+              {(() => {
+                const stats = getGlobalStats();
+                return (
+                  <div className="stats-row">
+                    <div className="stat-pill clients">
+                      <div className="stat-pill-icon">👥</div>
+                      <div className="stat-pill-info">
+                        <div className="stat-pill-label">Clientes</div>
+                        <div className="stat-pill-value">{stats.totalClients}</div>
+                      </div>
+                    </div>
+                    <div className="stat-pill total">
+                      <div className="stat-pill-icon">📊</div>
+                      <div className="stat-pill-info">
+                        <div className="stat-pill-label">Publicaciones</div>
+                        <div className="stat-pill-value">{stats.totalPosts}</div>
+                      </div>
+                    </div>
+                    <div className="stat-pill active">
+                      <div className="stat-pill-icon">✨</div>
+                      <div className="stat-pill-info">
+                        <div className="stat-pill-label">Activas</div>
+                        <div className="stat-pill-value">{stats.activePosts}</div>
+                      </div>
+                    </div>
+                    <div className="stat-pill paused">
+                      <div className="stat-pill-icon">⏸️</div>
+                      <div className="stat-pill-info">
+                        <div className="stat-pill-label">Pausadas</div>
+                        <div className="stat-pill-value">{stats.pausedPosts}</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="admin-filter-bar">
+                <input
+                  type="text"
+                  placeholder="🔍 Filtrar clientes por nombre..."
+                  value={adminFilter}
+                  onChange={(e) => setAdminFilter(e.target.value)}
+                />
+              </div>
+
+              <div className="clients-grid">
+                {filteredClients.length === 0 ? (
+                  <div className="clients-empty">
+                    <div style={{ fontSize: 56, marginBottom: 20 }}>📭</div>
+                    <div style={{ fontSize: 18, fontWeight: 600, marginBottom: 6, color: "var(--white)" }}>
+                      {Object.keys(allClients).length === 0 ? "Sin clientes" : "Sin resultados"}
+                    </div>
+                    <div style={{ fontSize: 14 }}>
+                      {Object.keys(allClients).length === 0
+                        ? "Aún no hay clientes registrados"
+                        : "Intenta con otro nombre"}
+                    </div>
+                  </div>
+                ) : (
+                  filteredClients.map(([key, data]) => {
+                    const posts = data.posts ? Object.values(data.posts) : [];
+                    const total = posts.length;
+                    const active = posts.filter((p) => p.status === "active").length;
+                    const paused = posts.filter((p) => p.status === "paused").length;
+                    const initial = (data.displayName || key).charAt(0).toUpperCase();
+
+                    return (
+                      <div key={key} className="client-card" onClick={() => selectClient(key, data)}>
+                        <div className="client-card-header">
+                          <div className="client-avatar">{initial}</div>
+                          <div className="client-info">
+                            <div className="client-name">{data.displayName || key}</div>
+                            <div className="client-handle">@{key}</div>
+                          </div>
+                        </div>
+
+                        <div className="client-stats">
+                          <div className="client-stat total">
+                            <div className="client-stat-value">{total}</div>
+                            <div className="client-stat-label">Total</div>
+                          </div>
+                          <div className="client-stat active">
+                            <div className="client-stat-value">{active}</div>
+                            <div className="client-stat-label">Activas</div>
+                          </div>
+                          <div className="client-stat paused">
+                            <div className="client-stat-value">{paused}</div>
+                            <div className="client-stat-label">Pausadas</div>
+                          </div>
+                        </div>
+
+                        <button className="client-action">Abrir panel →</button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ============ CLIENT CARDS ============ */}
           {step === "cards" && clientData && (
             <div>
               <div className="dash-header">
                 <div className="dash-greeting">
                   <h1>
-                    Hola, <span>{clientData.displayName}</span>
+                    {isAdmin ? "Panel de" : "Hola,"} <span>{clientData.displayName}</span>
                   </h1>
                   <p>
-                    Panel de control de publicaciones
+                    Control de publicaciones
                     {isAdmin && <span className="admin-badge">⚡ ADMIN</span>}
                   </p>
                 </div>
                 <div className="header-actions">
-                  {isAdmin && (
-                    <button className="btn-secondary" onClick={logoutAdmin}>
-                      🔓 Salir admin
-                    </button>
-                  )}
                   <button className="btn-back" onClick={goBack}>
-                    ← Cerrar sesión
+                    ← {isAdmin ? "Volver a lista" : "Cerrar sesión"}
                   </button>
                 </div>
               </div>
@@ -1390,7 +1694,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* RENTA */}
                         <div className={`pc-rent ${rent.status}`}>
                           <div className="pc-rent-info">
                             <div className="pc-rent-label">
