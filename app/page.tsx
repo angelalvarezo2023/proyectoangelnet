@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 
 const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASSWORD = "admin2024";
+const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
 
 interface PostData {
   status: "active" | "paused";
@@ -157,6 +158,12 @@ export default function Home() {
     window.open(`https://megapersonals.eu/public/escort_post_detail/${postId}`, "_blank");
   };
 
+  const renovarWhatsApp = (postId: string) => {
+    const mensaje = `Hola Angel, quiero renovar la renta del post: #${postId}`;
+    const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(mensaje)}`;
+    window.open(url, "_blank");
+  };
+
   const renovarRenta = async (postId: string) => {
     if (!clientData) return;
 
@@ -256,19 +263,22 @@ export default function Home() {
 
   const getRentInfo = (post: PostData) => {
     if (!post.rentExpiresAt) {
-      return { status: "none" as const, text: "Sin renta", days: 0, hours: 0 };
+      return { status: "none" as const, days: 0, hours: 0, isWarning: false, totalHours: 0 };
     }
 
     const diff = post.rentExpiresAt - now;
     if (diff <= 0) {
-      return { status: "expired" as const, text: "Renta vencida", days: 0, hours: 0 };
+      return { status: "expired" as const, days: 0, hours: 0, isWarning: false, totalHours: 0 };
     }
 
     const totalHours = Math.floor(diff / (60 * 60 * 1000));
     const days = Math.floor(totalHours / 24);
     const hours = totalHours % 24;
 
-    return { status: "active" as const, text: "Renta activa", days, hours };
+    // Advertencia cuando queda 1 día (24h) o menos
+    const isWarning = totalHours <= 24;
+
+    return { status: "active" as const, days, hours, isWarning, totalHours };
   };
 
   const goBack = () => {
@@ -285,7 +295,6 @@ export default function Home() {
     }
   };
 
-  // Stats globales para admin
   const getGlobalStats = () => {
     let totalPosts = 0;
     let activePosts = 0;
@@ -304,7 +313,6 @@ export default function Home() {
     return { totalClients, totalPosts, activePosts, pausedPosts };
   };
 
-  // Filtrar clientes por nombre
   const filteredClients = Object.entries(allClients).filter(([key, data]) => {
     if (!adminFilter) return true;
     const query = adminFilter.toLowerCase();
@@ -339,6 +347,7 @@ export default function Home() {
           --danger: #ef4444;
           --warning: #f59e0b;
           --info: #3b82f6;
+          --whatsapp: #25d366;
         }
 
         html, body { background: var(--bg-0); color: var(--white); min-height: 100vh; }
@@ -389,9 +398,6 @@ export default function Home() {
           margin: 0 auto;
         }
 
-        /* ============================================
-           SEARCH SCREEN
-           ============================================ */
         .search-container {
           min-height: 88vh;
           display: flex;
@@ -570,9 +576,6 @@ export default function Home() {
 
         .admin-link button:hover { color: var(--accent-2); }
 
-        /* ============================================
-           HEADERS
-           ============================================ */
         .dash-header {
           display: flex;
           justify-content: space-between;
@@ -646,7 +649,6 @@ export default function Home() {
         .btn-back:hover { background: var(--surface-2); border-color: var(--primary); }
         .btn-secondary:hover { background: var(--surface-2); border-color: var(--accent); }
 
-        /* STATS */
         .stats-row {
           display: flex;
           gap: 14px;
@@ -718,9 +720,6 @@ export default function Home() {
         .stat-pill.active .stat-pill-value { color: var(--success); }
         .stat-pill.paused .stat-pill-value { color: var(--danger); }
 
-        /* ============================================
-           ADMIN LIST - Lista de clientes
-           ============================================ */
         .admin-filter-bar {
           margin-bottom: 24px;
           display: flex;
@@ -890,9 +889,6 @@ export default function Home() {
           border-radius: 24px;
         }
 
-        /* ============================================
-           POST CARDS (same as before)
-           ============================================ */
         .posts-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
@@ -915,6 +911,12 @@ export default function Home() {
         }
 
         .post-card.paused { opacity: 0.92; }
+
+        /* Warning glow en el borde de la card */
+        .post-card.warning {
+          border-color: rgba(245,158,11,0.4);
+          box-shadow: 0 0 0 1px rgba(245,158,11,0.2), 0 0 30px rgba(245,158,11,0.1);
+        }
 
         .pc-mesh {
           position: relative;
@@ -1082,6 +1084,82 @@ export default function Home() {
         }
 
         .pc-time-row { display: flex; align-items: flex-end; }
+
+        /* ===== BANNER DE ADVERTENCIA ===== */
+        .pc-warning {
+          margin: 0 24px 20px;
+          padding: 18px;
+          border-radius: 16px;
+          background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 100%);
+          border: 1px solid rgba(245,158,11,0.4);
+          position: relative;
+          overflow: hidden;
+          animation: warningPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes warningPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0.2); }
+          50% { box-shadow: 0 0 0 4px rgba(245,158,11,0.08); }
+        }
+
+        .pc-warning-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+        }
+
+        .pc-warning-icon {
+          font-size: 18px;
+          animation: shake 0.8s ease-in-out infinite;
+        }
+
+        @keyframes shake {
+          0%, 100% { transform: rotate(0deg); }
+          25% { transform: rotate(-10deg); }
+          75% { transform: rotate(10deg); }
+        }
+
+        .pc-warning-title {
+          font-size: 12px;
+          font-weight: 800;
+          color: var(--warning);
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .pc-warning-text {
+          font-size: 12px;
+          color: var(--gray-300);
+          line-height: 1.5;
+          margin-bottom: 14px;
+        }
+
+        .pc-warning-text strong { color: var(--white); }
+
+        .pc-warning-btn {
+          width: 100%;
+          padding: 13px;
+          background: linear-gradient(135deg, var(--whatsapp) 0%, #1da851 100%);
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 14px;
+          font-weight: 700;
+          font-family: inherit;
+          cursor: pointer;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          box-shadow: 0 6px 20px rgba(37,211,102,0.3);
+        }
+
+        .pc-warning-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 26px rgba(37,211,102,0.45);
+        }
 
         .pc-rent {
           margin: 0 24px 20px;
@@ -1276,7 +1354,6 @@ export default function Home() {
         .empty-state-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--white); }
         .empty-state-sub { font-size: 14px; }
 
-        /* MODAL */
         .modal-overlay {
           position: fixed;
           inset: 0;
@@ -1415,7 +1492,6 @@ export default function Home() {
 
       <div className="page">
         <div className="content">
-          {/* ============ SEARCH SCREEN (cliente normal) ============ */}
           {step === "search" && (
             <div className="search-container">
               <div className="search-card">
@@ -1454,7 +1530,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* ============ ADMIN LIST - Lista de todos los clientes ============ */}
           {step === "admin-list" && isAdmin && (
             <div>
               <div className="dash-header">
@@ -1577,7 +1652,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* ============ CLIENT CARDS ============ */}
           {step === "cards" && clientData && (
             <div>
               <div className="dash-header">
@@ -1644,7 +1718,10 @@ export default function Home() {
                     const offset = circumference - (progress / 100) * circumference;
 
                     return (
-                      <div key={postId} className={`post-card ${isPaused ? "paused" : "active"}`}>
+                      <div
+                        key={postId}
+                        className={`post-card ${isPaused ? "paused" : "active"} ${rent.isWarning ? "warning" : ""}`}
+                      >
                         <div className="pc-mesh">
                           <div className="pc-mesh-content">
                             <div className="pc-id-block">
@@ -1693,6 +1770,27 @@ export default function Home() {
                             </div>
                           </div>
                         </div>
+
+                        {/* BANNER DE ADVERTENCIA - solo cuando queda 1 día o menos */}
+                        {rent.isWarning && (
+                          <div className="pc-warning">
+                            <div className="pc-warning-header">
+                              <span className="pc-warning-icon">⚠️</span>
+                              <span className="pc-warning-title">Advertencia</span>
+                            </div>
+                            <div className="pc-warning-text">
+                              Este post se <strong>pausará automáticamente</strong> y luego será{" "}
+                              <strong>eliminado</strong> cuando el tiempo de renta llegue a 0. Para renovar, contacta con{" "}
+                              <strong>Angel</strong> por WhatsApp.
+                            </div>
+                            <button className="pc-warning-btn" onClick={() => renovarWhatsApp(postId)}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.522l4.625-1.476A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.7 9.7 0 01-5.226-1.526l-.375-.237-3.872 1.013 1.035-3.776-.244-.388A9.71 9.71 0 012.25 12c0-5.385 4.365-9.75 9.75-9.75S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+                              </svg>
+                              Renovar por WhatsApp
+                            </button>
+                          </div>
+                        )}
 
                         <div className={`pc-rent ${rent.status}`}>
                           <div className="pc-rent-info">
@@ -1769,7 +1867,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* MODAL: Login admin */}
         {showAdminLogin && (
           <div className="modal-overlay" onClick={() => setShowAdminLogin(false)}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -1799,7 +1896,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: Establecer renta */}
         {rentModalPost && (
           <div className="modal-overlay" onClick={() => setRentModalPost(null)}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
