@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 
 const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
+const ADMIN_PASSWORD = "admin2024";
 
 interface PostData {
   status: "active" | "paused";
@@ -9,6 +10,7 @@ interface PostData {
   lastBumpAt: number | null;
   addedAt: number;
   url: string;
+  rentExpiresAt?: number | null;
 }
 
 interface ClientData {
@@ -24,10 +26,23 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showAdminLogin, setShowAdminLogin] = useState(false);
+  const [adminPass, setAdminPass] = useState("");
+  const [adminError, setAdminError] = useState("");
+  const [rentModalPost, setRentModalPost] = useState<string | null>(null);
+  const [rentDays, setRentDays] = useState("7");
+  const [rentHours, setRentHours] = useState("0");
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && localStorage.getItem("isAdmin") === "true") {
+      setIsAdmin(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -88,6 +103,101 @@ export default function Home() {
     });
   };
 
+  const handleAdminLogin = () => {
+    if (adminPass === ADMIN_PASSWORD) {
+      setIsAdmin(true);
+      localStorage.setItem("isAdmin", "true");
+      setShowAdminLogin(false);
+      setAdminPass("");
+      setAdminError("");
+    } else {
+      setAdminError("Contraseña incorrecta");
+    }
+  };
+
+  const logoutAdmin = () => {
+    setIsAdmin(false);
+    localStorage.removeItem("isAdmin");
+  };
+
+  const verAnuncio = (postId: string) => {
+    window.open(`https://megapersonals.eu/public/escort_post_detail/${postId}`, "_blank");
+  };
+
+  const renovarRenta = async (postId: string) => {
+    if (!clientData) return;
+
+    const post = clientData.posts[postId];
+    const currentExpiry = post.rentExpiresAt && post.rentExpiresAt > now ? post.rentExpiresAt : now;
+    const newExpiry = currentExpiry + 7 * 24 * 60 * 60 * 1000; // +7 días
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/rentExpiresAt.json`, {
+      method: "PUT",
+      body: JSON.stringify(newExpiry),
+    });
+
+    setClientData({
+      ...clientData,
+      posts: {
+        ...clientData.posts,
+        [postId]: { ...post, rentExpiresAt: newExpiry },
+      },
+    });
+  };
+
+  const abrirModalRenta = (postId: string) => {
+    setRentModalPost(postId);
+    setRentDays("7");
+    setRentHours("0");
+  };
+
+  const guardarRenta = async () => {
+    if (!rentModalPost || !clientData) return;
+
+    const days = parseInt(rentDays) || 0;
+    const hours = parseInt(rentHours) || 0;
+
+    if (days === 0 && hours === 0) {
+      alert("⚠️ Ingresa al menos 1 día o 1 hora");
+      return;
+    }
+
+    const newExpiry = Date.now() + days * 24 * 60 * 60 * 1000 + hours * 60 * 60 * 1000;
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${rentModalPost}/rentExpiresAt.json`, {
+      method: "PUT",
+      body: JSON.stringify(newExpiry),
+    });
+
+    setClientData({
+      ...clientData,
+      posts: {
+        ...clientData.posts,
+        [rentModalPost]: { ...clientData.posts[rentModalPost], rentExpiresAt: newExpiry },
+      },
+    });
+
+    setRentModalPost(null);
+  };
+
+  const quitarRenta = async (postId: string) => {
+    if (!clientData) return;
+    if (!confirm("¿Quitar la renta de este post?")) return;
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/rentExpiresAt.json`, {
+      method: "PUT",
+      body: JSON.stringify(null),
+    });
+
+    setClientData({
+      ...clientData,
+      posts: {
+        ...clientData.posts,
+        [postId]: { ...clientData.posts[postId], rentExpiresAt: null },
+      },
+    });
+  };
+
   const formatTime = (timestamp: number) => {
     const diff = timestamp - now;
     if (diff <= 0) return { mins: "00", secs: "00", total: 0 };
@@ -109,6 +219,23 @@ export default function Home() {
     const elapsed = now - start;
     if (total <= 0) return 100;
     return Math.min(100, Math.max(0, (elapsed / total) * 100));
+  };
+
+  const getRentInfo = (post: PostData) => {
+    if (!post.rentExpiresAt) {
+      return { status: "none" as const, text: "Sin renta", days: 0, hours: 0 };
+    }
+
+    const diff = post.rentExpiresAt - now;
+    if (diff <= 0) {
+      return { status: "expired" as const, text: "Renta vencida", days: 0, hours: 0 };
+    }
+
+    const totalHours = Math.floor(diff / (60 * 60 * 1000));
+    const days = Math.floor(totalHours / 24);
+    const hours = totalHours % 24;
+
+    return { status: "active" as const, text: "Renta activa", days, hours };
   };
 
   const goBack = () => {
@@ -135,20 +262,18 @@ export default function Home() {
           --surface-2: rgba(255,255,255,0.05);
           --primary: #c41e3a;
           --primary-2: #ff3859;
-          --primary-glow: rgba(196,30,58,0.35);
           --accent: #d4af5f;
           --accent-2: #ffd47a;
           --white: #fafafa;
-          --gray-50: #f5f5f7;
           --gray-300: #a0a0b0;
           --gray-500: #6b6b85;
           --gray-700: #3a3a4a;
           --border: rgba(255,255,255,0.06);
           --border-2: rgba(255,255,255,0.1);
           --success: #10b981;
-          --success-glow: rgba(16,185,129,0.4);
           --danger: #ef4444;
-          --danger-glow: rgba(239,68,68,0.4);
+          --warning: #f59e0b;
+          --info: #3b82f6;
         }
 
         html, body { background: var(--bg-0); color: var(--white); min-height: 100vh; }
@@ -161,7 +286,6 @@ export default function Home() {
           overflow-x: hidden;
         }
 
-        /* Animated mesh background */
         .page::before {
           content: '';
           position: fixed;
@@ -219,10 +343,7 @@ export default function Home() {
           max-width: 480px;
           width: 100%;
           text-align: center;
-          box-shadow:
-            0 0 120px rgba(0,0,0,0.5),
-            0 1px 0 rgba(255,255,255,0.04) inset,
-            0 0 0 1px var(--border) inset;
+          box-shadow: 0 0 120px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.04) inset;
           animation: fadeUp 0.7s cubic-bezier(0.22,1,0.36,1) both;
         }
 
@@ -253,9 +374,7 @@ export default function Home() {
           justify-content: center;
           margin: 0 auto 32px;
           position: relative;
-          box-shadow:
-            0 0 80px rgba(196,30,58,0.3),
-            inset 0 0 24px rgba(196,30,58,0.15);
+          box-shadow: 0 0 80px rgba(196,30,58,0.3), inset 0 0 24px rgba(196,30,58,0.15);
         }
 
         .logo-orb::after {
@@ -344,17 +463,13 @@ export default function Home() {
           font-family: inherit;
           cursor: pointer;
           transition: all 0.2s;
-          box-shadow:
-            0 8px 32px rgba(196,30,58,0.4),
-            0 1px 0 rgba(255,255,255,0.15) inset;
+          box-shadow: 0 8px 32px rgba(196,30,58,0.4), 0 1px 0 rgba(255,255,255,0.15) inset;
           letter-spacing: 0.3px;
         }
 
         .btn-primary:hover:not(:disabled) {
           transform: translateY(-2px);
-          box-shadow:
-            0 12px 40px rgba(196,30,58,0.5),
-            0 1px 0 rgba(255,255,255,0.2) inset;
+          box-shadow: 0 12px 40px rgba(196,30,58,0.5), 0 1px 0 rgba(255,255,255,0.2) inset;
         }
 
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -370,8 +485,28 @@ export default function Home() {
           border-radius: 10px;
         }
 
+        .admin-link {
+          margin-top: 24px;
+          padding-top: 24px;
+          border-top: 1px solid var(--border);
+          font-size: 12px;
+          color: var(--gray-500);
+        }
+
+        .admin-link button {
+          background: none;
+          border: none;
+          color: var(--accent);
+          cursor: pointer;
+          font-weight: 600;
+          text-decoration: underline;
+          font-family: inherit;
+        }
+
+        .admin-link button:hover { color: var(--accent-2); }
+
         /* ============================================
-           HEADER OF DASHBOARD
+           DASHBOARD HEADER
            ============================================ */
         .dash-header {
           display: flex;
@@ -406,9 +541,32 @@ export default function Home() {
           color: var(--gray-500);
           font-size: 14px;
           font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 8px;
         }
 
-        .btn-back {
+        .admin-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 10px;
+          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+          color: #1a1a1a;
+          border-radius: 100px;
+          font-size: 11px;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .header-actions {
+          display: flex;
+          gap: 10px;
+          align-items: center;
+        }
+
+        .btn-back, .btn-secondary {
           padding: 12px 22px;
           background: var(--surface);
           border: 1px solid var(--border-2);
@@ -427,12 +585,14 @@ export default function Home() {
         .btn-back:hover {
           background: var(--surface-2);
           border-color: var(--primary);
-          transform: translateX(-3px);
         }
 
-        /* ============================================
-           STATS PILLS - Pill-shaped premium stats
-           ============================================ */
+        .btn-secondary:hover {
+          background: var(--surface-2);
+          border-color: var(--accent);
+        }
+
+        /* STATS */
         .stats-row {
           display: flex;
           gap: 14px;
@@ -447,8 +607,6 @@ export default function Home() {
           background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-1) 100%);
           border: 1px solid var(--border);
           border-radius: 18px;
-          position: relative;
-          overflow: hidden;
           display: flex;
           align-items: center;
           gap: 16px;
@@ -475,19 +633,16 @@ export default function Home() {
           background: linear-gradient(135deg, rgba(212,175,95,0.2) 0%, rgba(212,175,95,0.05) 100%);
           border: 1px solid rgba(212,175,95,0.2);
         }
-
         .stat-pill.active .stat-pill-icon {
           background: linear-gradient(135deg, rgba(16,185,129,0.2) 0%, rgba(16,185,129,0.05) 100%);
           border: 1px solid rgba(16,185,129,0.2);
         }
-
         .stat-pill.paused .stat-pill-icon {
           background: linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.05) 100%);
           border: 1px solid rgba(239,68,68,0.2);
         }
 
         .stat-pill-info { flex: 1; min-width: 0; }
-
         .stat-pill-label {
           font-size: 11px;
           color: var(--gray-500);
@@ -496,7 +651,6 @@ export default function Home() {
           font-weight: 700;
           margin-bottom: 4px;
         }
-
         .stat-pill-value {
           font-family: 'Syne', sans-serif;
           font-size: 28px;
@@ -504,13 +658,12 @@ export default function Home() {
           line-height: 1;
           letter-spacing: -0.5px;
         }
-
         .stat-pill.total .stat-pill-value { color: var(--accent); }
         .stat-pill.active .stat-pill-value { color: var(--success); }
         .stat-pill.paused .stat-pill-value { color: var(--danger); }
 
         /* ============================================
-           PREMIUM POST CARDS - Stripe/Apple style
+           POST CARDS
            ============================================ */
         .posts-grid {
           display: grid;
@@ -528,36 +681,14 @@ export default function Home() {
           animation: fadeUp 0.6s ease-out both;
         }
 
-        .post-card::before {
-          content: '';
-          position: absolute;
-          inset: -1px;
-          border-radius: 28px;
-          padding: 1px;
-          background: linear-gradient(135deg, var(--success) 0%, transparent 50%);
-          -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-          -webkit-mask-composite: xor;
-          mask-composite: exclude;
-          opacity: 0.5;
-          pointer-events: none;
-        }
-
-        .post-card.paused::before {
-          background: linear-gradient(135deg, var(--danger) 0%, transparent 50%);
-        }
-
         .post-card:hover {
           transform: translateY(-8px);
-          box-shadow:
-            0 30px 60px rgba(0,0,0,0.6),
-            0 0 0 1px rgba(255,255,255,0.05);
+          box-shadow: 0 30px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
         }
 
-        .post-card.active:hover::before { opacity: 1; }
         .post-card.paused { opacity: 0.92; }
 
-        /* TOP MESH HEADER */
+        /* MESH HEADER */
         .pc-mesh {
           position: relative;
           height: 110px;
@@ -579,8 +710,7 @@ export default function Home() {
           content: '';
           position: absolute;
           inset: 0;
-          background:
-            linear-gradient(180deg, transparent 60%, var(--bg-2) 100%);
+          background: linear-gradient(180deg, transparent 60%, var(--bg-2) 100%);
         }
 
         .pc-mesh-content {
@@ -629,15 +759,8 @@ export default function Home() {
           letter-spacing: 1px;
         }
 
-        .pc-badge.active {
-          color: var(--success);
-          border: 1px solid rgba(16,185,129,0.3);
-        }
-
-        .pc-badge.paused {
-          color: var(--danger);
-          border: 1px solid rgba(239,68,68,0.3);
-        }
+        .pc-badge.active { color: var(--success); border: 1px solid rgba(16,185,129,0.3); }
+        .pc-badge.paused { color: var(--danger); border: 1px solid rgba(239,68,68,0.3); }
 
         .pc-badge-dot {
           width: 6px;
@@ -656,9 +779,9 @@ export default function Home() {
           50% { opacity: 0.5; transform: scale(0.85); }
         }
 
-        /* CIRCULAR TIMER - The hero element */
+        /* TIMER */
         .pc-timer-section {
-          padding: 4px 24px 28px;
+          padding: 4px 24px 20px;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -668,7 +791,7 @@ export default function Home() {
           position: relative;
           width: 200px;
           height: 200px;
-          margin-bottom: 20px;
+          margin-bottom: 8px;
         }
 
         .pc-ring-svg {
@@ -690,10 +813,7 @@ export default function Home() {
           transition: stroke-dashoffset 1s linear;
         }
 
-        .post-card.active .pc-ring-progress {
-          stroke: url(#gradActive);
-        }
-
+        .post-card.active .pc-ring-progress { stroke: url(#gradActive); }
         .post-card.paused .pc-ring-progress {
           stroke: url(#gradPaused);
           opacity: 0.5;
@@ -751,24 +871,93 @@ export default function Home() {
           margin-top: 8px;
         }
 
-        .pc-time-row {
+        .pc-time-row { display: flex; align-items: flex-end; }
+
+        /* RENT SECTION */
+        .pc-rent {
+          margin: 0 24px 20px;
+          padding: 16px 18px;
+          border-radius: 16px;
           display: flex;
-          align-items: flex-end;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
         }
 
-        .pc-time-status {
-          font-size: 11px;
-          color: var(--gray-300);
-          text-transform: uppercase;
-          letter-spacing: 2.5px;
-          font-weight: 600;
-          padding: 6px 14px;
-          background: rgba(255,255,255,0.04);
-          border-radius: 100px;
+        .pc-rent.active {
+          background: linear-gradient(135deg, rgba(16,185,129,0.08) 0%, rgba(16,185,129,0.02) 100%);
+          border: 1px solid rgba(16,185,129,0.2);
+        }
+        .pc-rent.expired {
+          background: linear-gradient(135deg, rgba(239,68,68,0.08) 0%, rgba(239,68,68,0.02) 100%);
+          border: 1px solid rgba(239,68,68,0.2);
+        }
+        .pc-rent.none {
+          background: var(--surface);
           border: 1px solid var(--border);
         }
 
-        /* META GRID */
+        .pc-rent-info { display: flex; flex-direction: column; }
+
+        .pc-rent-label {
+          font-size: 10px;
+          color: var(--gray-500);
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          font-weight: 700;
+          margin-bottom: 2px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .pc-rent-value {
+          font-family: 'Syne', sans-serif;
+          font-size: 18px;
+          font-weight: 700;
+          letter-spacing: -0.3px;
+        }
+
+        .pc-rent.active .pc-rent-value { color: var(--success); }
+        .pc-rent.expired .pc-rent-value { color: var(--danger); }
+        .pc-rent.none .pc-rent-value { color: var(--gray-500); font-size: 14px; }
+
+        .pc-rent-actions { display: flex; gap: 6px; }
+
+        .rent-btn {
+          padding: 8px 12px;
+          background: var(--bg-3);
+          border: 1px solid var(--border-2);
+          color: var(--white);
+          border-radius: 8px;
+          font-size: 11px;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: inherit;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .rent-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        .rent-btn.renew {
+          background: linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(16,185,129,0.05) 100%);
+          border-color: rgba(16,185,129,0.3);
+          color: var(--success);
+        }
+
+        .rent-btn.renew:hover {
+          background: linear-gradient(135deg, rgba(16,185,129,0.25) 0%, rgba(16,185,129,0.1) 100%);
+        }
+
+        .rent-btn.remove:hover {
+          border-color: var(--danger);
+          color: var(--danger);
+        }
+
+        /* META */
         .pc-meta-grid {
           display: grid;
           grid-template-columns: 1fr 1fr;
@@ -782,12 +971,6 @@ export default function Home() {
           background: var(--surface);
           border: 1px solid var(--border);
           border-radius: 14px;
-          transition: all 0.2s;
-        }
-
-        .pc-meta-cell:hover {
-          background: var(--surface-2);
-          border-color: var(--border-2);
         }
 
         .pc-meta-label {
@@ -810,15 +993,20 @@ export default function Home() {
         .pc-actions {
           padding: 0 24px 24px;
           display: grid;
+          gap: 10px;
+        }
+
+        .pc-actions-row {
+          display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 12px;
+          gap: 10px;
         }
 
         .action-btn {
-          padding: 16px 20px;
+          padding: 14px 18px;
           border: none;
           border-radius: 14px;
-          font-size: 14px;
+          font-size: 13px;
           font-weight: 600;
           font-family: inherit;
           cursor: pointer;
@@ -846,22 +1034,24 @@ export default function Home() {
         .btn-pause {
           background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
           color: white;
-          box-shadow:
-            0 8px 24px rgba(239,68,68,0.35),
-            0 1px 0 rgba(255,255,255,0.15) inset;
+          box-shadow: 0 6px 20px rgba(239,68,68,0.3), 0 1px 0 rgba(255,255,255,0.15) inset;
         }
-
-        .btn-pause:hover { transform: translateY(-2px); }
 
         .btn-resume {
           background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
           color: white;
-          box-shadow:
-            0 8px 24px rgba(16,185,129,0.35),
-            0 1px 0 rgba(255,255,255,0.15) inset;
+          box-shadow: 0 6px 20px rgba(16,185,129,0.3), 0 1px 0 rgba(255,255,255,0.15) inset;
         }
 
-        .btn-resume:hover { transform: translateY(-2px); }
+        .btn-pause:hover, .btn-resume:hover { transform: translateY(-2px); }
+
+        .btn-view {
+          background: linear-gradient(135deg, var(--info) 0%, #2563eb 100%);
+          color: white;
+          box-shadow: 0 6px 20px rgba(59,130,246,0.3), 0 1px 0 rgba(255,255,255,0.15) inset;
+        }
+
+        .btn-view:hover { transform: translateY(-2px); }
 
         .btn-edit {
           background: var(--surface-2);
@@ -875,7 +1065,7 @@ export default function Home() {
           background: rgba(212,175,95,0.06);
         }
 
-        /* EMPTY STATE */
+        /* EMPTY */
         .empty-state {
           grid-column: 1 / -1;
           text-align: center;
@@ -888,7 +1078,119 @@ export default function Home() {
 
         .empty-state-icon { font-size: 64px; margin-bottom: 24px; }
         .empty-state-text { font-size: 18px; font-weight: 600; margin-bottom: 8px; color: var(--white); }
-        .empty-state-sub { font-size: 14px; color: var(--gray-500); }
+        .empty-state-sub { font-size: 14px; }
+
+        /* MODAL */
+        .modal-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(0,0,0,0.85);
+          backdrop-filter: blur(10px);
+          z-index: 9999;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .modal-card {
+          background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+          border: 1px solid var(--border-2);
+          border-radius: 24px;
+          padding: 36px 32px;
+          max-width: 420px;
+          width: 100%;
+          box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+          animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        .modal-title {
+          font-family: 'Syne', sans-serif;
+          font-size: 24px;
+          font-weight: 800;
+          margin-bottom: 8px;
+        }
+
+        .modal-subtitle {
+          font-size: 13px;
+          color: var(--gray-500);
+          margin-bottom: 28px;
+        }
+
+        .modal-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 14px;
+          margin-bottom: 24px;
+        }
+
+        .modal-field { display: flex; flex-direction: column; }
+        .modal-field label {
+          font-size: 11px;
+          color: var(--gray-300);
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          font-weight: 700;
+          margin-bottom: 8px;
+        }
+
+        .modal-field input {
+          padding: 16px 20px;
+          background: var(--bg-3);
+          border: 1.5px solid var(--border);
+          border-radius: 12px;
+          color: var(--white);
+          font-size: 18px;
+          font-family: 'Syne', sans-serif;
+          font-weight: 700;
+          text-align: center;
+          outline: none;
+          transition: all 0.2s;
+        }
+
+        .modal-field input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 4px rgba(212,175,95,0.12);
+        }
+
+        .modal-actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+        }
+
+        .modal-btn {
+          padding: 16px;
+          border: none;
+          border-radius: 12px;
+          font-size: 14px;
+          font-weight: 600;
+          font-family: inherit;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .modal-btn-primary {
+          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+          color: #1a1a1a;
+          box-shadow: 0 6px 20px rgba(212,175,95,0.3);
+        }
+
+        .modal-btn-primary:hover { transform: translateY(-2px); }
+
+        .modal-btn-secondary {
+          background: var(--surface-2);
+          color: var(--white);
+          border: 1px solid var(--border-2);
+        }
+
+        .modal-btn-secondary:hover { background: var(--bg-3); }
 
         /* MOBILE */
         @media (max-width: 640px) {
@@ -899,10 +1201,12 @@ export default function Home() {
           .pc-ring-container { width: 180px; height: 180px; }
           .pc-time-value, .pc-time-divider { font-size: 38px; }
           .stat-pill { min-width: 100%; }
+          .pc-rent { flex-direction: column; align-items: flex-start; }
+          .pc-rent-actions { width: 100%; }
+          .rent-btn { flex: 1; justify-content: center; }
         }
       `}</style>
 
-      {/* SVG Gradients */}
       <svg width="0" height="0" style={{ position: "absolute" }}>
         <defs>
           <linearGradient id="gradActive" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -929,7 +1233,9 @@ export default function Home() {
                 <div className="brand">
                   Angel<span>Vercel</span>
                 </div>
-                <div className="tagline">Panel premium de control</div>
+                <div className="tagline">
+                  {isAdmin ? "🔐 Panel Administrador" : "Panel premium de control"}
+                </div>
 
                 <div className="input-group">
                   <label className="input-label">Nombre del cliente</label>
@@ -949,6 +1255,16 @@ export default function Home() {
                 <button className="btn-primary" onClick={searchClient} disabled={loading}>
                   {loading ? "Buscando..." : "Acceder al panel"}
                 </button>
+
+                <div className="admin-link">
+                  {isAdmin ? (
+                    <>
+                      ✓ Modo administrador activado · <button onClick={logoutAdmin}>Salir</button>
+                    </>
+                  ) : (
+                    <button onClick={() => setShowAdminLogin(true)}>🔐 Acceso administrador</button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -960,11 +1276,21 @@ export default function Home() {
                   <h1>
                     Hola, <span>{clientData.displayName}</span>
                   </h1>
-                  <p>Panel de control de publicaciones</p>
+                  <p>
+                    Panel de control de publicaciones
+                    {isAdmin && <span className="admin-badge">⚡ ADMIN</span>}
+                  </p>
                 </div>
-                <button className="btn-back" onClick={goBack}>
-                  ← Cerrar sesión
-                </button>
+                <div className="header-actions">
+                  {isAdmin && (
+                    <button className="btn-secondary" onClick={logoutAdmin}>
+                      🔓 Salir admin
+                    </button>
+                  )}
+                  <button className="btn-back" onClick={goBack}>
+                    ← Cerrar sesión
+                  </button>
+                </div>
               </div>
 
               <div className="stats-row">
@@ -1007,8 +1333,8 @@ export default function Home() {
                     const isPaused = post.status === "paused";
                     const time = formatTime(post.nextBumpAt);
                     const progress = isPaused ? 0 : getProgress(post);
+                    const rent = getRentInfo(post);
 
-                    // Ring calculations
                     const radius = 90;
                     const circumference = 2 * Math.PI * radius;
                     const offset = circumference - (progress / 100) * circumference;
@@ -1064,6 +1390,37 @@ export default function Home() {
                           </div>
                         </div>
 
+                        {/* RENTA */}
+                        <div className={`pc-rent ${rent.status}`}>
+                          <div className="pc-rent-info">
+                            <div className="pc-rent-label">
+                              🎫 {rent.status === "active" ? "Renta activa" : rent.status === "expired" ? "Renta vencida" : "Sin renta"}
+                            </div>
+                            <div className="pc-rent-value">
+                              {rent.status === "active"
+                                ? `${rent.days}d ${rent.hours}h restantes`
+                                : rent.status === "expired"
+                                ? "Renovar para reactivar"
+                                : "No establecida"}
+                            </div>
+                          </div>
+                          {isAdmin && (
+                            <div className="pc-rent-actions">
+                              <button className="rent-btn renew" onClick={() => renovarRenta(postId)} title="Agregar 7 días">
+                                +7d
+                              </button>
+                              <button className="rent-btn" onClick={() => abrirModalRenta(postId)} title="Establecer renta">
+                                ⚙
+                              </button>
+                              {rent.status !== "none" && (
+                                <button className="rent-btn remove" onClick={() => quitarRenta(postId)} title="Quitar renta">
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
                         <div className="pc-meta-grid">
                           <div className="pc-meta-cell">
                             <div className="pc-meta-label">Último bump</div>
@@ -1085,14 +1442,19 @@ export default function Home() {
                         </div>
 
                         <div className="pc-actions">
-                          <button
-                            className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
-                            onClick={() => togglePostStatus(postId, post.status)}
-                          >
-                            {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
-                          </button>
+                          <div className="pc-actions-row">
+                            <button
+                              className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
+                              onClick={() => togglePostStatus(postId, post.status)}
+                            >
+                              {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
+                            </button>
+                            <button className="action-btn btn-view" onClick={() => verAnuncio(postId)}>
+                              👁 Ver anuncio
+                            </button>
+                          </div>
                           <button className="action-btn btn-edit" onClick={() => alert("✨ Próximamente disponible!")}>
-                            ✏ Editar
+                            ✏ Editar publicación
                           </button>
                         </div>
                       </div>
@@ -1103,6 +1465,79 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* MODAL: Login admin */}
+        {showAdminLogin && (
+          <div className="modal-overlay" onClick={() => setShowAdminLogin(false)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">🔐 Acceso Administrador</div>
+              <div className="modal-subtitle">Ingresa la contraseña de administrador</div>
+              <div style={{ marginBottom: 20 }}>
+                <input
+                  type="password"
+                  className="search-input"
+                  placeholder="Contraseña"
+                  value={adminPass}
+                  onChange={(e) => setAdminPass(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleAdminLogin()}
+                  autoFocus
+                />
+              </div>
+              {adminError && <div className="error-msg">{adminError}</div>}
+              <div className="modal-actions">
+                <button className="modal-btn modal-btn-secondary" onClick={() => setShowAdminLogin(false)}>
+                  Cancelar
+                </button>
+                <button className="modal-btn modal-btn-primary" onClick={handleAdminLogin}>
+                  Entrar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: Establecer renta */}
+        {rentModalPost && (
+          <div className="modal-overlay" onClick={() => setRentModalPost(null)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">🎫 Establecer Renta</div>
+              <div className="modal-subtitle">
+                Post <code style={{ color: "var(--accent)" }}>#{rentModalPost}</code> · La renta se calcula desde ahora
+              </div>
+              <div className="modal-row">
+                <div className="modal-field">
+                  <label>Días</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="365"
+                    value={rentDays}
+                    onChange={(e) => setRentDays(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div className="modal-field">
+                  <label>Horas</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="23"
+                    value={rentHours}
+                    onChange={(e) => setRentHours(e.target.value)}
+                  />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button className="modal-btn modal-btn-secondary" onClick={() => setRentModalPost(null)}>
+                  Cancelar
+                </button>
+                <button className="modal-btn modal-btn-primary" onClick={guardarRenta}>
+                  Guardar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
