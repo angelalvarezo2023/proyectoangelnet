@@ -67,8 +67,10 @@ export default function Home() {
 
   // Estados del flujo de edición del cliente
   const [editConfirmPost, setEditConfirmPost] = useState<string | null>(null); // muestra modal de confirmación inicial
-  const [editFormPost, setEditFormPost] = useState<string | null>(null);       // muestra modal con captcha + formulario
-  const [editFields, setEditFields] = useState<EditRequestFields>({});         // valores del formulario
+  const [editFormPost, setEditFormPost] = useState<string | null>(null);       // muestra modal de edición
+  const [editStep, setEditStep] = useState<"fields" | "captcha">("fields");    // qué pantalla del modal
+  const [editFields, setEditFields] = useState<EditRequestFields>({});         // valores que el cliente está editando
+  const [editOriginalFields, setEditOriginalFields] = useState<EditRequestFields>({}); // valores originales (para comparar)
   const [editCaptchaCode, setEditCaptchaCode] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
 
@@ -314,7 +316,7 @@ export default function Home() {
     return null;
   };
 
-  // Limpia automáticamente solicitudes terminadas/fallidas tras unos segundos
+  // Limpia automáticamente solicitudes terminadas/fallidas tras 5 segundos
   // para que dejen de aparecer en la card.
   useEffect(() => {
     if (!clientData) return;
@@ -323,8 +325,8 @@ export default function Home() {
       if (!er) return;
       const s = er.status;
       const finishedAt = er.appliedAt || er.failedAt;
-      // Si terminó hace más de 8 segundos, limpiarlo
-      if ((s === "aplicada" || s === "fallida") && finishedAt && now - finishedAt > 8000) {
+      // Si terminó hace más de 5 segundos, limpiarlo
+      if ((s === "aplicada" || s === "fallida") && finishedAt && now - finishedAt > 5000) {
         await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
           method: "DELETE",
         });
@@ -368,40 +370,81 @@ export default function Home() {
   };
 
   // Paso 3: el cliente toca "Editar ahora" cuando el captcha ya está listo.
-  // Abrimos el formulario grande con la imagen del captcha y los campos editables.
+  // Abrimos el formulario en la pantalla 1 (campos editables, sin captcha aún).
   const abrirFormularioEdicion = (postId: string) => {
     if (!clientData) return;
     const post = clientData.posts[postId];
     if (!post.editRequest || post.editRequest.status !== "captcha_listo") return;
 
     // Pre-llenar los campos con los valores actuales que capturó el bot
-    const current = post.editRequest.currentValues || {};
-    setEditFields({
-      name: current.name || "",
-      age: current.age || "",
-      title: current.title || "",
-      body: current.body || "",
-      cityName: current.cityName || "",
-      location: current.location || "",
-    });
+    const current: EditRequestFields = {
+      name: post.editRequest.currentValues?.name || "",
+      age: post.editRequest.currentValues?.age || "",
+      title: post.editRequest.currentValues?.title || "",
+      body: post.editRequest.currentValues?.body || "",
+      cityName: post.editRequest.currentValues?.cityName || "",
+      location: post.editRequest.currentValues?.location || "",
+    };
+    setEditFields(current);
+    setEditOriginalFields(current); // guardar copia para comparar después
     setEditCaptchaCode("");
+    setEditStep("fields"); // empezar en la pantalla 1
     setEditFormPost(postId);
   };
 
-  // Paso 4: el cliente envía el formulario completo (captcha + datos editados)
+  // Validación de los campos antes de avanzar al captcha
+  const validarCampos = (): string | null => {
+    if (!editFields.title?.trim()) return "El titular (Headline) no puede estar vacío";
+    if (!editFields.body?.trim()) return "La descripción (Body) no puede estar vacía";
+    return null;
+  };
+
+  // Avanzar de pantalla "fields" a "captcha"
+  const irAlCaptcha = () => {
+    const err = validarCampos();
+    if (err) {
+      alert("⚠️ " + err);
+      return;
+    }
+    setEditStep("captcha");
+  };
+
+  // Volver de "captcha" a "fields" para editar los campos
+  const volverAFields = () => {
+    setEditStep("fields");
+  };
+
+  // Paso 4: el cliente envía el formulario completo (campos modificados + captcha)
   const enviarEdicion = async () => {
     if (!editFormPost || !clientData) return;
     if (!editCaptchaCode.trim()) {
       alert("⚠️ Escribe el código del captcha");
       return;
     }
+    const errCampos = validarCampos();
+    if (errCampos) {
+      alert("⚠️ " + errCampos);
+      setEditStep("fields");
+      return;
+    }
+
+    // Construir 'fields' SOLO con los campos que el cliente realmente cambió
+    // Comparando contra los valores originales que capturó el bot.
+    const cambios: EditRequestFields = {};
+    (Object.keys(editFields) as (keyof EditRequestFields)[]).forEach((key) => {
+      const valNuevo = (editFields[key] || "").trim();
+      const valOriginal = (editOriginalFields[key] || "").trim();
+      if (valNuevo !== valOriginal) {
+        cambios[key] = valNuevo;
+      }
+    });
 
     setEditSubmitting(true);
 
     const updates: Partial<EditRequest> = {
       status: "listo_para_publicar",
       captchaCode: editCaptchaCode.trim(),
-      fields: { ...editFields },
+      fields: cambios, // SOLO los campos modificados
     };
 
     await fetch(`${FB_URL}/clients/${clientKey}/posts/${editFormPost}/editRequest.json`, {
@@ -2615,7 +2658,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: Formulario de edición con captcha */}
+        {/* MODAL: Formulario de edición - 2 pantallas (Datos → Captcha) */}
         {editFormPost && clientData && clientData.posts[editFormPost]?.editRequest && (
           <div className="modal-overlay" onClick={() => !editSubmitting && setEditFormPost(null)}>
             <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
@@ -2630,100 +2673,144 @@ export default function Home() {
 
                 return (
                   <>
-                    <div className="modal-title">🔐 Editar publicación</div>
-                    <div className="modal-subtitle" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span>Post <code style={{ color: "var(--accent)" }}>#{editFormPost}</code></span>
+                    <div className="modal-title">
+                      {editStep === "fields" ? "✏️ Editar publicación" : "🔐 Verificación"}
+                    </div>
+                    <div className="modal-subtitle" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+                      <span>
+                        Post <code style={{ color: "var(--accent)" }}>#{editFormPost}</code>
+                        <span style={{ color: "var(--gray-500)", marginLeft: 12, fontSize: 12 }}>
+                          Paso {editStep === "fields" ? "1" : "2"} de 2
+                        </span>
+                      </span>
                       <span className="edit-modal-timer">
                         ⏱ {minRest}:{secRest.toString().padStart(2, "0")}
                       </span>
                     </div>
 
-                    {/* Captcha */}
-                    <div className="edit-modal-section-title">Captcha de verificación</div>
-                    <div className="edit-modal-captcha">
-                      {er.captchaUrl && (
-                        <img src={er.captchaUrl} alt="Captcha" />
-                      )}
-                      <input
-                        type="text"
-                        className="edit-modal-captcha-input"
-                        placeholder="Escribe el código"
-                        value={editCaptchaCode}
-                        onChange={(e) => setEditCaptchaCode(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
+                    {/* ====== PANTALLA 1: CAMPOS EDITABLES ====== */}
+                    {editStep === "fields" && (
+                      <>
+                        <div className="edit-modal-section-title">Información del anuncio</div>
+                        <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 16, marginTop: -6 }}>
+                          Estos son los datos actuales de tu post. Modifica solo lo que quieras cambiar.
+                        </div>
+                        <div className="edit-modal-grid">
+                          <div className="edit-modal-field">
+                            <label>Name / Alias</label>
+                            <input
+                              type="text"
+                              value={editFields.name || ""}
+                              onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                            />
+                          </div>
+                          <div className="edit-modal-field">
+                            <label>Age</label>
+                            <input
+                              type="number"
+                              min="18"
+                              max="99"
+                              value={editFields.age || ""}
+                              onChange={(e) => setEditFields({ ...editFields, age: e.target.value })}
+                            />
+                          </div>
+                          <div className="edit-modal-field full">
+                            <label>Headline *</label>
+                            <input
+                              type="text"
+                              value={editFields.title || ""}
+                              onChange={(e) => setEditFields({ ...editFields, title: e.target.value })}
+                              placeholder="Required"
+                            />
+                          </div>
+                          <div className="edit-modal-field full">
+                            <label>Body *</label>
+                            <textarea
+                              value={editFields.body || ""}
+                              onChange={(e) => setEditFields({ ...editFields, body: e.target.value })}
+                              placeholder="Required"
+                            />
+                          </div>
+                          <div className="edit-modal-field">
+                            <label>City</label>
+                            <input
+                              type="text"
+                              value={editFields.cityName || ""}
+                              onChange={(e) => setEditFields({ ...editFields, cityName: e.target.value })}
+                            />
+                          </div>
+                          <div className="edit-modal-field">
+                            <label>Location / Area</label>
+                            <input
+                              type="text"
+                              value={editFields.location || ""}
+                              onChange={(e) => setEditFields({ ...editFields, location: e.target.value })}
+                            />
+                          </div>
+                        </div>
 
-                    {/* Campos editables */}
-                    <div className="edit-modal-section-title">Información del anuncio</div>
-                    <div className="edit-modal-grid">
-                      <div className="edit-modal-field">
-                        <label>Nombre / Alias</label>
-                        <input
-                          type="text"
-                          value={editFields.name || ""}
-                          onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
-                        />
-                      </div>
-                      <div className="edit-modal-field">
-                        <label>Edad</label>
-                        <input
-                          type="number"
-                          min="18"
-                          max="99"
-                          value={editFields.age || ""}
-                          onChange={(e) => setEditFields({ ...editFields, age: e.target.value })}
-                        />
-                      </div>
-                      <div className="edit-modal-field full">
-                        <label>Titular (Headline)</label>
-                        <input
-                          type="text"
-                          value={editFields.title || ""}
-                          onChange={(e) => setEditFields({ ...editFields, title: e.target.value })}
-                        />
-                      </div>
-                      <div className="edit-modal-field full">
-                        <label>Descripción (Body)</label>
-                        <textarea
-                          value={editFields.body || ""}
-                          onChange={(e) => setEditFields({ ...editFields, body: e.target.value })}
-                        />
-                      </div>
-                      <div className="edit-modal-field">
-                        <label>Ciudad</label>
-                        <input
-                          type="text"
-                          value={editFields.cityName || ""}
-                          onChange={(e) => setEditFields({ ...editFields, cityName: e.target.value })}
-                        />
-                      </div>
-                      <div className="edit-modal-field">
-                        <label>Ubicación / Área</label>
-                        <input
-                          type="text"
-                          value={editFields.location || ""}
-                          onChange={(e) => setEditFields({ ...editFields, location: e.target.value })}
-                        />
-                      </div>
-                    </div>
+                        <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4, marginBottom: 18 }}>
+                          * Campos obligatorios
+                        </div>
 
-                    <div className="modal-actions" style={{ marginTop: 24 }}>
-                      <button
-                        className="modal-btn modal-btn-secondary"
-                        onClick={() => cancelarEdicion(editFormPost)}
-                        disabled={editSubmitting}
-                      >
-                        Cancelar edición
-                      </button>
-                      <button
-                        className="modal-btn modal-btn-primary"
-                        onClick={enviarEdicion}
-                        disabled={editSubmitting}
-                      >
-                        {editSubmitting ? "Enviando..." : "Guardar y publicar"}
-                      </button>
-                    </div>
+                        <div className="modal-actions" style={{ marginTop: 8 }}>
+                          <button
+                            className="modal-btn modal-btn-secondary"
+                            onClick={() => cancelarEdicion(editFormPost)}
+                            disabled={editSubmitting}
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            className="modal-btn modal-btn-primary"
+                            onClick={irAlCaptcha}
+                          >
+                            Next ▶
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {/* ====== PANTALLA 2: CAPTCHA ====== */}
+                    {editStep === "captcha" && (
+                      <>
+                        <div className="edit-modal-section-title">Captcha de verificación</div>
+                        <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 16, marginTop: -6 }}>
+                          Escribe el código que aparece en la imagen para publicar tus cambios.
+                        </div>
+
+                        <div className="edit-modal-captcha">
+                          {er.captchaUrl && (
+                            <img src={er.captchaUrl} alt="Captcha" />
+                          )}
+                          <input
+                            type="text"
+                            className="edit-modal-captcha-input"
+                            placeholder="Enter code from the picture"
+                            value={editCaptchaCode}
+                            onChange={(e) => setEditCaptchaCode(e.target.value)}
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="modal-actions" style={{ marginTop: 8 }}>
+                          <button
+                            className="modal-btn modal-btn-secondary"
+                            onClick={volverAFields}
+                            disabled={editSubmitting}
+                          >
+                            ◀ Back
+                          </button>
+                          <button
+                            className="modal-btn modal-btn-primary"
+                            onClick={enviarEdicion}
+                            disabled={editSubmitting}
+                          >
+                            {editSubmitting ? "Enviando..." : "Publish ✓"}
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </>
                 );
               })()}
