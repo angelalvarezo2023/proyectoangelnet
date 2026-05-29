@@ -12,6 +12,7 @@ interface PostData {
   addedAt: number;
   url: string;
   rentExpiresAt?: number | null;
+  rentPaused?: boolean;
 }
 
 interface ClientData {
@@ -168,19 +169,35 @@ export default function Home() {
     if (!clientData) return;
 
     const post = clientData.posts[postId];
-    const currentExpiry = post.rentExpiresAt && post.rentExpiresAt > now ? post.rentExpiresAt : now;
-    const newExpiry = currentExpiry + 7 * 24 * 60 * 60 * 1000;
+    const SEMANA = 7 * 24 * 60 * 60 * 1000;
 
-    await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/rentExpiresAt.json`, {
-      method: "PUT",
-      body: JSON.stringify(newExpiry),
+    // Si el post YA tiene renta (vencida o no), el nuevo periodo se cuenta
+    // desde la fecha de vencimiento original. Asi, si el cliente pago tarde,
+    // el tiempo que estuvo en deuda se le descuenta automaticamente.
+    // Si nunca tuvo renta, se cuenta desde ahora.
+    const base = post.rentExpiresAt || Date.now();
+    const newExpiry = base + SEMANA;
+
+    // Reactivar el post solo si el nuevo vencimiento queda en el futuro.
+    // (Si la deuda era mayor a lo pagado, seguiria vencido y pausado.)
+    const reactivar = newExpiry > Date.now() && post.rentPaused;
+
+    const updates: Partial<PostData> = { rentExpiresAt: newExpiry };
+    if (reactivar) {
+      updates.status = "active";
+      updates.rentPaused = false;
+    }
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}.json`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
     });
 
     setClientData({
       ...clientData,
       posts: {
         ...clientData.posts,
-        [postId]: { ...post, rentExpiresAt: newExpiry },
+        [postId]: { ...post, ...updates },
       },
     });
   };
@@ -202,18 +219,28 @@ export default function Home() {
       return;
     }
 
+    // El modal "Establecer" cuenta desde AHORA (renta limpia, sin cobrar deuda).
+    // Usalo cuando quieras dar tiempo fresco. Para cobrar deuda usa el boton +7d.
     const newExpiry = Date.now() + days * 24 * 60 * 60 * 1000 + hours * 60 * 60 * 1000;
 
-    await fetch(`${FB_URL}/clients/${clientKey}/posts/${rentModalPost}/rentExpiresAt.json`, {
-      method: "PUT",
-      body: JSON.stringify(newExpiry),
+    const post = clientData.posts[rentModalPost];
+    const updates: Partial<PostData> = { rentExpiresAt: newExpiry };
+    // Si estaba pausado por renta vencida, reactivarlo
+    if (post.rentPaused) {
+      updates.status = "active";
+      updates.rentPaused = false;
+    }
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${rentModalPost}.json`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
     });
 
     setClientData({
       ...clientData,
       posts: {
         ...clientData.posts,
-        [rentModalPost]: { ...clientData.posts[rentModalPost], rentExpiresAt: newExpiry },
+        [rentModalPost]: { ...post, ...updates },
       },
     });
 
@@ -263,12 +290,17 @@ export default function Home() {
 
   const getRentInfo = (post: PostData) => {
     if (!post.rentExpiresAt) {
-      return { status: "none" as const, days: 0, hours: 0, isWarning: false, totalHours: 0 };
+      return { status: "none" as const, days: 0, hours: 0, isWarning: false, totalHours: 0, debtDays: 0, debtHours: 0 };
     }
 
     const diff = post.rentExpiresAt - now;
     if (diff <= 0) {
-      return { status: "expired" as const, days: 0, hours: 0, isWarning: false, totalHours: 0 };
+      // Renta vencida: calcular el tiempo que lleva en deuda
+      const debtMs = now - post.rentExpiresAt;
+      const debtTotalHours = Math.floor(debtMs / (60 * 60 * 1000));
+      const debtDays = Math.floor(debtTotalHours / 24);
+      const debtHours = debtTotalHours % 24;
+      return { status: "expired" as const, days: 0, hours: 0, isWarning: false, totalHours: 0, debtDays, debtHours };
     }
 
     const totalHours = Math.floor(diff / (60 * 60 * 1000));
@@ -278,7 +310,7 @@ export default function Home() {
     // Advertencia cuando queda 1 día (24h) o menos
     const isWarning = totalHours <= 24;
 
-    return { status: "active" as const, days, hours, isWarning, totalHours };
+    return { status: "active" as const, days, hours, isWarning, totalHours, debtDays: 0, debtHours: 0 };
   };
 
   const goBack = () => {
@@ -853,6 +885,55 @@ export default function Home() {
           text-transform: uppercase;
           letter-spacing: 1px;
           font-weight: 700;
+        }
+
+        .client-rent {
+          margin-bottom: 14px;
+          padding: 10px 14px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 12px;
+          font-weight: 600;
+        }
+
+        .client-rent.active {
+          background: rgba(16,185,129,0.08);
+          border: 1px solid rgba(16,185,129,0.2);
+          color: var(--success);
+        }
+
+        .client-rent.warning {
+          background: rgba(245,158,11,0.1);
+          border: 1px solid rgba(245,158,11,0.3);
+          color: var(--warning);
+          animation: clientRentPulse 2s ease-in-out infinite;
+        }
+
+        .client-rent.expired {
+          background: rgba(239,68,68,0.1);
+          border: 1px solid rgba(239,68,68,0.3);
+          color: var(--danger);
+          animation: clientRentPulse 1.5s ease-in-out infinite;
+        }
+
+        .client-rent.none {
+          background: var(--surface);
+          border: 1px solid var(--border);
+          color: var(--gray-500);
+        }
+
+        @keyframes clientRentPulse {
+          0%, 100% { box-shadow: 0 0 0 0 transparent; }
+          50% { box-shadow: 0 0 0 3px currentColor; opacity: 0.95; }
+        }
+
+        .client-rent-icon { font-size: 14px; line-height: 1; }
+        .client-rent-text {
+          flex: 1;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
         }
 
         .client-action {
@@ -1618,6 +1699,52 @@ export default function Home() {
                     const paused = posts.filter((p) => p.status === "paused").length;
                     const initial = (data.displayName || key).charAt(0).toUpperCase();
 
+                    // Estado de renta agregado del cliente
+                    const postsConRenta = posts.filter((p) => p.rentExpiresAt);
+                    let rentSummary: { type: "expired" | "warning" | "active" | "none"; text: string; count?: number } = {
+                      type: "none",
+                      text: "Sin renta",
+                    };
+
+                    if (postsConRenta.length > 0) {
+                      const expired = postsConRenta.filter((p) => p.rentExpiresAt! <= now);
+                      const activeRent = postsConRenta.filter((p) => p.rentExpiresAt! > now);
+                      const warning = activeRent.filter((p) => p.rentExpiresAt! - now <= 24 * 60 * 60 * 1000);
+
+                      if (expired.length > 0) {
+                        // Tomar la deuda más grande (más urgente)
+                        const maxDebt = Math.max(...expired.map((p) => now - p.rentExpiresAt!));
+                        const debtDays = Math.floor(maxDebt / (24 * 60 * 60 * 1000));
+                        const debtHours = Math.floor((maxDebt % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+                        rentSummary = {
+                          type: "expired",
+                          text: `${expired.length} en deuda · ${debtDays}d ${debtHours}h`,
+                          count: expired.length,
+                        };
+                      } else if (warning.length > 0) {
+                        // Tomar el que vence más pronto
+                        const minTime = Math.min(...warning.map((p) => p.rentExpiresAt! - now));
+                        const totalHours = Math.floor(minTime / (60 * 60 * 1000));
+                        const h = totalHours;
+                        const m = Math.floor((minTime % (60 * 60 * 1000)) / (60 * 1000));
+                        rentSummary = {
+                          type: "warning",
+                          text: `${warning.length} por vencer · ${h}h ${m}m`,
+                          count: warning.length,
+                        };
+                      } else if (activeRent.length > 0) {
+                        // Tomar el que vence más pronto entre los activos
+                        const minTime = Math.min(...activeRent.map((p) => p.rentExpiresAt! - now));
+                        const totalHours = Math.floor(minTime / (60 * 60 * 1000));
+                        const days = Math.floor(totalHours / 24);
+                        const hours = totalHours % 24;
+                        rentSummary = {
+                          type: "active",
+                          text: `Próximo: ${days}d ${hours}h`,
+                        };
+                      }
+                    }
+
                     return (
                       <div key={key} className="client-card" onClick={() => selectClient(key, data)}>
                         <div className="client-card-header">
@@ -1641,6 +1768,16 @@ export default function Home() {
                             <div className="client-stat-value">{paused}</div>
                             <div className="client-stat-label">Pausadas</div>
                           </div>
+                        </div>
+
+                        {/* Estado de renta del cliente */}
+                        <div className={`client-rent ${rentSummary.type}`}>
+                          <span className="client-rent-icon">
+                            {rentSummary.type === "expired" ? "🔴" :
+                             rentSummary.type === "warning" ? "🟡" :
+                             rentSummary.type === "active" ? "🟢" : "⚪"}
+                          </span>
+                          <span className="client-rent-text">{rentSummary.text}</span>
                         </div>
 
                         <button className="client-action">Abrir panel →</button>
@@ -1720,7 +1857,7 @@ export default function Home() {
                     return (
                       <div
                         key={postId}
-                        className={`post-card ${isPaused ? "paused" : "active"} ${rent.isWarning ? "warning" : ""}`}
+                        className={`post-card ${isPaused ? "paused" : "active"} ${rent.isWarning || rent.status === "expired" ? "warning" : ""}`}
                       >
                         <div className="pc-mesh">
                           <div className="pc-mesh-content">
@@ -1771,17 +1908,29 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* BANNER DE ADVERTENCIA - solo cuando queda 1 día o menos */}
-                        {rent.isWarning && (
+                        {/* BANNER - cuando queda 1 día o menos, O cuando ya venció (en deuda) */}
+                        {(rent.isWarning || rent.status === "expired") && (
                           <div className="pc-warning">
                             <div className="pc-warning-header">
                               <span className="pc-warning-icon">⚠️</span>
-                              <span className="pc-warning-title">Advertencia</span>
+                              <span className="pc-warning-title">
+                                {rent.status === "expired" ? "Renta vencida" : "Advertencia"}
+                              </span>
                             </div>
                             <div className="pc-warning-text">
-                              Este post se <strong>pausará automáticamente</strong> y luego será{" "}
-                              <strong>eliminado</strong> cuando el tiempo de renta llegue a 0. Para renovar, contacta con{" "}
-                              <strong>Angel</strong> por WhatsApp.
+                              {rent.status === "expired" ? (
+                                <>
+                                  Este post está <strong>pausado</strong> porque la renta llegó a 0. El tiempo sigue
+                                  corriendo como <strong>deuda ({rent.debtDays}d {rent.debtHours}h)</strong>. Al renovar
+                                  se descontará ese tiempo. Contacta con <strong>Angel</strong> por WhatsApp.
+                                </>
+                              ) : (
+                                <>
+                                  Este post se <strong>pausará automáticamente</strong> cuando el tiempo de renta
+                                  llegue a 0, y el tiempo seguirá corriendo como <strong>deuda</strong>. Para reactivarlo,
+                                  contacta con <strong>Angel</strong> por WhatsApp y renueva.
+                                </>
+                              )}
                             </div>
                             <button className="pc-warning-btn" onClick={() => renovarWhatsApp(postId)}>
                               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -1801,7 +1950,7 @@ export default function Home() {
                               {rent.status === "active"
                                 ? `${rent.days}d ${rent.hours}h restantes`
                                 : rent.status === "expired"
-                                ? "Renovar para reactivar"
+                                ? `En deuda: ${rent.debtDays}d ${rent.debtHours}h`
                                 : "No establecida"}
                             </div>
                           </div>
