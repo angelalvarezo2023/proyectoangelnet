@@ -5,6 +5,30 @@ const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASSWORD = "admin2024";
 const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
 
+interface EditRequestFields {
+  name?: string;
+  age?: string;
+  title?: string;
+  body?: string;
+  cityName?: string;
+  location?: string;
+}
+
+interface EditRequest {
+  status: "captcha_pendiente" | "captcha_listo" | "listo_para_publicar" | "aplicada" | "fallida";
+  requestedAt: number;
+  capturedAt?: number;
+  expiresAt?: number;
+  appliedAt?: number;
+  failedAt?: number;
+  failReason?: string;
+  captchaUrl?: string;
+  captchaKey?: string;
+  captchaCode?: string;
+  currentValues?: EditRequestFields;
+  fields?: EditRequestFields;
+}
+
 interface PostData {
   status: "active" | "paused";
   nextBumpAt: number;
@@ -13,6 +37,7 @@ interface PostData {
   url: string;
   rentExpiresAt?: number | null;
   rentPaused?: boolean;
+  editRequest?: EditRequest | null;
 }
 
 interface ClientData {
@@ -39,6 +64,13 @@ export default function Home() {
   const [rentModalPost, setRentModalPost] = useState<string | null>(null);
   const [rentDays, setRentDays] = useState("7");
   const [rentHours, setRentHours] = useState("0");
+
+  // Estados del flujo de edición del cliente
+  const [editConfirmPost, setEditConfirmPost] = useState<string | null>(null); // muestra modal de confirmación inicial
+  const [editFormPost, setEditFormPost] = useState<string | null>(null);       // muestra modal con captcha + formulario
+  const [editFields, setEditFields] = useState<EditRequestFields>({});         // valores del formulario
+  const [editCaptchaCode, setEditCaptchaCode] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -263,6 +295,154 @@ export default function Home() {
         [postId]: { ...clientData.posts[postId], rentExpiresAt: null },
       },
     });
+  };
+
+  // ===========================================================
+  // FLUJO DE EDICIÓN DEL CLIENTE
+  // ===========================================================
+
+  // Verifica si esta cuenta ya tiene una edición activa (en cualquier post).
+  // Por regla: solo una edición a la vez por cuenta.
+  const hayEdicionActiva = (): string | null => {
+    if (!clientData) return null;
+    for (const [pid, post] of Object.entries(clientData.posts)) {
+      const s = post.editRequest?.status;
+      if (s === "captcha_pendiente" || s === "captcha_listo" || s === "listo_para_publicar") {
+        return pid;
+      }
+    }
+    return null;
+  };
+
+  // Limpia automáticamente solicitudes terminadas/fallidas tras unos segundos
+  // para que dejen de aparecer en la card.
+  useEffect(() => {
+    if (!clientData) return;
+    Object.entries(clientData.posts).forEach(async ([postId, post]) => {
+      const er = post.editRequest;
+      if (!er) return;
+      const s = er.status;
+      const finishedAt = er.appliedAt || er.failedAt;
+      // Si terminó hace más de 8 segundos, limpiarlo
+      if ((s === "aplicada" || s === "fallida") && finishedAt && now - finishedAt > 8000) {
+        await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
+          method: "DELETE",
+        });
+      }
+    });
+  }, [now, clientData, clientKey]);
+
+  // Paso 1: el cliente toca "Editar publicación" en una tarjeta
+  const iniciarEdicion = (postId: string) => {
+    const existente = hayEdicionActiva();
+    if (existente && existente !== postId) {
+      alert(`⚠️ Ya tienes una edición en curso en otro post (#${existente}). Termina o cancela esa primero.`);
+      return;
+    }
+    setEditConfirmPost(postId);
+  };
+
+  // Paso 2: el cliente confirma. Creamos la solicitud en Firebase con estado "captcha_pendiente"
+  const confirmarEdicion = async () => {
+    if (!editConfirmPost || !clientData) return;
+
+    const editRequest: EditRequest = {
+      status: "captcha_pendiente",
+      requestedAt: Date.now(),
+    };
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${editConfirmPost}/editRequest.json`, {
+      method: "PUT",
+      body: JSON.stringify(editRequest),
+    });
+
+    setClientData({
+      ...clientData,
+      posts: {
+        ...clientData.posts,
+        [editConfirmPost]: { ...clientData.posts[editConfirmPost], editRequest },
+      },
+    });
+
+    setEditConfirmPost(null);
+  };
+
+  // Paso 3: el cliente toca "Editar ahora" cuando el captcha ya está listo.
+  // Abrimos el formulario grande con la imagen del captcha y los campos editables.
+  const abrirFormularioEdicion = (postId: string) => {
+    if (!clientData) return;
+    const post = clientData.posts[postId];
+    if (!post.editRequest || post.editRequest.status !== "captcha_listo") return;
+
+    // Pre-llenar los campos con los valores actuales que capturó el bot
+    const current = post.editRequest.currentValues || {};
+    setEditFields({
+      name: current.name || "",
+      age: current.age || "",
+      title: current.title || "",
+      body: current.body || "",
+      cityName: current.cityName || "",
+      location: current.location || "",
+    });
+    setEditCaptchaCode("");
+    setEditFormPost(postId);
+  };
+
+  // Paso 4: el cliente envía el formulario completo (captcha + datos editados)
+  const enviarEdicion = async () => {
+    if (!editFormPost || !clientData) return;
+    if (!editCaptchaCode.trim()) {
+      alert("⚠️ Escribe el código del captcha");
+      return;
+    }
+
+    setEditSubmitting(true);
+
+    const updates: Partial<EditRequest> = {
+      status: "listo_para_publicar",
+      captchaCode: editCaptchaCode.trim(),
+      fields: { ...editFields },
+    };
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${editFormPost}/editRequest.json`, {
+      method: "PATCH",
+      body: JSON.stringify(updates),
+    });
+
+    const post = clientData.posts[editFormPost];
+    setClientData({
+      ...clientData,
+      posts: {
+        ...clientData.posts,
+        [editFormPost]: {
+          ...post,
+          editRequest: { ...(post.editRequest as EditRequest), ...updates } as EditRequest,
+        },
+      },
+    });
+
+    setEditSubmitting(false);
+    setEditFormPost(null);
+  };
+
+  // Cancelar edición en cualquier momento (antes de "aplicada")
+  const cancelarEdicion = async (postId: string) => {
+    if (!confirm("¿Cancelar la edición de este post?")) return;
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
+      method: "DELETE",
+    });
+
+    if (clientData) {
+      const newPosts = { ...clientData.posts };
+      if (newPosts[postId]) {
+        const { editRequest, ...rest } = newPosts[postId];
+        newPosts[postId] = rest;
+      }
+      setClientData({ ...clientData, posts: newPosts });
+    }
+
+    setEditFormPost(null);
   };
 
   const formatTime = (timestamp: number) => {
@@ -1421,6 +1601,248 @@ export default function Home() {
 
         .btn-edit:hover { border-color: var(--accent); color: var(--accent); background: rgba(212,175,95,0.06); }
 
+        /* ===== Estados de edición en la card ===== */
+        .edit-status {
+          padding: 12px 14px;
+          border-radius: 14px;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .edit-status.pending {
+          background: linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(59,130,246,0.03) 100%);
+          border: 1px solid rgba(59,130,246,0.25);
+          color: var(--info);
+          justify-content: space-between;
+        }
+
+        .edit-status.ready {
+          flex-direction: column;
+          gap: 8px;
+          padding: 0;
+          background: transparent;
+        }
+
+        .edit-status.publishing {
+          background: linear-gradient(135deg, rgba(245,158,11,0.1) 0%, rgba(245,158,11,0.03) 100%);
+          border: 1px solid rgba(245,158,11,0.3);
+          color: var(--warning);
+          justify-content: center;
+          font-weight: 600;
+        }
+
+        .edit-status.applied {
+          background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 100%);
+          border: 1px solid rgba(16,185,129,0.3);
+          color: var(--success);
+          justify-content: center;
+          font-weight: 700;
+          font-size: 13px;
+        }
+
+        .edit-status.failed {
+          background: linear-gradient(135deg, rgba(239,68,68,0.1) 0%, rgba(239,68,68,0.03) 100%);
+          border: 1px solid rgba(239,68,68,0.3);
+          color: var(--danger);
+          font-size: 12px;
+          justify-content: center;
+        }
+
+        .edit-status-info {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex: 1;
+        }
+
+        .edit-status-spinner {
+          font-size: 22px;
+          animation: spin 2s linear infinite;
+          display: inline-block;
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .edit-status-title {
+          font-weight: 700;
+          font-size: 13px;
+          margin-bottom: 2px;
+        }
+
+        .edit-status-sub {
+          font-size: 11px;
+          color: var(--gray-500);
+          font-weight: 500;
+        }
+
+        .edit-cancel-btn {
+          padding: 8px 14px;
+          background: var(--surface);
+          border: 1px solid var(--border-2);
+          color: var(--gray-300);
+          border-radius: 10px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: inherit;
+          transition: all 0.2s;
+        }
+
+        .edit-cancel-btn:hover {
+          color: var(--danger);
+          border-color: var(--danger);
+        }
+
+        .edit-cancel-btn.small {
+          width: 100%;
+          padding: 10px;
+        }
+
+        .btn-edit-ready {
+          background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%) !important;
+          color: #1a1a1a !important;
+          border: none !important;
+          font-weight: 800 !important;
+          box-shadow: 0 6px 22px rgba(212,175,95,0.4), 0 1px 0 rgba(255,255,255,0.3) inset !important;
+          animation: pulseReady 2s ease-in-out infinite;
+        }
+
+        @keyframes pulseReady {
+          0%, 100% { box-shadow: 0 6px 22px rgba(212,175,95,0.4), 0 1px 0 rgba(255,255,255,0.3) inset; }
+          50% { box-shadow: 0 6px 30px rgba(212,175,95,0.7), 0 1px 0 rgba(255,255,255,0.3) inset; }
+        }
+
+        /* ===== Modal de edición ===== */
+        .edit-modal {
+          background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 100%);
+          border: 1px solid var(--border-2);
+          border-radius: 24px;
+          padding: 32px;
+          max-width: 580px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 30px 80px rgba(0,0,0,0.6);
+          animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        .edit-modal-captcha {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 14px;
+          padding: 22px;
+          background: var(--surface);
+          border: 1px solid var(--border-2);
+          border-radius: 16px;
+          margin-bottom: 22px;
+        }
+
+        .edit-modal-captcha img {
+          max-width: 100%;
+          height: auto;
+          border-radius: 8px;
+          background: white;
+          padding: 8px;
+        }
+
+        .edit-modal-captcha-input {
+          width: 100%;
+          padding: 14px 18px;
+          background: var(--bg-3);
+          border: 1.5px solid var(--border-2);
+          border-radius: 10px;
+          color: var(--white);
+          font-size: 16px;
+          font-family: 'JetBrains Mono', monospace;
+          text-align: center;
+          letter-spacing: 4px;
+          font-weight: 700;
+          text-transform: uppercase;
+          outline: none;
+        }
+
+        .edit-modal-captcha-input:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(212,175,95,0.15);
+        }
+
+        .edit-modal-timer {
+          font-size: 12px;
+          color: var(--warning);
+          font-weight: 700;
+          padding: 6px 12px;
+          background: rgba(245,158,11,0.1);
+          border: 1px solid rgba(245,158,11,0.3);
+          border-radius: 100px;
+        }
+
+        .edit-modal-section {
+          margin-bottom: 18px;
+        }
+
+        .edit-modal-section-title {
+          font-size: 11px;
+          color: var(--gray-300);
+          text-transform: uppercase;
+          letter-spacing: 2px;
+          font-weight: 700;
+          margin-bottom: 14px;
+          padding-bottom: 10px;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .edit-modal-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 12px;
+        }
+
+        .edit-modal-field {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .edit-modal-field.full { grid-column: 1 / -1; }
+
+        .edit-modal-field label {
+          font-size: 11px;
+          color: var(--gray-500);
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+          margin-bottom: 6px;
+        }
+
+        .edit-modal-field input, .edit-modal-field textarea {
+          padding: 12px 14px;
+          background: var(--bg-3);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          color: var(--white);
+          font-family: inherit;
+          font-size: 14px;
+          outline: none;
+          transition: all 0.2s;
+        }
+
+        .edit-modal-field input:focus, .edit-modal-field textarea:focus {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 3px rgba(212,175,95,0.1);
+        }
+
+        .edit-modal-field textarea {
+          min-height: 120px;
+          resize: vertical;
+          font-family: inherit;
+        }
+
         .empty-state {
           grid-column: 1 / -1;
           text-align: center;
@@ -2003,9 +2425,73 @@ export default function Home() {
                               👁 Ver anuncio
                             </button>
                           </div>
-                          <button className="action-btn btn-edit" onClick={() => alert("✨ Próximamente disponible!")}>
-                            ✏ Editar publicación
-                          </button>
+
+                          {/* Botón de Editar dinámico según estado de la solicitud */}
+                          {(() => {
+                            const er = post.editRequest;
+                            if (!er || er.status === "aplicada" || er.status === "fallida") {
+                              return (
+                                <button className="action-btn btn-edit" onClick={() => iniciarEdicion(postId)}>
+                                  ✏ Editar publicación
+                                </button>
+                              );
+                            }
+
+                            if (er.status === "captcha_pendiente") {
+                              return (
+                                <div className="edit-status pending">
+                                  <div className="edit-status-info">
+                                    <span className="edit-status-spinner">🔄</span>
+                                    <div>
+                                      <div className="edit-status-title">Generando captcha...</div>
+                                      <div className="edit-status-sub">Esperando turno del sistema (1-15 min)</div>
+                                    </div>
+                                  </div>
+                                  <button className="edit-cancel-btn" onClick={() => cancelarEdicion(postId)}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            if (er.status === "captcha_listo") {
+                              const minRestantes = er.expiresAt
+                                ? Math.max(0, Math.ceil((er.expiresAt - now) / 60000))
+                                : 0;
+                              return (
+                                <div className="edit-status ready">
+                                  <button className="action-btn btn-edit-ready" onClick={() => abrirFormularioEdicion(postId)}>
+                                    🔐 Editar ahora ({minRestantes}min)
+                                  </button>
+                                  <button className="edit-cancel-btn small" onClick={() => cancelarEdicion(postId)}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            if (er.status === "listo_para_publicar") {
+                              return (
+                                <div className="edit-status publishing">
+                                  <span className="edit-status-spinner">⏳</span>
+                                  <span>Publicando cambios...</span>
+                                </div>
+                              );
+                            }
+
+                            return null;
+                          })()}
+
+                          {/* Mensaje breve cuando ya se aplicó o falló */}
+                          {post.editRequest?.status === "aplicada" && (
+                            <div className="edit-status applied">✅ Cambios aplicados</div>
+                          )}
+                          {post.editRequest?.status === "fallida" && (
+                            <div className="edit-status failed">
+                              ✗ Edición fallida
+                              {post.editRequest.failReason ? `: ${post.editRequest.failReason}` : ""}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );
@@ -2083,6 +2569,164 @@ export default function Home() {
                   Guardar
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: Confirmar inicio de edición */}
+        {editConfirmPost && (
+          <div className="modal-overlay" onClick={() => setEditConfirmPost(null)}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-title">✏️ Editar publicación</div>
+              <div className="modal-subtitle">
+                Vas a editar el post <code style={{ color: "var(--accent)" }}>#{editConfirmPost}</code>
+              </div>
+
+              <div style={{
+                background: "rgba(59,130,246,0.08)",
+                border: "1px solid rgba(59,130,246,0.25)",
+                borderRadius: 14,
+                padding: 18,
+                marginBottom: 24,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "var(--gray-300)"
+              }}>
+                <div style={{ fontWeight: 700, color: "var(--info)", marginBottom: 8 }}>
+                  ¿Cómo funciona?
+                </div>
+                <div>
+                  1. El sistema generará un <strong>captcha de verificación</strong> en su próximo turno (1-15 min).<br/>
+                  2. Te avisaremos aquí cuando esté listo, y verás un botón <strong>"Editar ahora"</strong>.<br/>
+                  3. Al abrir, podrás resolver el captcha y editar todos los campos (menos teléfono).<br/>
+                  4. Tendrás <strong>15 minutos</strong> para enviar antes de que caduque.
+                </div>
+              </div>
+
+              <div className="modal-actions">
+                <button className="modal-btn modal-btn-secondary" onClick={() => setEditConfirmPost(null)}>
+                  Cancelar
+                </button>
+                <button className="modal-btn modal-btn-primary" onClick={confirmarEdicion}>
+                  Iniciar edición
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL: Formulario de edición con captcha */}
+        {editFormPost && clientData && clientData.posts[editFormPost]?.editRequest && (
+          <div className="modal-overlay" onClick={() => !editSubmitting && setEditFormPost(null)}>
+            <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+              {(() => {
+                const er = clientData.posts[editFormPost].editRequest as EditRequest;
+                const minRest = er.expiresAt
+                  ? Math.max(0, Math.ceil((er.expiresAt - now) / 60000))
+                  : 0;
+                const secRest = er.expiresAt
+                  ? Math.max(0, Math.floor((er.expiresAt - now) / 1000) % 60)
+                  : 0;
+
+                return (
+                  <>
+                    <div className="modal-title">🔐 Editar publicación</div>
+                    <div className="modal-subtitle" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span>Post <code style={{ color: "var(--accent)" }}>#{editFormPost}</code></span>
+                      <span className="edit-modal-timer">
+                        ⏱ {minRest}:{secRest.toString().padStart(2, "0")}
+                      </span>
+                    </div>
+
+                    {/* Captcha */}
+                    <div className="edit-modal-section-title">Captcha de verificación</div>
+                    <div className="edit-modal-captcha">
+                      {er.captchaUrl && (
+                        <img src={er.captchaUrl} alt="Captcha" />
+                      )}
+                      <input
+                        type="text"
+                        className="edit-modal-captcha-input"
+                        placeholder="Escribe el código"
+                        value={editCaptchaCode}
+                        onChange={(e) => setEditCaptchaCode(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
+
+                    {/* Campos editables */}
+                    <div className="edit-modal-section-title">Información del anuncio</div>
+                    <div className="edit-modal-grid">
+                      <div className="edit-modal-field">
+                        <label>Nombre / Alias</label>
+                        <input
+                          type="text"
+                          value={editFields.name || ""}
+                          onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                        />
+                      </div>
+                      <div className="edit-modal-field">
+                        <label>Edad</label>
+                        <input
+                          type="number"
+                          min="18"
+                          max="99"
+                          value={editFields.age || ""}
+                          onChange={(e) => setEditFields({ ...editFields, age: e.target.value })}
+                        />
+                      </div>
+                      <div className="edit-modal-field full">
+                        <label>Titular (Headline)</label>
+                        <input
+                          type="text"
+                          value={editFields.title || ""}
+                          onChange={(e) => setEditFields({ ...editFields, title: e.target.value })}
+                        />
+                      </div>
+                      <div className="edit-modal-field full">
+                        <label>Descripción (Body)</label>
+                        <textarea
+                          value={editFields.body || ""}
+                          onChange={(e) => setEditFields({ ...editFields, body: e.target.value })}
+                        />
+                      </div>
+                      <div className="edit-modal-field">
+                        <label>Ciudad</label>
+                        <input
+                          type="text"
+                          value={editFields.cityName || ""}
+                          onChange={(e) => setEditFields({ ...editFields, cityName: e.target.value })}
+                        />
+                      </div>
+                      <div className="edit-modal-field">
+                        <label>Ubicación / Área</label>
+                        <input
+                          type="text"
+                          value={editFields.location || ""}
+                          onChange={(e) => setEditFields({ ...editFields, location: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="modal-actions" style={{ marginTop: 24 }}>
+                      <button
+                        className="modal-btn modal-btn-secondary"
+                        onClick={() => cancelarEdicion(editFormPost)}
+                        disabled={editSubmitting}
+                      >
+                        Cancelar edición
+                      </button>
+                      <button
+                        className="modal-btn modal-btn-primary"
+                        onClick={enviarEdicion}
+                        disabled={editSubmitting}
+                      >
+                        {editSubmitting ? "Enviando..." : "Guardar y publicar"}
+                      </button>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}
