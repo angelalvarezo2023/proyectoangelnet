@@ -254,67 +254,226 @@ const ESTILOS_VCMP = String.raw`
 }
 
 /* ============================================================
- * CAJA DE RENTA — siempre visible para el cliente
+ * CAJA DE RENTA — estilo MegaPersonals con cinta dorada
  * ============================================================ */
 .vcmp-rent-row {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  padding: 0 4px;
 }
 
 .vcmp-rent {
+  position: relative;
+  background: white;
+  border-radius: 14px;
+  padding: 0;
+  overflow: visible;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  margin-top: 16px;
+}
+
+/* Cinta superior tipo MegaPersonals */
+.vcmp-rent-ribbon {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 22px;
+  border: 3px solid #f4b945;
+  border-radius: 30px;
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 11px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: 1.5px;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2),
+              inset 0 -2px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.4);
+  z-index: 2;
+  white-space: nowrap;
+}
+
+.vcmp-rent-content {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 11px 16px;
-  border-radius: 12px;
-  border: 2px solid;
+  gap: 14px;
+  padding: 22px 18px 16px;
 }
 
 .vcmp-rent-icon {
-  font-size: 26px;
+  font-size: 36px;
   flex-shrink: 0;
   line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
 }
 
-.vcmp-rent-text {
+.vcmp-rent-info {
   flex: 1;
   min-width: 0;
 }
 
-.vcmp-rent-title {
-  font-size: 14px;
-  font-weight: 800;
-  margin-bottom: 1px;
-  letter-spacing: 0.3px;
+.vcmp-rent-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  opacity: 0.7;
+  margin-bottom: 4px;
 }
 
-.vcmp-rent-sub {
-  font-size: 12px;
-  font-weight: 500;
+.vcmp-rent-time {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.vcmp-rent-num {
+  font-family: "Arial Black", Arial, sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.vcmp-rent-unit {
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: 4px;
   opacity: 0.85;
 }
 
-.vcmp-rent-active {
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.03));
-  border-color: rgba(34, 197, 94, 0.35);
-  color: #047857;
+.vcmp-rent-action {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  font-style: italic;
 }
 
+/* Variante ACTIVA - rosa/dorada estilo MP */
+.vcmp-rent-active {
+  background: linear-gradient(135deg, #fff9fb 0%, #fef0f7 100%);
+  border: 2px solid rgba(220, 20, 60, 0.18);
+}
+
+.vcmp-rent-active .vcmp-rent-ribbon {
+  background: linear-gradient(180deg, #6cd99e 0%, #3fc079 40%, #29a464 60%, #3fc079 100%);
+}
+
+.vcmp-rent-active .vcmp-rent-label {
+  color: #c41e3a;
+}
+
+.vcmp-rent-active .vcmp-rent-num,
+.vcmp-rent-active .vcmp-rent-unit {
+  color: #1f5f3d;
+}
+
+/* Variante POR VENCER - dorada amarilla */
 .vcmp-rent-warning {
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
-  border-color: rgba(245, 158, 11, 0.45);
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 2px solid rgba(245, 158, 11, 0.4);
+  animation: vcmpWarnPulse 3s ease-in-out infinite;
+}
+
+.vcmp-rent-warning .vcmp-rent-ribbon {
+  background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 40%, #d97706 60%, #f59e0b 100%);
+}
+
+.vcmp-rent-warning .vcmp-rent-label {
   color: #b45309;
 }
 
+.vcmp-rent-warning .vcmp-rent-num,
+.vcmp-rent-warning .vcmp-rent-unit {
+  color: #92400e;
+}
+
+@keyframes vcmpWarnPulse {
+  0%, 100% { box-shadow: 0 6px 18px rgba(245, 158, 11, 0.15); }
+  50% { box-shadow: 0 6px 24px rgba(245, 158, 11, 0.4); }
+}
+
+/* Variante EN DEUDA - roja pulsante */
 .vcmp-rent-debt {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #b91c1c;
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+  border: 2px solid rgba(239, 68, 68, 0.45);
   animation: vcmpDebtPulse 2s ease-in-out infinite;
 }
 
+.vcmp-rent-debt .vcmp-rent-ribbon {
+  background: linear-gradient(180deg, #f87171 0%, #ef4444 40%, #b91c1c 60%, #ef4444 100%);
+}
+
+.vcmp-rent-debt .vcmp-rent-label {
+  color: #b91c1c;
+}
+
+.vcmp-rent-debt .vcmp-rent-num,
+.vcmp-rent-debt .vcmp-rent-unit {
+  color: #991b1b;
+}
+
+.vcmp-rent-debt .vcmp-rent-action {
+  color: #b91c1c;
+}
+
 @keyframes vcmpDebtPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
-  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+  0%, 100% {
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.2),
+                0 0 0 0 rgba(239, 68, 68, 0.3);
+  }
+  50% {
+    box-shadow: 0 6px 24px rgba(239, 68, 68, 0.4),
+                0 0 0 8px rgba(239, 68, 68, 0);
+  }
+}
+
+/* ============================================================
+ * BOTÓN FLOTANTE "BACK TO TOP" — estilo MegaPersonals
+ * ============================================================ */
+.vcmp-back-to-top {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #f5a8c8 0%, #ee87b4 40%, #d96fa1 60%, #ee87b4 100%);
+  border: 4px solid #f4b945;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(217, 111, 161, 0.5),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  z-index: 90;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: vcmpBackToTopIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vcmp-back-to-top:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 28px rgba(217, 111, 161, 0.6),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.3);
+}
+
+.vcmp-back-to-top:active {
+  transform: translateY(0);
+}
+
+.vcmp-back-to-top svg {
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+@keyframes vcmpBackToTopIn {
+  from { opacity: 0; transform: scale(0.7) translateY(20px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* "CURRENT POST" - título grande pero más compacto */
@@ -726,21 +885,45 @@ const ESTILOS_VCMP = String.raw`
     padding: 10px 14px;
   }
 
-  .vcmp-rent {
-    padding: 12px 14px;
+  .vcmp-rent-content {
+    padding: 20px 14px 14px;
     gap: 10px;
   }
 
   .vcmp-rent-icon {
-    font-size: 26px;
+    font-size: 28px;
   }
 
-  .vcmp-rent-title {
-    font-size: 14px;
+  .vcmp-rent-ribbon {
+    font-size: 10px;
+    padding: 5px 16px;
+    letter-spacing: 1px;
   }
 
-  .vcmp-rent-sub {
+  .vcmp-rent-num {
+    font-size: 20px;
+  }
+
+  .vcmp-rent-unit {
     font-size: 12px;
+  }
+
+  .vcmp-rent-label {
+    font-size: 10px;
+  }
+
+  /* Back to top más pequeño en mobile */
+  .vcmp-back-to-top {
+    width: 48px;
+    height: 48px;
+    bottom: 18px;
+    right: 18px;
+    border-width: 3px;
+  }
+
+  .vcmp-back-to-top svg {
+    width: 22px;
+    height: 22px;
   }
 
   /* Título CURRENT POST */
