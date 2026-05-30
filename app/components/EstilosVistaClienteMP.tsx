@@ -7,13 +7,17 @@ const ESTILOS_VCMP = String.raw`
  * Replica visual de la página /users/posts/list de MegaPersonals.
  * ============================================================ */
 
+/* Aplicar fondo rosa pálido al body completo para que no se vea
+   el fondo oscuro de la vista admin alrededor. */
 .vcmp-wrapper {
-  position: relative;
-  min-height: 100vh;
+  position: fixed;
+  inset: 0;
   background: rgb(253, 246, 251);
   font-family: Arial, "sans serif";
   color: #333;
-  padding: 16px 0 50px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  z-index: 1;
 }
 
 .vcmp-logout {
@@ -43,9 +47,10 @@ const ESTILOS_VCMP = String.raw`
 .vcmp-container {
   max-width: 600px;
   margin: 0 auto;
-  padding: 16px 12px;
+  padding: 16px 12px 50px;
   background: rgb(253, 246, 251);
   position: relative;
+  min-height: 100vh;
 }
 
 /* Logo — tamaño contenido para no estirarse */
@@ -430,12 +435,13 @@ const ESTILOS_VCMP = String.raw`
 }
 
 /* ============================================================
- * BOTÓN FLOTANTE "BACK TO TOP" — estilo MegaPersonals
+ * BOTÓN FLOTANTE "BACK TO TOP" — centrado como MegaPersonals
  * ============================================================ */
 .vcmp-back-to-top {
   position: fixed;
   bottom: 24px;
-  right: 24px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 56px;
   height: 56px;
   border-radius: 50%;
@@ -455,14 +461,14 @@ const ESTILOS_VCMP = String.raw`
 }
 
 .vcmp-back-to-top:hover {
-  transform: translateY(-3px);
+  transform: translateX(-50%) translateY(-3px);
   box-shadow: 0 10px 28px rgba(217, 111, 161, 0.6),
               inset 0 -3px 0 rgba(0, 0, 0, 0.15),
               inset 0 2px 0 rgba(255, 255, 255, 0.3);
 }
 
 .vcmp-back-to-top:active {
-  transform: translateY(0);
+  transform: translateX(-50%) translateY(0);
 }
 
 .vcmp-back-to-top svg {
@@ -472,8 +478,8 @@ const ESTILOS_VCMP = String.raw`
 }
 
 @keyframes vcmpBackToTopIn {
-  from { opacity: 0; transform: scale(0.7) translateY(20px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: translateX(-50%) scale(0.7) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
 }
 
 /* "CURRENT POST" - título grande pero más compacto */
@@ -912,12 +918,11 @@ const ESTILOS_VCMP = String.raw`
     font-size: 10px;
   }
 
-  /* Back to top más pequeño en mobile */
+  /* Back to top más pequeño en mobile, sigue centrado */
   .vcmp-back-to-top {
     width: 48px;
     height: 48px;
     bottom: 18px;
-    right: 18px;
     border-width: 3px;
   }
 
