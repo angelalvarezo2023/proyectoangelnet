@@ -1250,6 +1250,15 @@ const ESTILOS_GLOBALES = String.raw`
           font-weight: 600;
         }
 
+        .edit-status.waiting-bump {
+          background: linear-gradient(135deg, rgba(212,175,95,0.12) 0%, rgba(212,175,95,0.04) 100%);
+          border: 1px solid rgba(212,175,95,0.35);
+          color: #d4af5f;
+          justify-content: center;
+          font-weight: 600;
+          font-variant-numeric: tabular-nums;
+        }
+
         .edit-status.applied {
           background: linear-gradient(135deg, rgba(16,185,129,0.12) 0%, rgba(16,185,129,0.04) 100%);
           border: 1px solid rgba(16,185,129,0.3);
