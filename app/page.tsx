@@ -1,9 +1,65 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASSWORD = "admin2024";
 const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
+
+// Lista completa de estados de US con sus ciudades, replicando lo de MegaPersonals.
+// Se usa en el modal selector de ubicación al editar un post.
+const US_LOCATIONS: Record<string, { abrev: string; ciudades: string[] }> = {
+  "Alabama": { abrev: "AL", ciudades: ["Auburn","Birmingham","Dothan","Gadsden","Huntsville","Mobile","Montgomery","Muscle Shoals","Tuscaloosa"] },
+  "Alaska": { abrev: "AK", ciudades: ["Anchorage","Fairbanks","Juneau","Kenai Peninsula"] },
+  "Arizona": { abrev: "AZ", ciudades: ["Flagstaff","Mohave County","Phoenix","Prescott","Show Low","Sierra Vista","Tucson","Yuma"] },
+  "Arkansas": { abrev: "AR", ciudades: ["Fayetteville","Fort Smith","Jonesboro","Little Rock"] },
+  "California": { abrev: "CA", ciudades: ["Bakersfield","Chico","Concord","Fresno","Humboldt County","Imperial County","Inland Empire","Lancaster","Long Beach","Los Angeles","Mendocino","Merced","Modesto","Monterey","North Bay","Oakland","Orange County","Palm Springs","Redding","Sacramento","San Diego","San Fernando Valley","San Francisco","San Gabriel Valley","San Jose","San Luis Obispo","San Mateo","Santa Barbara","Santa Cruz","Santa Maria","Siskiyou","Stockton","Ventura","Visalia"] },
+  "Colorado": { abrev: "CO", ciudades: ["Boulder","Colorado Springs","Denver","Fort Collins","Pueblo","Rockies","Western Slope"] },
+  "Connecticut": { abrev: "CT", ciudades: ["Bridgeport","Eastern Connecticut","Hartford","New Haven","Northwest"] },
+  "Delaware": { abrev: "DE", ciudades: ["Dover","Milford","Wilmington"] },
+  "District of Columbia": { abrev: "DC", ciudades: ["Annandale","Northern Virginia","Southern Maryland"] },
+  "Florida": { abrev: "FL", ciudades: ["Daytona","Fort Lauderdale","Fort Myers","Gainesville","Jacksonville","Keys","Miami","Ocala","Okaloosa","Orlando","Palm Bay","Panama City","Pensacola","Sarasota","Space Coast","St. Augustine","Tallahassee","Tampa","Treasure Coast","West Palm Beach"] },
+  "Georgia": { abrev: "GA", ciudades: ["Albany","Athens","Atlanta","Augusta","Brunswick","Columbus","Macon","Northwest Georgia","Savannah","Statesboro","Valdosta"] },
+  "Hawaii": { abrev: "HI", ciudades: ["Big Island","Honolulu","Kauai","Maui"] },
+  "Idaho": { abrev: "ID", ciudades: ["Boise","East Idaho","Lewiston","Twin Falls"] },
+  "Illinois": { abrev: "IL", ciudades: ["Bloomington","Carbondale","Chambana","Chicago","Decatur","La Salle County","Mattoon","Peoria","Rockford","Springfield","Western Illinois"] },
+  "Indiana": { abrev: "IN", ciudades: ["Bloomington","Evansville","Ft Wayne","Indianapolis","Kokomo","Lafayette","Muncie","Richmond","South Bend","Terre Haute"] },
+  "Iowa": { abrev: "IA", ciudades: ["Ames","Cedar Rapids","Desmoines","Dubuque","Fort Dodge","Iowa City","Mason City","Quad Cities","Sioux City","Southeast Iowa","Waterloo"] },
+  "Kansas": { abrev: "KS", ciudades: ["Lawrence","Manhattan","Salina","Topeka","Wichita"] },
+  "Kentucky": { abrev: "KY", ciudades: ["Bowling Green","Eastern Kentucky","Lexington","Louisville","Owensboro","Western Kentucky"] },
+  "Louisiana": { abrev: "LA", ciudades: ["Alexandria","Baton Rouge","Hammond","Houma","Lafayette","Lake Charles","Monroe","New Orleans","Shreveport"] },
+  "Maine": { abrev: "ME", ciudades: ["Bangor","Lewiston-Auburn","Portland"] },
+  "Maryland": { abrev: "MD", ciudades: ["Annapolis","Baltimore","Cumberland Valley","Eastern Shore","Frederick","Western Maryland"] },
+  "Massachusetts": { abrev: "MA", ciudades: ["Boston","Brockton","Cape Cod","Lowell","South Coast","Springfield","Worcester"] },
+  "Michigan": { abrev: "MI", ciudades: ["Ann Arbor","Battle Creek","Central Michigan","Detroit","Flint","Grand Rapids","Holland","Jackson","Kalamazoo","Lansing","Monroe","Muskegon","Northern Michigan","Port Huron","Saginaw","Southwest Michigan","Upper Peninsula"] },
+  "Minnesota": { abrev: "MN", ciudades: ["Bemidji","Brainerd","Duluth","Mankato","Minneapolis","Rochester","St. Cloud"] },
+  "Mississippi": { abrev: "MS", ciudades: ["Biloxi","Hattiesburg","Jackson","Meridian","North Mississippi","Southwest Mississippi"] },
+  "Missouri": { abrev: "MO", ciudades: ["Columbia","Joplin","Kansas City","Kirksville","Lake Of The Ozarks","Saint Louis","Southeast Missouri","Springfield","St Joseph"] },
+  "Montana": { abrev: "MT", ciudades: ["Billings","Bozeman","Butte","Great Falls","Helena","Kalispell","Missoula"] },
+  "Nebraska": { abrev: "NE", ciudades: ["Grand Island","Lincoln","North Platte","Omaha","Scottsbluff"] },
+  "Nevada": { abrev: "NV", ciudades: ["Elko","Las Vegas","Reno","Virginia City"] },
+  "New Hampshire": { abrev: "NH", ciudades: ["Concord","Dover","Manchester","Nashua"] },
+  "New Jersey": { abrev: "NJ", ciudades: ["Central Jersey","Jersey Shore","North Jersey","South Jersey"] },
+  "New Mexico": { abrev: "NM", ciudades: ["Albuquerque","Clovis","Farmington","Las Cruces","Roswell","Santa Fe"] },
+  "New York": { abrev: "NY", ciudades: ["Albany","Binghamton","Bronx","Brooklyn","Buffalo","Catskills","Chautauqua","Elmira","Finger Lakes","Glens Falls","Hudson Valley","Ithaca","Long Island","Manhattan","Oneonta","Plattsburgh","Potsdam","Queens","Rochester","Staten Island","Syracuse","Twin Tiers","Utica","Watertown","Westchester"] },
+  "North Carolina": { abrev: "NC", ciudades: ["Asheville","Boone","Charlotte","Eastern","Fayetteville","Greensboro","Hickory","High Point","Outer Banks","Raleigh","Raleigh-Durham","Wilmington","Winston-Salem"] },
+  "North Dakota": { abrev: "ND", ciudades: ["Bismarck","Fargo","Grand Forks","Minot"] },
+  "Ohio": { abrev: "OH", ciudades: ["Akron","Ashtabula","Athens","Cambridge","Chillicothe","Cincinnati","Cleveland","Columbus","Dayton","Findlay","Mansfield","Sandusky","Toledo","Tuscarawas County","Youngstown"] },
+  "Oklahoma": { abrev: "OK", ciudades: ["Lawton","Norman","Oklahoma City","Stillwater","Tulsa"] },
+  "Oregon": { abrev: "OR", ciudades: ["Bend","Corvallis","East Oregon","Eugene","Klamath Falls","Medford","Oregon Coast","Portland","Roseburg","Salem"] },
+  "Pennsylvania": { abrev: "PA", ciudades: ["Allentown","Altoona","Chambersburg","Erie","Harrisburg","Lancaster","Meadville","Penn State","Philadelphia","Pittsburgh","Poconos","Reading","Scranton","Williamsport","York"] },
+  "Rhode Island": { abrev: "RI", ciudades: ["Providence","Warwick"] },
+  "South Carolina": { abrev: "SC", ciudades: ["Charleston","Columbia","Florence","Greenville","Hilton Head","Myrtle Beach"] },
+  "South Dakota": { abrev: "SD", ciudades: ["Aberdeen","Pierre","Rapid City","Sioux Falls"] },
+  "Tennessee": { abrev: "TN", ciudades: ["Chattanooga","Clarksville","Cookeville","Johnson City","Knoxville","Memphis","Nashville","Tri-Cities"] },
+  "Texas": { abrev: "TX", ciudades: ["Abilene","Amarillo","Austin","Beaumont","Brownsville","College Station","Corpus Christi","Dallas","Del Rio","Denton","El Paso","Fort Worth","Galveston","Houston","Huntsville","Killeen","Laredo","Longview","Lubbock","Mcallen","Mid Cities","Odessa","San Antonio","San Marcos","Texarkana","Texoma","Tyler","Victoria","Waco","Wichita Falls"] },
+  "Utah": { abrev: "UT", ciudades: ["Logan","Ogden","Provo","Salt Lake City","St. George"] },
+  "Vermont": { abrev: "VT", ciudades: ["Burlington","Colchester","Essex"] },
+  "Virginia": { abrev: "VA", ciudades: ["Charlottesville","Chesapeake","Danville","Fredericksburg","Hampton","Harrisonburg","Lynchburg","New River Valley","Newport News","Norfolk","Portsmouth","Richmond","Roanoke","Southwest Virginia","Suffolk","Virginia Beach"] },
+  "Washington": { abrev: "WA", ciudades: ["Bellingham","Everett","Moses Lake","Mt. Vernon","Olympia","Pullman","Seattle","Spokane","Tacoma","Tri-Cities","Wenatchee","Yakima"] },
+  "West Virginia": { abrev: "WV", ciudades: ["Charleston","Huntington","Martinsburg","Morgantown","Parkersburg","Southern West Virginia","Wheeling"] },
+  "Wisconsin": { abrev: "WI", ciudades: ["Appleton","Eau Claire","Green Bay","Janesville","La Crosse","Madison","Milwaukee","Racine","Sheboygan","Wausau"] },
+  "Wyoming": { abrev: "WY", ciudades: ["Casper","Cheyenne","Laramie"] }
+};
 
 interface EditRequestFields {
   name?: string;
@@ -73,6 +129,10 @@ export default function Home() {
   const [editOriginalFields, setEditOriginalFields] = useState<EditRequestFields>({}); // valores originales (para comparar)
   const [editCaptchaCode, setEditCaptchaCode] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
+
+  // Estados del modal de selección de ubicación (city)
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [expandedState, setExpandedState] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -316,8 +376,12 @@ export default function Home() {
     return null;
   };
 
-  // Limpia automáticamente solicitudes terminadas/fallidas tras 5 segundos
-  // para que dejen de aparecer en la card.
+  // Tracker para evitar borrar varias veces la misma editRequest
+  const borradasRef = useRef<Set<string>>(new Set());
+
+  // Limpia automáticamente solicitudes terminadas/fallidas tras 5 segundos.
+  // Actualiza el estado local INMEDIATAMENTE para que la card no muestre el mensaje
+  // pegado mientras el polling de 5s refresca los datos.
   useEffect(() => {
     if (!clientData) return;
     Object.entries(clientData.posts).forEach(async ([postId, post]) => {
@@ -325,10 +389,29 @@ export default function Home() {
       if (!er) return;
       const s = er.status;
       const finishedAt = er.appliedAt || er.failedAt;
-      // Si terminó hace más de 5 segundos, limpiarlo
-      if ((s === "aplicada" || s === "fallida") && finishedAt && now - finishedAt > 5000) {
+      if (!finishedAt || (s !== "aplicada" && s !== "fallida")) return;
+
+      // Solo borrar una vez por finishedAt
+      const claveBorrado = `${postId}:${finishedAt}`;
+      if (borradasRef.current.has(claveBorrado)) return;
+
+      if (now - finishedAt > 5000) {
+        borradasRef.current.add(claveBorrado);
+
+        // Borrar en Firebase
         await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
           method: "DELETE",
+        });
+
+        // Actualizar el estado local INMEDIATAMENTE (sin esperar el polling)
+        setClientData((prev) => {
+          if (!prev || !prev.posts[postId]) return prev;
+          const newPost = { ...prev.posts[postId] };
+          delete newPost.editRequest;
+          return {
+            ...prev,
+            posts: { ...prev.posts, [postId]: newPost },
+          };
         });
       }
     });
@@ -486,6 +569,19 @@ export default function Home() {
     }
 
     setEditFormPost(null);
+  };
+
+  // Selector de ubicación: el usuario eligió una ciudad de un estado
+  const seleccionarCiudad = (ciudad: string, abrev: string) => {
+    setEditFields({ ...editFields, cityName: `${ciudad}, ${abrev}` });
+    setShowLocationPicker(false);
+    setExpandedState(null);
+  };
+
+  // Abre el modal del selector
+  const abrirSelectorUbicacion = () => {
+    setExpandedState(null);
+    setShowLocationPicker(true);
   };
 
   const formatTime = (timestamp: number) => {
@@ -1886,6 +1982,674 @@ export default function Home() {
           font-family: inherit;
         }
 
+        /* ===== Selector de City (botón que abre el modal) ===== */
+        .city-selector-btn {
+          padding: 12px 14px;
+          background: var(--bg-3);
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          color: var(--white);
+          font-family: inherit;
+          font-size: 14px;
+          outline: none;
+          cursor: pointer;
+          text-align: left;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: all 0.2s;
+        }
+
+        .city-selector-btn:hover {
+          border-color: var(--accent);
+        }
+
+        .city-placeholder {
+          color: var(--gray-500);
+        }
+
+        .city-selected {
+          color: var(--white);
+        }
+
+        .city-selector-arrow {
+          color: var(--gray-500);
+          font-size: 11px;
+        }
+
+        /* ===== Modal de selección de ubicación (estilo MegaPersonals) ===== */
+        .location-modal {
+          background: white;
+          border-radius: 16px;
+          padding: 24px 18px 18px 18px;
+          max-width: 380px;
+          width: 92%;
+          max-height: 85vh;
+          overflow-y: auto;
+          box-shadow: 0 25px 80px rgba(0,0,0,0.5);
+          position: relative;
+          animation: fadeUp 0.3s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        .location-close-btn {
+          position: absolute;
+          top: -14px;
+          right: -14px;
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          background: #5a5a5a;
+          color: white;
+          border: 3px solid white;
+          font-size: 16px;
+          font-weight: bold;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+          font-family: inherit;
+        }
+
+        .location-close-btn:hover {
+          background: #ef4444;
+        }
+
+        .location-title {
+          color: #4FC3F7;
+          font-size: 22px;
+          font-weight: 800;
+          text-align: center;
+          margin-bottom: 18px;
+          letter-spacing: 0.5px;
+        }
+
+        /* Botón naranja "United States" - estilo MegaPersonals */
+        .location-region-btn {
+          width: 100%;
+          padding: 14px 18px;
+          background: linear-gradient(180deg, #F5A623 0%, #E89714 100%);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 17px;
+          font-weight: 700;
+          text-align: left;
+          cursor: default;
+          margin-bottom: 8px;
+          font-family: inherit;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .location-states-list {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .location-state-group {
+          display: flex;
+          flex-direction: column;
+        }
+
+        /* Botones azul claro de los estados */
+        .location-state-btn {
+          width: 100%;
+          padding: 13px 18px;
+          background: linear-gradient(180deg, #4FC3F7 0%, #29B6F6 100%);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 15px;
+          font-weight: 700;
+          text-align: left;
+          cursor: pointer;
+          font-family: inherit;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          transition: filter 0.15s;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+
+        .location-state-btn:hover {
+          filter: brightness(1.08);
+        }
+
+        .location-state-btn.expanded {
+          background: linear-gradient(180deg, #81D4FA 0%, #4FC3F7 100%);
+        }
+
+        .location-state-icon {
+          font-size: 22px;
+          line-height: 1;
+          font-weight: 400;
+          opacity: 0.95;
+        }
+
+        /* Lista de ciudades de un estado expandido */
+        .location-cities-list {
+          display: flex;
+          flex-direction: column;
+          padding: 4px 0 4px 24px;
+          background: rgba(79,195,247,0.04);
+          border-left: 3px solid #4FC3F7;
+          margin: 2px 0 4px 12px;
+          border-radius: 0 8px 8px 0;
+        }
+
+        .location-city-btn {
+          padding: 9px 14px;
+          background: transparent;
+          border: none;
+          color: #333;
+          font-size: 14px;
+          text-align: left;
+          cursor: pointer;
+          font-family: inherit;
+          border-radius: 6px;
+          transition: all 0.15s;
+          font-weight: 500;
+        }
+
+        .location-city-btn:hover {
+          background: rgba(79,195,247,0.15);
+          color: #0277BD;
+          padding-left: 18px;
+        }
+
+        /* ============================================
+         * MODAL MEGAPERSONALS 1:1 — réplica exacta del estilo Candy Crush
+         * ============================================ */
+        .mp-overlay {
+          position: fixed;
+          top: 0; left: 0; right: 0; bottom: 0;
+          background: rgba(0,0,0,0.7);
+          z-index: 9999;
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          padding: 20px;
+          overflow-y: auto;
+          animation: fadeIn 0.2s ease-out;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        .mp-modal {
+          position: relative;
+          width: 100%;
+          max-width: 600px;
+          background: linear-gradient(rgb(253, 52, 171) 0%, rgb(255, 255, 255) 100%);
+          padding: 21px 0;
+          font-family: Arial, "sans serif";
+          font-size: 14px;
+          color: #333;
+          box-shadow: 0 25px 80px rgba(0,0,0,0.5);
+          margin: 20px 0;
+          animation: mpSlide 0.4s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        @keyframes mpSlide {
+          from { transform: translateY(-30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+
+        .mp-close-x {
+          position: absolute;
+          top: -15px;
+          right: -15px;
+          width: 50px;
+          height: 50px;
+          border: none;
+          background: transparent;
+          cursor: pointer;
+          padding: 0;
+          z-index: 10;
+        }
+
+        .mp-close-x img {
+          width: 100%;
+          height: 100%;
+        }
+
+        .mp-timer {
+          position: absolute;
+          top: 10px;
+          left: 10px;
+          background: rgba(255,255,255,0.95);
+          color: #d63384;
+          padding: 6px 14px;
+          border-radius: 100px;
+          font-size: 13px;
+          font-weight: 700;
+          box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+          z-index: 5;
+          font-family: 'JetBrains Mono', monospace;
+          font-variant-numeric: tabular-nums;
+        }
+
+        /* Bordes decorativos rosa (4 lados) */
+        .mp-topborder,
+        .mp-bottomborder,
+        .mp-leftborder,
+        .mp-rightborder {
+          position: absolute;
+          pointer-events: none;
+          background-repeat: repeat;
+        }
+        .mp-topborder {
+          top: 0; left: 0; right: 0;
+          height: 21px;
+          background-image: url("/megapersonals-img/topborder.png");
+          background-repeat: repeat-x;
+        }
+        .mp-bottomborder {
+          bottom: 0; left: 0; right: 0;
+          height: 21px;
+          background-image: url("/megapersonals-img/bottomborder.png");
+          background-repeat: repeat-x;
+        }
+        .mp-leftborder {
+          top: 21px; bottom: 21px; left: 0;
+          width: 21px;
+          background-image: url("/megapersonals-img/leftborder.png");
+          background-repeat: repeat-y;
+        }
+        .mp-rightborder {
+          top: 21px; bottom: 21px; right: 0;
+          width: 21px;
+          background-image: url("/megapersonals-img/rightborder.png");
+          background-repeat: repeat-y;
+        }
+
+        .mp-header-logo {
+          text-align: center;
+          padding: 20px 20px 10px;
+          position: relative;
+          z-index: 2;
+        }
+        .mp-header-logo img {
+          max-width: 90%;
+          height: auto;
+        }
+
+        .mp-stage {
+          padding: 0 20px;
+          position: relative;
+          z-index: 2;
+        }
+
+        .mp-banner {
+          text-align: center;
+          margin-bottom: 10px;
+        }
+        .mp-banner img {
+          max-width: 100%;
+          height: auto;
+        }
+
+        .mp-form {
+          width: 100%;
+        }
+
+        .mp-row {
+          display: flex;
+          gap: 12px;
+          margin-bottom: 14px;
+        }
+
+        .mp-row-2 > .mp-field {
+          flex: 1;
+        }
+
+        .mp-field {
+          display: flex;
+          flex-direction: column;
+        }
+
+        .mp-field-full {
+          flex: 1;
+          width: 100%;
+        }
+
+        .mp-label {
+          color: rgba(248, 208, 7, 0.91); /* amarillo MegaPersonals */
+          font-family: Helvetica, Arial, sans-serif;
+          font-size: 16px;
+          font-weight: 600;
+          font-style: italic;
+          margin-bottom: 5px;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.15);
+        }
+
+        .mp-input {
+          background: #fff;
+          border: 2px solid rgb(136, 136, 136);
+          border-radius: 5px;
+          padding: 6px 12px;
+          font-family: Arial, "sans serif";
+          font-size: 14px;
+          color: #333;
+          width: 100%;
+          height: 34px;
+          box-sizing: border-box;
+          outline: none;
+          transition: border-color 0.15s;
+        }
+
+        .mp-input:focus {
+          border-color: #d63384;
+        }
+
+        .mp-input.mp-disabled {
+          background: rgb(238, 238, 238);
+          color: #666;
+          cursor: not-allowed;
+        }
+
+        .mp-textarea {
+          height: 200px !important;
+          padding: 8px 12px;
+          resize: vertical;
+          font-family: Arial, "sans serif";
+        }
+
+        .mp-city-btn {
+          text-align: left;
+          cursor: pointer;
+          background: #fff;
+        }
+        .mp-city-btn:hover {
+          border-color: #d63384;
+        }
+
+        .mp-phone-wrapper {
+          display: flex;
+          gap: 4px;
+        }
+        .mp-phone-code {
+          width: 70px !important;
+          flex-shrink: 0;
+          text-align: center;
+        }
+        .mp-phone-number {
+          flex: 1;
+        }
+
+        .mp-button-row {
+          text-align: center;
+          margin: 30px 0 10px;
+        }
+
+        .mp-btn-next {
+          width: 130px;
+          height: 60px;
+          background-image: url("/megapersonals-img/button_next.png");
+          background-size: 100% 100%;
+          background-repeat: no-repeat;
+          background-color: transparent;
+          border: none;
+          cursor: pointer;
+          color: white;
+          font-size: 18px;
+          padding: 0;
+          transition: transform 0.1s;
+        }
+        .mp-btn-next:hover {
+          transform: scale(1.05);
+        }
+        .mp-btn-next:active {
+          transform: scale(0.97);
+        }
+
+        .mp-cancel-row {
+          text-align: center;
+          margin: 15px 0 5px;
+        }
+
+        .mp-cancel {
+          background: rgba(255,255,255,0.6);
+          border: 1px solid rgba(0,0,0,0.15);
+          color: #666;
+          padding: 8px 18px;
+          border-radius: 100px;
+          font-size: 12px;
+          cursor: pointer;
+          font-family: inherit;
+        }
+        .mp-cancel:hover {
+          background: white;
+          color: #d63384;
+        }
+        .mp-cancel:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        /* ========== Pestaña 2: Photos + Videos + Captcha ========== */
+        .mp-section-locked {
+          margin-bottom: 24px;
+          position: relative;
+        }
+
+        .mp-section-title {
+          color: rgba(248, 208, 7, 0.91);
+          font-family: Helvetica, Arial, sans-serif;
+          font-size: 16px;
+          font-weight: 700;
+          font-style: italic;
+          margin-bottom: 10px;
+          text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .mp-letter {
+          display: inline-block;
+          width: 28px;
+          height: 28px;
+          line-height: 28px;
+          background: #4FC3F7;
+          color: white;
+          border-radius: 50%;
+          text-align: center;
+          font-weight: bold;
+          font-style: normal;
+          margin-right: 8px;
+          font-family: Arial, sans-serif;
+          font-size: 16px;
+        }
+        .mp-letter-c {
+          background: #FFA726;
+        }
+
+        .mp-locked-content {
+          position: relative;
+          padding: 15px;
+          background: rgba(255,255,255,0.6);
+          border: 2px dashed rgba(214, 51, 132, 0.4);
+          border-radius: 10px;
+        }
+
+        .mp-locked-msg {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          background: rgba(214, 51, 132, 0.95);
+          color: white;
+          padding: 14px 24px;
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 700;
+          text-align: center;
+          z-index: 5;
+          box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+          white-space: nowrap;
+        }
+
+        .mp-locked-sub {
+          font-size: 11px;
+          font-weight: 400;
+          opacity: 0.9;
+          margin-top: 4px;
+          white-space: normal;
+          max-width: 250px;
+        }
+
+        .mp-photos-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 6px;
+          opacity: 0.4;
+          pointer-events: none;
+        }
+
+        .mp-videos-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 6px;
+          opacity: 0.4;
+          pointer-events: none;
+        }
+
+        .mp-photo-cell {
+          aspect-ratio: 1 / 1;
+          background: #ddd;
+          border-radius: 4px;
+          overflow: hidden;
+        }
+        .mp-photo-cell img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        /* Captcha */
+        .mp-captcha-section {
+          margin: 24px 0;
+          padding: 18px;
+          background: rgba(255,255,255,0.7);
+          border-radius: 10px;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .mp-captcha-image-wrapper {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+
+        .mp-captcha-image {
+          background: white;
+          padding: 4px;
+          border-radius: 4px;
+          max-width: 100%;
+          height: auto;
+        }
+
+        .mp-captcha-reload {
+          width: 40px;
+          height: 40px;
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+        .mp-captcha-reload img {
+          width: 100%;
+          height: 100%;
+        }
+
+        .mp-captcha-input {
+          max-width: 320px;
+          text-align: center;
+          font-size: 16px !important;
+          letter-spacing: 3px;
+          font-weight: 700;
+          text-transform: uppercase;
+        }
+
+        /* Botones Back y Publish */
+        .mp-buttons-final {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin: 30px 20px 10px;
+        }
+
+        .mp-btn-back {
+          width: 90px;
+          height: 45px;
+          background-image: url("/megapersonals-img/button_back.png");
+          background-size: 100% 100%;
+          background-repeat: no-repeat;
+          background-color: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          transition: transform 0.1s;
+        }
+        .mp-btn-back:hover { transform: scale(1.05); }
+        .mp-btn-back:active { transform: scale(0.97); }
+        .mp-btn-back:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .mp-btn-publish {
+          width: 150px;
+          height: 60px;
+          background-image: url("/megapersonals-img/button_publish.png");
+          background-size: 100% 100%;
+          background-repeat: no-repeat;
+          background-color: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 0;
+          transition: transform 0.1s;
+        }
+        .mp-btn-publish:hover { transform: scale(1.05); }
+        .mp-btn-publish:active { transform: scale(0.97); }
+        .mp-btn-publish:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* MOBILE: adaptar para pantallas pequeñas */
+        @media (max-width: 640px) {
+          .mp-modal {
+            margin: 10px 0;
+            padding: 15px 0;
+          }
+          .mp-stage {
+            padding: 0 14px;
+          }
+          .mp-row-2 {
+            flex-direction: column;
+          }
+          .mp-photos-grid,
+          .mp-videos-grid {
+            grid-template-columns: repeat(3, 1fr);
+          }
+          .mp-locked-msg {
+            font-size: 13px;
+            padding: 10px 14px;
+            white-space: normal;
+            max-width: 80%;
+          }
+          .mp-buttons-final {
+            margin: 24px 10px 10px;
+          }
+          .mp-close-x {
+            width: 40px;
+            height: 40px;
+            top: -10px;
+            right: -10px;
+          }
+          .mp-timer {
+            font-size: 11px;
+            padding: 5px 10px;
+          }
+        }
+
         .empty-state {
           grid-column: 1 / -1;
           text-align: center;
@@ -2658,10 +3422,10 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: Formulario de edición - 2 pantallas (Datos → Captcha) */}
+        {/* MODAL: Formulario de edición estilo MegaPersonals 1:1 */}
         {editFormPost && clientData && clientData.posts[editFormPost]?.editRequest && (
-          <div className="modal-overlay" onClick={() => !editSubmitting && setEditFormPost(null)}>
-            <div className="edit-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="mp-overlay" onClick={() => !editSubmitting && setEditFormPost(null)}>
+            <div className="mp-modal" onClick={(e) => e.stopPropagation()}>
               {(() => {
                 const er = clientData.posts[editFormPost].editRequest as EditRequest;
                 const minRest = er.expiresAt
@@ -2673,119 +3437,239 @@ export default function Home() {
 
                 return (
                   <>
-                    <div className="modal-title">
-                      {editStep === "fields" ? "✏️ Editar publicación" : "🔐 Verificación"}
-                    </div>
-                    <div className="modal-subtitle" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                      <span>
-                        Post <code style={{ color: "var(--accent)" }}>#{editFormPost}</code>
-                        <span style={{ color: "var(--gray-500)", marginLeft: 12, fontSize: 12 }}>
-                          Paso {editStep === "fields" ? "1" : "2"} de 2
-                        </span>
-                      </span>
-                      <span className="edit-modal-timer">
-                        ⏱ {minRest}:{secRest.toString().padStart(2, "0")}
-                      </span>
+                    {/* Botón X cerrar (esquina superior derecha) */}
+                    <button
+                      className="mp-close-x"
+                      onClick={() => !editSubmitting && setEditFormPost(null)}
+                      title="Cerrar"
+                    >
+                      <img src="/megapersonals-img/close_bump_to_top_modal.png" alt="Cerrar" />
+                    </button>
+
+                    {/* Timer flotante */}
+                    <div className="mp-timer">⏱ {minRest}:{secRest.toString().padStart(2, "0")}</div>
+
+                    {/* Bordes decorativos rosa */}
+                    <div className="mp-topborder"></div>
+                    <div className="mp-leftborder"></div>
+                    <div className="mp-rightborder"></div>
+                    <div className="mp-bottomborder"></div>
+
+                    {/* Logo de header */}
+                    <div className="mp-header-logo">
+                      <img src="/megapersonals-img/megapersonalsPageHeader2.png" alt="MegaPersonals" />
                     </div>
 
-                    {/* ====== PANTALLA 1: CAMPOS EDITABLES ====== */}
+                    {/* ============ PESTAÑA 1: DATOS ============ */}
                     {editStep === "fields" && (
-                      <>
-                        <div className="edit-modal-section-title">Información del anuncio</div>
-                        <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 16, marginTop: -6 }}>
-                          Estos son los datos actuales de tu post. Modifica solo lo que quieras cambiar.
-                        </div>
-                        <div className="edit-modal-grid">
-                          <div className="edit-modal-field">
-                            <label>Name / Alias</label>
-                            <input
-                              type="text"
-                              value={editFields.name || ""}
-                              onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
-                            />
-                          </div>
-                          <div className="edit-modal-field">
-                            <label>Age</label>
-                            <input
-                              type="number"
-                              min="18"
-                              max="99"
-                              value={editFields.age || ""}
-                              onChange={(e) => setEditFields({ ...editFields, age: e.target.value })}
-                            />
-                          </div>
-                          <div className="edit-modal-field full">
-                            <label>Headline *</label>
-                            <input
-                              type="text"
-                              value={editFields.title || ""}
-                              onChange={(e) => setEditFields({ ...editFields, title: e.target.value })}
-                              placeholder="Required"
-                            />
-                          </div>
-                          <div className="edit-modal-field full">
-                            <label>Body *</label>
-                            <textarea
-                              value={editFields.body || ""}
-                              onChange={(e) => setEditFields({ ...editFields, body: e.target.value })}
-                              placeholder="Required"
-                            />
-                          </div>
-                          <div className="edit-modal-field">
-                            <label>City</label>
-                            <input
-                              type="text"
-                              value={editFields.cityName || ""}
-                              onChange={(e) => setEditFields({ ...editFields, cityName: e.target.value })}
-                            />
-                          </div>
-                          <div className="edit-modal-field">
-                            <label>Location / Area</label>
-                            <input
-                              type="text"
-                              value={editFields.location || ""}
-                              onChange={(e) => setEditFields({ ...editFields, location: e.target.value })}
-                            />
-                          </div>
+                      <div className="mp-stage">
+                        <div className="mp-banner">
+                          <img src="/megapersonals-img/writepost1_devilgirl.png" alt="Create Post" />
                         </div>
 
-                        <div style={{ fontSize: 11, color: "var(--gray-500)", marginTop: 4, marginBottom: 18 }}>
-                          * Campos obligatorios
-                        </div>
+                        <form className="mp-form" onSubmit={(e) => e.preventDefault()}>
+                          {/* I AM / I SEE */}
+                          <div className="mp-row mp-row-2">
+                            <div className="mp-field">
+                              <label className="mp-label">I AM:</label>
+                              <select className="mp-input mp-disabled" disabled value="1">
+                                <option value="1">A woman</option>
+                              </select>
+                            </div>
+                            <div className="mp-field">
+                              <label className="mp-label">I SEE:</label>
+                              <input
+                                className="mp-input mp-disabled"
+                                type="text"
+                                disabled
+                                value="Men"
+                                readOnly
+                              />
+                            </div>
+                          </div>
 
-                        <div className="modal-actions" style={{ marginTop: 8 }}>
-                          <button
-                            className="modal-btn modal-btn-secondary"
-                            onClick={() => cancelarEdicion(editFormPost)}
-                            disabled={editSubmitting}
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            className="modal-btn modal-btn-primary"
-                            onClick={irAlCaptcha}
-                          >
-                            Next ▶
-                          </button>
-                        </div>
-                      </>
+                          {/* Name / Age */}
+                          <div className="mp-row mp-row-2">
+                            <div className="mp-field">
+                              <label className="mp-label">Name/Alias:</label>
+                              <input
+                                className="mp-input"
+                                type="text"
+                                value={editFields.name || ""}
+                                onChange={(e) => setEditFields({ ...editFields, name: e.target.value })}
+                              />
+                            </div>
+                            <div className="mp-field">
+                              <label className="mp-label">Age:</label>
+                              <select
+                                className="mp-input"
+                                value={editFields.age || "25"}
+                                onChange={(e) => setEditFields({ ...editFields, age: e.target.value })}
+                              >
+                                {Array.from({ length: 82 }, (_, i) => i + 18).map((a) => (
+                                  <option key={a} value={a}>{a}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Headline */}
+                          <div className="mp-row">
+                            <div className="mp-field mp-field-full">
+                              <label className="mp-label">Headline: *</label>
+                              <input
+                                className="mp-input"
+                                type="text"
+                                value={editFields.title || ""}
+                                onChange={(e) => setEditFields({ ...editFields, title: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Body */}
+                          <div className="mp-row">
+                            <div className="mp-field mp-field-full">
+                              <label className="mp-label">Body: *</label>
+                              <textarea
+                                className="mp-input mp-textarea"
+                                value={editFields.body || ""}
+                                onChange={(e) => setEditFields({ ...editFields, body: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* City / Phone */}
+                          <div className="mp-row mp-row-2">
+                            <div className="mp-field">
+                              <label className="mp-label">City:</label>
+                              <button
+                                type="button"
+                                className="mp-input mp-city-btn"
+                                onClick={abrirSelectorUbicacion}
+                              >
+                                {editFields.cityName || "Click to select"}
+                              </button>
+                            </div>
+                            <div className="mp-field">
+                              <label className="mp-label">Phone:</label>
+                              <div className="mp-phone-wrapper">
+                                <input
+                                  className="mp-input mp-disabled mp-phone-code"
+                                  type="text"
+                                  disabled
+                                  value="+1"
+                                  readOnly
+                                />
+                                <input
+                                  className="mp-input mp-disabled mp-phone-number"
+                                  type="text"
+                                  disabled
+                                  value={er.currentValues?.name ? "(no editable)" : ""}
+                                  readOnly
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Location/Area */}
+                          <div className="mp-row">
+                            <div className="mp-field mp-field-full">
+                              <label className="mp-label">Location/Area:</label>
+                              <input
+                                className="mp-input"
+                                type="text"
+                                value={editFields.location || ""}
+                                onChange={(e) => setEditFields({ ...editFields, location: e.target.value })}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Botón Next */}
+                          <div className="mp-button-row">
+                            <button
+                              type="button"
+                              className="mp-btn-next"
+                              onClick={irAlCaptcha}
+                              aria-label="Next"
+                            >
+                              <span style={{ visibility: "hidden" }}>Next</span>
+                            </button>
+                          </div>
+
+                          {/* Cancelar */}
+                          <div className="mp-cancel-row">
+                            <button
+                              type="button"
+                              className="mp-cancel"
+                              onClick={() => cancelarEdicion(editFormPost)}
+                              disabled={editSubmitting}
+                            >
+                              Cancelar edición
+                            </button>
+                          </div>
+                        </form>
+                      </div>
                     )}
 
-                    {/* ====== PANTALLA 2: CAPTCHA ====== */}
+                    {/* ============ PESTAÑA 2: CAPTCHA + FOTOS ============ */}
                     {editStep === "captcha" && (
-                      <>
-                        <div className="edit-modal-section-title">Captcha de verificación</div>
-                        <div style={{ fontSize: 12, color: "var(--gray-500)", marginBottom: 16, marginTop: -6 }}>
-                          Escribe el código que aparece en la imagen para publicar tus cambios.
+                      <div className="mp-stage">
+                        <div className="mp-banner">
+                          <img src="/megapersonals-img/writepost2_devilgirl.png" alt="Add Pics & Video" />
                         </div>
 
-                        <div className="edit-modal-captcha">
+                        {/* Photos in this Ad (deshabilitado) */}
+                        <div className="mp-section-locked">
+                          <div className="mp-section-title">
+                            <span className="mp-letter">A</span> Photos in this Ad:
+                          </div>
+                          <div className="mp-locked-content">
+                            <div className="mp-locked-msg">
+                              🔒 Prohibido temporalmente
+                              <div className="mp-locked-sub">El cambio de fotos solo lo puede hacer Angel directamente</div>
+                            </div>
+                            <div className="mp-photos-grid">
+                              {Array.from({ length: 12 }, (_, i) => (
+                                <div key={i} className="mp-photo-cell">
+                                  <img src="/megapersonals-img/pic_placeholder.png" alt={`${i+1}`} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Videos (deshabilitado) */}
+                        <div className="mp-section-locked">
+                          <div className="mp-section-title">
+                            <span className="mp-letter mp-letter-c">C</span> Videos: <span style={{ fontWeight: 400, fontSize: 14, color: "#666" }}>(optional)</span>
+                          </div>
+                          <div className="mp-locked-content">
+                            <div className="mp-locked-msg">
+                              🔒 Prohibido temporalmente
+                            </div>
+                            <div className="mp-videos-grid">
+                              {Array.from({ length: 4 }, (_, i) => (
+                                <div key={i} className="mp-photo-cell">
+                                  <img src="/megapersonals-img/pic_placeholder.png" alt={`${i+1}`} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Captcha */}
+                        <div className="mp-captcha-section">
                           {er.captchaUrl && (
-                            <img src={er.captchaUrl} alt="Captcha" />
+                            <div className="mp-captcha-image-wrapper">
+                              <img className="mp-captcha-image" src={er.captchaUrl} alt="Captcha" />
+                              <div className="mp-captcha-reload" title="No se puede recargar">
+                                <img src="/megapersonals-img/reloadButton.png" alt="reload" />
+                              </div>
+                            </div>
                           )}
                           <input
                             type="text"
-                            className="edit-modal-captcha-input"
+                            className="mp-input mp-captcha-input"
                             placeholder="Enter code from the picture"
                             value={editCaptchaCode}
                             onChange={(e) => setEditCaptchaCode(e.target.value)}
@@ -2793,27 +3677,96 @@ export default function Home() {
                           />
                         </div>
 
-                        <div className="modal-actions" style={{ marginTop: 8 }}>
+                        {/* Botones Back y Publish */}
+                        <div className="mp-buttons-final">
                           <button
-                            className="modal-btn modal-btn-secondary"
+                            type="button"
+                            className="mp-btn-back"
                             onClick={volverAFields}
                             disabled={editSubmitting}
+                            aria-label="Back"
                           >
-                            ◀ Back
+                            <span style={{ visibility: "hidden" }}>Back</span>
                           </button>
                           <button
-                            className="modal-btn modal-btn-primary"
+                            type="button"
+                            className="mp-btn-publish"
                             onClick={enviarEdicion}
                             disabled={editSubmitting}
+                            aria-label="Publish"
                           >
-                            {editSubmitting ? "Enviando..." : "Publish ✓"}
+                            <span style={{ visibility: "hidden" }}>{editSubmitting ? "..." : "Publish"}</span>
                           </button>
                         </div>
-                      </>
+
+                        {/* Cancelar */}
+                        <div className="mp-cancel-row">
+                          <button
+                            type="button"
+                            className="mp-cancel"
+                            onClick={() => cancelarEdicion(editFormPost)}
+                            disabled={editSubmitting}
+                          >
+                            Cancelar edición
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </>
                 );
               })()}
+            </div>
+          </div>
+        )}
+
+
+        {/* MODAL: Selector de ubicación (estilo MegaPersonals) */}
+        {showLocationPicker && (
+          <div className="modal-overlay" onClick={() => { setShowLocationPicker(false); setExpandedState(null); }}>
+            <div className="location-modal" onClick={(e) => e.stopPropagation()}>
+              <button
+                className="location-close-btn"
+                onClick={() => { setShowLocationPicker(false); setExpandedState(null); }}
+                aria-label="Cerrar"
+              >
+                ✕
+              </button>
+              <div className="location-title">Choose a Location</div>
+
+              {/* United States es el ÚNICO continente disponible */}
+              <button className="location-region-btn">
+                United States
+              </button>
+
+              <div className="location-states-list">
+                {Object.entries(US_LOCATIONS).map(([estado, info]) => {
+                  const expanded = expandedState === estado;
+                  return (
+                    <div key={estado} className="location-state-group">
+                      <button
+                        className={`location-state-btn ${expanded ? "expanded" : ""}`}
+                        onClick={() => setExpandedState(expanded ? null : estado)}
+                      >
+                        <span>{estado}</span>
+                        <span className="location-state-icon">{expanded ? "−" : "+"}</span>
+                      </button>
+                      {expanded && (
+                        <div className="location-cities-list">
+                          {info.ciudades.map((ciudad) => (
+                            <button
+                              key={ciudad}
+                              className="location-city-btn"
+                              onClick={() => seleccionarCiudad(ciudad, info.abrev)}
+                            >
+                              {ciudad}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
