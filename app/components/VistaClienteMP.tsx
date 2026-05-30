@@ -201,10 +201,6 @@ export default function VistaClienteMP({
             <div className="vcmp-status vcmp-status-paused">
               ⏸ PUBLICACIÓN PAUSADA
             </div>
-          ) : rentInfo?.status === "deuda" ? (
-            <div className="vcmp-status vcmp-status-debt">
-              💰 RENTA VENCIDA — {rentInfo.days}d {rentInfo.hours}h en deuda
-            </div>
           ) : enEdicion && listoParaPublicar && msHastaBump > 0 ? (
             <div className="vcmp-status vcmp-status-waiting">
               ⏳ Haciendo cambios — {minHastaBump > 0
@@ -231,14 +227,43 @@ export default function VistaClienteMP({
                   ? `${minHastaBump} min ${segHastaBump.toString().padStart(2, "0")}s`
                   : `${segHastaBump}s`}
               </strong>
-              {rentInfo?.isWarning && (
-                <span className="vcmp-status-warn">
-                  {" "}· ⚠️ Renta vence en {rentInfo.days}d {rentInfo.hours}h
-                </span>
-              )}
             </div>
           )}
         </div>
+
+        {/* Caja de info de RENTA — siempre visible para el cliente */}
+        {rentInfo && (
+          <div className="vcmp-rent-row">
+            {rentInfo.status === "deuda" ? (
+              <div className="vcmp-rent vcmp-rent-debt">
+                <div className="vcmp-rent-icon">💰</div>
+                <div className="vcmp-rent-text">
+                  <div className="vcmp-rent-title">RENTA VENCIDA</div>
+                  <div className="vcmp-rent-sub">En deuda: {rentInfo.days}d {rentInfo.hours}h — contacta a Angel para reactivar</div>
+                </div>
+              </div>
+            ) : rentInfo.isWarning ? (
+              <div className="vcmp-rent vcmp-rent-warning">
+                <div className="vcmp-rent-icon">⚠️</div>
+                <div className="vcmp-rent-text">
+                  <div className="vcmp-rent-title">Renta vence pronto</div>
+                  <div className="vcmp-rent-sub">Quedan: {rentInfo.days}d {rentInfo.hours}h</div>
+                </div>
+              </div>
+            ) : (
+              <div className="vcmp-rent vcmp-rent-active">
+                <div className="vcmp-rent-icon">📅</div>
+                <div className="vcmp-rent-text">
+                  <div className="vcmp-rent-title">Renta activa</div>
+                  <div className="vcmp-rent-sub">
+                    {rentInfo.days > 0 ? `${rentInfo.days} día${rentInfo.days !== 1 ? "s" : ""} ` : ""}
+                    {rentInfo.hours} hora{rentInfo.hours !== 1 ? "s" : ""} restantes
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Título "Current Post" */}
         <div className="vcmp-current-post-title">CURRENT POST</div>
