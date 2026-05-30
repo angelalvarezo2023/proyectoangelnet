@@ -482,6 +482,310 @@ const ESTILOS_VCMP = String.raw`
   to { opacity: 1; transform: translateX(-50%) scale(1) translateY(0); }
 }
 
+/* ============================================================
+ * BOTÓN FLOTANTE "SOPORTE" — esquina inferior derecha (verde)
+ * ============================================================ */
+.vcmp-soporte-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(180deg, #34d399 0%, #10b981 40%, #059669 60%, #10b981 100%);
+  border: 4px solid #f4b945;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  z-index: 91;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: vcmpSoporteIn 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vcmp-soporte-btn:hover {
+  transform: translateY(-3px) scale(1.05);
+  box-shadow: 0 10px 28px rgba(16, 185, 129, 0.6),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.3);
+}
+
+.vcmp-soporte-btn:active {
+  transform: translateY(0);
+}
+
+.vcmp-soporte-btn svg {
+  width: 30px;
+  height: 30px;
+  filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.3));
+}
+
+@keyframes vcmpSoporteIn {
+  from { opacity: 0; transform: scale(0) rotate(-180deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+/* Modal overlay */
+.vcmp-soporte-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: vcmpFadeIn 0.2s ease-out;
+}
+
+@keyframes vcmpFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.vcmp-soporte-modal {
+  position: relative;
+  background: white;
+  border-radius: 20px;
+  padding: 28px 24px 24px;
+  max-width: 420px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: vcmpModalIn 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.vcmp-soporte-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.vcmp-soporte-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
+}
+
+.vcmp-soporte-header {
+  text-align: center;
+  margin-bottom: 22px;
+}
+
+.vcmp-soporte-icon-big {
+  font-size: 48px;
+  margin-bottom: 8px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+.vcmp-soporte-header h2 {
+  color: #1a1a1a;
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 6px;
+  font-family: "Arial Black", Arial, sans-serif;
+}
+
+.vcmp-soporte-header p {
+  color: #555;
+  font-size: 13px;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Opciones del menú */
+.vcmp-soporte-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vcmp-soporte-option {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: linear-gradient(135deg, #fff9fb 0%, #fef0f7 100%);
+  border: 2px solid rgba(220, 20, 60, 0.18);
+  border-radius: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.15s;
+  width: 100%;
+}
+
+.vcmp-soporte-option:hover {
+  border-color: rgba(220, 20, 60, 0.45);
+  background: linear-gradient(135deg, #fef0f7 0%, #fde4ef 100%);
+  transform: translateX(2px);
+}
+
+.vcmp-soporte-emoji {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.vcmp-soporte-option-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vcmp-soporte-option-text strong {
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.vcmp-soporte-option-text small {
+  color: #888;
+  font-size: 12px;
+}
+
+/* Input del nuevo número */
+.vcmp-soporte-input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid rgba(220, 20, 60, 0.25);
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  font-family: inherit;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.vcmp-soporte-input:focus {
+  border-color: #d63384;
+}
+
+.vcmp-soporte-input::placeholder {
+  color: #aaa;
+  font-weight: 500;
+}
+
+/* Info de cambio de fotos */
+.vcmp-soporte-info {
+  background: linear-gradient(135deg, #fff9fb 0%, #fef0f7 100%);
+  border: 1.5px solid rgba(220, 20, 60, 0.18);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+.vcmp-soporte-info p {
+  color: #333;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.vcmp-soporte-info p:last-child {
+  margin-bottom: 0;
+}
+
+.vcmp-soporte-info ul {
+  margin: 8px 0;
+  padding-left: 22px;
+}
+
+.vcmp-soporte-info li {
+  color: #444;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+/* Botones de acción */
+.vcmp-soporte-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.vcmp-soporte-back {
+  flex: 1;
+  padding: 12px 14px;
+  background: transparent;
+  border: 1.5px solid #ddd;
+  color: #666;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.vcmp-soporte-back:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.vcmp-soporte-submit {
+  flex: 2;
+  padding: 12px 16px;
+  background: linear-gradient(180deg, #34d399 0%, #10b981 40%, #059669 60%, #10b981 100%);
+  border: 2px solid #f4b945;
+  color: white;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  font-family: inherit;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 3px 10px rgba(16, 185, 129, 0.3);
+  transition: filter 0.15s, transform 0.1s;
+}
+
+.vcmp-soporte-submit:hover:not(:disabled) {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.vcmp-soporte-submit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vcmp-soporte-secondary {
+  flex: 1;
+  padding: 12px 14px;
+  background: white;
+  border: 1.5px solid rgba(220, 20, 60, 0.4);
+  color: #c41e3a;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.15s;
+}
+
+.vcmp-soporte-secondary:hover {
+  background: #fef0f7;
+}
+
 /* "CURRENT POST" - título grande pero más compacto */
 .vcmp-current-post-title {
   font-family: "Anton", "Arial Black", Impact, sans-serif;
@@ -929,6 +1233,49 @@ const ESTILOS_VCMP = String.raw`
   .vcmp-back-to-top svg {
     width: 22px;
     height: 22px;
+  }
+
+  /* Botón soporte más pequeño en mobile */
+  .vcmp-soporte-btn {
+    width: 52px;
+    height: 52px;
+    bottom: 18px;
+    right: 18px;
+    border-width: 3px;
+  }
+
+  .vcmp-soporte-btn svg {
+    width: 26px;
+    height: 26px;
+  }
+
+  .vcmp-soporte-modal {
+    padding: 22px 18px 18px;
+    border-radius: 16px;
+  }
+
+  .vcmp-soporte-header h2 {
+    font-size: 19px;
+  }
+
+  .vcmp-soporte-icon-big {
+    font-size: 42px;
+  }
+
+  .vcmp-soporte-option {
+    padding: 11px 12px;
+  }
+
+  .vcmp-soporte-emoji {
+    font-size: 24px;
+  }
+
+  .vcmp-soporte-option-text strong {
+    font-size: 13px;
+  }
+
+  .vcmp-soporte-option-text small {
+    font-size: 11px;
   }
 
   /* Título CURRENT POST */
