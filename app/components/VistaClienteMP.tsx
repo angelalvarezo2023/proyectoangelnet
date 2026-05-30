@@ -15,7 +15,7 @@
 // - Flechas ← → para navegar si tiene varios posts
 // - NO muestra "Your other posts" (decisión del usuario)
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ClientData, PostData } from "../lib/types";
 import { imagenViaProxy, WHATSAPP_NUMERO } from "../lib/constants";
 
@@ -49,6 +49,21 @@ export default function VistaClienteMP({
   const post: PostData | undefined = clientData.posts[postIdActual];
   const [modalProhibido, setModalProhibido] = useState<string | null>(null);
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null);
+  const [mostrarBackToTop, setMostrarBackToTop] = useState(false);
+
+  // Mostrar botón "back to top" cuando el usuario haya bajado más de 300px
+  useEffect(() => {
+    const onScroll = () => {
+      setMostrarBackToTop(window.scrollY > 300);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll(); // chequeo inicial
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const scrollAlInicio = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   if (!post) {
     return (
@@ -231,37 +246,56 @@ export default function VistaClienteMP({
           )}
         </div>
 
-        {/* Caja de info de RENTA — siempre visible para el cliente */}
+        {/* Caja de info de RENTA — estilo MegaPersonals con cinta dorada */}
         {rentInfo && (
           <div className="vcmp-rent-row">
-            {rentInfo.status === "deuda" ? (
-              <div className="vcmp-rent vcmp-rent-debt">
-                <div className="vcmp-rent-icon">💰</div>
-                <div className="vcmp-rent-text">
-                  <div className="vcmp-rent-title">RENTA VENCIDA</div>
-                  <div className="vcmp-rent-sub">En deuda: {rentInfo.days}d {rentInfo.hours}h — contacta a Angel para reactivar</div>
-                </div>
+            <div className={`vcmp-rent ${
+              rentInfo.status === "deuda"
+                ? "vcmp-rent-debt"
+                : rentInfo.isWarning
+                  ? "vcmp-rent-warning"
+                  : "vcmp-rent-active"
+            }`}>
+              <div className="vcmp-rent-ribbon">
+                {rentInfo.status === "deuda" ? "EN DEUDA" : rentInfo.isWarning ? "POR VENCER" : "ACTIVA"}
               </div>
-            ) : rentInfo.isWarning ? (
-              <div className="vcmp-rent vcmp-rent-warning">
-                <div className="vcmp-rent-icon">⚠️</div>
-                <div className="vcmp-rent-text">
-                  <div className="vcmp-rent-title">Renta vence pronto</div>
-                  <div className="vcmp-rent-sub">Quedan: {rentInfo.days}d {rentInfo.hours}h</div>
+              <div className="vcmp-rent-content">
+                <div className="vcmp-rent-icon">
+                  {rentInfo.status === "deuda" ? "💰" : rentInfo.isWarning ? "⏰" : "✨"}
                 </div>
-              </div>
-            ) : (
-              <div className="vcmp-rent vcmp-rent-active">
-                <div className="vcmp-rent-icon">📅</div>
-                <div className="vcmp-rent-text">
-                  <div className="vcmp-rent-title">Renta activa</div>
-                  <div className="vcmp-rent-sub">
-                    {rentInfo.days > 0 ? `${rentInfo.days} día${rentInfo.days !== 1 ? "s" : ""} ` : ""}
-                    {rentInfo.hours} hora{rentInfo.hours !== 1 ? "s" : ""} restantes
+                <div className="vcmp-rent-info">
+                  <div className="vcmp-rent-label">
+                    {rentInfo.status === "deuda" ? "Tu Renta Venció" : "Tiempo de Renta Restante"}
                   </div>
+                  <div className="vcmp-rent-time">
+                    {rentInfo.status === "deuda" ? (
+                      <>
+                        <span className="vcmp-rent-num">{rentInfo.days}</span>
+                        <span className="vcmp-rent-unit">{rentInfo.days === 1 ? "día" : "días"}</span>
+                        <span className="vcmp-rent-num">{rentInfo.hours}</span>
+                        <span className="vcmp-rent-unit">{rentInfo.hours === 1 ? "hora" : "horas"}</span>
+                      </>
+                    ) : (
+                      <>
+                        {rentInfo.days > 0 && (
+                          <>
+                            <span className="vcmp-rent-num">{rentInfo.days}</span>
+                            <span className="vcmp-rent-unit">{rentInfo.days === 1 ? "día" : "días"}</span>
+                          </>
+                        )}
+                        <span className="vcmp-rent-num">{rentInfo.hours}</span>
+                        <span className="vcmp-rent-unit">{rentInfo.hours === 1 ? "hora" : "horas"}</span>
+                      </>
+                    )}
+                  </div>
+                  {rentInfo.status === "deuda" && (
+                    <div className="vcmp-rent-action">
+                      💬 Contacta a Angel para reactivar
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 
@@ -411,6 +445,20 @@ export default function VistaClienteMP({
             ✕
           </button>
         </div>
+      )}
+
+      {/* Botón flotante "Back to top" (estilo MegaPersonals) */}
+      {mostrarBackToTop && (
+        <button
+          className="vcmp-back-to-top"
+          onClick={scrollAlInicio}
+          aria-label="Volver al inicio"
+          title="Volver al inicio"
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 4L4 12L5.4 13.4L11 7.8V20H13V7.8L18.6 13.4L20 12L12 4Z" fill="currentColor"/>
+          </svg>
+        </button>
       )}
     </div>
   );
