@@ -30,6 +30,10 @@ export interface PostCapturedData {
   images?: string[];
   title?: string;
   body?: string;
+  phone?: string;
+  age?: string;
+  city?: string;
+  location?: string;
 }
 
 export interface PostData {
