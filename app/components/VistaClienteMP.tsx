@@ -92,15 +92,17 @@ export default function VistaClienteMP({
     return { status: "active" as const, days, hours, isWarning };
   })();
 
-  // Datos capturados del post (fotos + texto)
+  // Datos capturados del post (fotos + texto + info)
+  // El bot llena post.data en cada bump. Si aún no hay data, mostramos placeholder.
   const datos = post.data;
   const fotos = datos?.images || [];
-  const titulo = datos?.title || post.editRequest?.currentValues?.title;
-  const cuerpo = datos?.body || post.editRequest?.currentValues?.body;
-  const nombre = post.editRequest?.currentValues?.name;
-  const edad = post.editRequest?.currentValues?.age;
-  const ciudad = post.editRequest?.currentValues?.cityName;
-  const location = post.editRequest?.currentValues?.location;
+  const titulo = datos?.title || post.editRequest?.currentValues?.title || null;
+  const cuerpo = datos?.body || post.editRequest?.currentValues?.body || null;
+  const telefono = datos?.phone || null;
+  const edad = datos?.age || post.editRequest?.currentValues?.age || null;
+  const ciudad = datos?.city || post.editRequest?.currentValues?.cityName || null;
+  const ubicacion = datos?.location || post.editRequest?.currentValues?.location || null;
+  const nombre = post.editRequest?.currentValues?.name || null;
 
   // Estado pausado
   const pausado = post.status === "paused";
@@ -248,26 +250,49 @@ export default function VistaClienteMP({
           </div>
         )}
 
-        {/* Info (Phone, Age, City, Location) */}
+        {/* Info (Phone, Age, City, Location) — estructura idéntica a MegaPersonals */}
         <div className="vcmp-info">
-          <div className="vcmp-info-row">
-            <span className="vcmp-info-label">Phone:</span>
-            <span className="vcmp-info-value">+1 (oculto por seguridad)</span>
-            <span className="vcmp-info-label vcmp-info-label-right">Age:</span>
-            <span className="vcmp-info-value">{edad || "—"}</span>
-          </div>
-          <div className="vcmp-info-row">
-            <span className="vcmp-info-label">City:</span>
-            <span className="vcmp-info-value">{ciudad || "—"}</span>
-          </div>
-          <div className="vcmp-info-row">
-            <span className="vcmp-info-label">Location:</span>
-            <span className="vcmp-info-value">{location || "—"}</span>
-          </div>
-          <div className="vcmp-info-row">
-            <span className="vcmp-info-label">Name:</span>
-            <span className="vcmp-info-value">{nombre || "—"}</span>
-          </div>
+          {telefono && (
+            <div className="vcmp-info-row">
+              <span className="vcmp-info-label">Phone:</span>
+              <span className="vcmp-info-value">{telefono}</span>
+              {edad && (
+                <>
+                  <span className="vcmp-info-label vcmp-info-label-right">Age:</span>
+                  <span className="vcmp-info-value">{edad}</span>
+                </>
+              )}
+            </div>
+          )}
+          {!telefono && edad && (
+            <div className="vcmp-info-row">
+              <span className="vcmp-info-label">Age:</span>
+              <span className="vcmp-info-value">{edad}</span>
+            </div>
+          )}
+          {ciudad && (
+            <div className="vcmp-info-row">
+              <span className="vcmp-info-label">City:</span>
+              <span className="vcmp-info-value">{ciudad}</span>
+            </div>
+          )}
+          {ubicacion && (
+            <div className="vcmp-info-row">
+              <span className="vcmp-info-label">Location:</span>
+              <span className="vcmp-info-value">{ubicacion}</span>
+            </div>
+          )}
+          {nombre && (
+            <div className="vcmp-info-row">
+              <span className="vcmp-info-label">Name:</span>
+              <span className="vcmp-info-value">{nombre}</span>
+            </div>
+          )}
+          {!telefono && !edad && !ciudad && !ubicacion && (
+            <div className="vcmp-info-empty">
+              📋 Los datos del post se actualizarán cuando el bot pase por tu publicación
+            </div>
+          )}
         </div>
 
         {/* Caja del Body */}
