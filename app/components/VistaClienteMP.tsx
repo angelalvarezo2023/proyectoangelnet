@@ -128,14 +128,13 @@ export default function VistaClienteMP({
           <img src="/megapersonals-img/megapersonalsHeaderLogo_v2.png" alt="MegaPersonals" />
         </div>
 
-        {/* Banner "Manage Posts" con la chica diabla */}
+        {/* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta */}
         <div className="vcmp-banner">
-          <div className="vcmp-banner-girl">
-            <img src="/megapersonals-img/writepost1_devilgirl.png" alt="" />
-          </div>
-          <div className="vcmp-banner-ribbon">
-            <span>Manage Posts</span>
-          </div>
+          <img
+            className="vcmp-banner-img"
+            src="/megapersonals-img/megapersonalsHeaderBackground.png"
+            alt="Manage Posts"
+          />
         </div>
 
         {/* Los 4 botones grandes (sólo Edit Post funciona) */}
