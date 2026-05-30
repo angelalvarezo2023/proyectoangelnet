@@ -18,9 +18,11 @@
 import { useState, useEffect } from "react";
 import type { ClientData, PostData } from "../lib/types";
 import { imagenViaProxy, WHATSAPP_NUMERO } from "../lib/constants";
+import BotonSoporte from "./BotonSoporte";
 
 interface VistaClienteMPProps {
   clientData: ClientData;
+  clientKey: string;
   postIdActual: string;
   postIdsOrdenados: string[]; // todos los IDs ordenados por addedAt
   now: number;
@@ -36,6 +38,7 @@ interface VistaClienteMPProps {
 
 export default function VistaClienteMP({
   clientData,
+  clientKey,
   postIdActual,
   postIdsOrdenados,
   now,
@@ -476,6 +479,13 @@ export default function VistaClienteMP({
           </svg>
         </button>
       )}
+
+      {/* Botón flotante de Soporte (esquina inferior derecha) */}
+      <BotonSoporte
+        clientData={clientData}
+        clientKey={clientKey}
+        postIdActual={postIdActual}
+      />
     </div>
   );
 }
