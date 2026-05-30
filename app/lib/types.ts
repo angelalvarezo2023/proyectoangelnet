@@ -47,6 +47,7 @@ export interface PostData {
   editRequest?: EditRequest | null;
   data?: PostCapturedData;
   browserName?: string | null;
+  lastPhotoChangeRequest?: number; // timestamp del último cambio de fotos solicitado
 }
 
 export interface ClientData {
