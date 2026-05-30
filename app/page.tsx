@@ -968,6 +968,7 @@ export default function Home() {
             return (
               <VistaClienteMP
                 clientData={clientData}
+                clientKey={clientKey}
                 postIdActual={postActual}
                 postIdsOrdenados={postIdsOrdenados}
                 now={now}
