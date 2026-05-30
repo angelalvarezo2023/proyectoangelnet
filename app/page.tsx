@@ -799,6 +799,11 @@ export default function Home() {
                     const paused = posts.filter((p) => p.status === "paused").length;
                     const initial = (data.displayName || key).charAt(0).toUpperCase();
 
+                    // Lista de navegadores únicos donde están los posts de este cliente
+                    const navegadores = Array.from(new Set(
+                      posts.map((p) => p.browserName).filter((b): b is string => !!b)
+                    ));
+
                     // Estado de renta agregado del cliente
                     const postsConRenta = posts.filter((p) => p.rentExpiresAt);
                     let rentSummary: { type: "expired" | "warning" | "active" | "none"; text: string; count?: number } = {
@@ -852,6 +857,11 @@ export default function Home() {
                           <div className="client-info">
                             <div className="client-name">{data.displayName || key}</div>
                             <div className="client-handle">@{key}</div>
+                            {navegadores.length > 0 && (
+                              <div className="client-browsers" title={`Navegadores: ${navegadores.join(", ")}`}>
+                                🖥 {navegadores.join(", ")}
+                              </div>
+                            )}
                           </div>
                         </div>
 
@@ -1065,6 +1075,9 @@ export default function Home() {
                                 <span className="hash">#</span>
                                 {postId}
                               </div>
+                              {post.browserName && (
+                                <div className="pc-browser">🖥 {post.browserName}</div>
+                              )}
                             </div>
                             <span className={`pc-badge ${isPaused ? "paused" : "active"}`}>
                               <span className="pc-badge-dot"></span>
@@ -1202,15 +1215,32 @@ export default function Home() {
                             </button>
                           </div>
 
-                          {/* Botón de Editar dinámico según estado de la solicitud */}
+                          {/* Vista admin: muestra el estado de la edición si existe.
+                              NO permite iniciar nueva edición — eso lo hace el cliente
+                              desde su vista MegaPersonals. */}
                           {(() => {
                             const er = post.editRequest;
                             if (!er || er.status === "aplicada" || er.status === "fallida") {
-                              return (
-                                <button className="action-btn btn-edit" onClick={() => iniciarEdicion(postId)}>
-                                  ✏ Editar publicación
-                                </button>
-                              );
+                              // Sin edición en curso: nada que mostrar.
+                              // (El admin no inicia ediciones, eso es solo del cliente.)
+                              if (er?.status === "aplicada") {
+                                return (
+                                  <div className="edit-status applied">
+                                    <span>✅ Cambios aplicados</span>
+                                  </div>
+                                );
+                              }
+                              if (er?.status === "fallida") {
+                                return (
+                                  <div className="edit-status failed">
+                                    <span>✗ Edición falló{er.failReason ? `: ${er.failReason}` : ""}</span>
+                                    <button className="edit-cancel-btn small" onClick={() => cancelarEdicion(postId)}>
+                                      Cerrar
+                                    </button>
+                                  </div>
+                                );
+                              }
+                              return null;
                             }
 
                             if (er.status === "captcha_pendiente") {
@@ -1236,9 +1266,13 @@ export default function Home() {
                                 : 0;
                               return (
                                 <div className="edit-status ready">
-                                  <button className="action-btn btn-edit-ready" onClick={() => abrirFormularioEdicion(postId)}>
-                                    🔐 Editar ahora ({minRestantes}min)
-                                  </button>
+                                  <div className="edit-status-info">
+                                    <span className="edit-status-spinner">📸</span>
+                                    <div>
+                                      <div className="edit-status-title">Captcha listo</div>
+                                      <div className="edit-status-sub">Esperando que el cliente lo resuelva ({minRestantes}min)</div>
+                                    </div>
+                                  </div>
                                   <button className="edit-cancel-btn small" onClick={() => cancelarEdicion(postId)}>
                                     Cancelar
                                   </button>
@@ -1279,17 +1313,6 @@ export default function Home() {
 
                             return null;
                           })()}
-
-                          {/* Mensaje breve cuando ya se aplicó o falló */}
-                          {post.editRequest?.status === "aplicada" && (
-                            <div className="edit-status applied">✅ Cambios aplicados</div>
-                          )}
-                          {post.editRequest?.status === "fallida" && (
-                            <div className="edit-status failed">
-                              ✗ Edición fallida
-                              {post.editRequest.failReason ? `: ${post.editRequest.failReason}` : ""}
-                            </div>
-                          )}
                         </div>
                       </div>
                     );
