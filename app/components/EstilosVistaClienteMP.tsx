@@ -309,6 +309,17 @@ const ESTILOS_VCMP = String.raw`
   font-weight: 500;
 }
 
+.vcmp-info-empty {
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.6);
+  border: 1.5px dashed rgba(220,20,60,0.3);
+  border-radius: 10px;
+  text-align: center;
+  color: #888;
+  font-size: 13px;
+  font-style: italic;
+}
+
 /* Caja del body (anuncio) */
 .vcmp-body-box {
   background: white;
