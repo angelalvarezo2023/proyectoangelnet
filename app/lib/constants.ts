@@ -4,6 +4,7 @@
 export const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 export const ADMIN_PASSWORD = "admin2024";
 export const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
+export const TELEGRAM_SOPORTE = "https://t.me/Soportetecnico2323"; // Telegram de soporte técnico
 
 /**
  * Convierte una URL de MegaPersonals a una URL del proxy local en Vercel.
