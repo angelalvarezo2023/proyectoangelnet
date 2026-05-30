@@ -650,6 +650,17 @@ const ESTILOS_GLOBALES = String.raw`
           font-family: 'JetBrains Mono', monospace;
         }
 
+        .client-browsers {
+          margin-top: 4px;
+          font-size: 11px;
+          color: var(--primary);
+          font-weight: 600;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          max-width: 200px;
+        }
+
         .client-stats {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
@@ -851,6 +862,21 @@ const ESTILOS_GLOBALES = String.raw`
         }
 
         .pc-id-big .hash { color: var(--gray-500); }
+
+        .pc-browser {
+          margin-top: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          color: var(--primary);
+          font-family: 'JetBrains Mono', monospace;
+          display: inline-flex;
+          align-items: center;
+          gap: 4px;
+          padding: 3px 10px;
+          background: rgba(244, 114, 182, 0.12);
+          border: 1px solid rgba(244, 114, 182, 0.25);
+          border-radius: 100px;
+        }
 
         .pc-badge {
           display: inline-flex;
