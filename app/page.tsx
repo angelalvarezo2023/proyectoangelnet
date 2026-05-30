@@ -963,7 +963,20 @@ export default function Home() {
                 now={now}
                 isAdmin={isAdmin}
                 onCambiarPost={(newId) => setPostIdActualMP(newId)}
-                onEditClick={(pid) => iniciarEdicion(pid)}
+                onEditClick={(pid) => {
+                  // Decide qué hacer según el estado actual de la editRequest:
+                  // - sin editRequest, o aplicada/fallida → iniciar nueva edición
+                  // - captcha_listo → abrir formulario para que llene el captcha
+                  // - captcha_pendiente o listo_para_publicar → ya está en progreso, no hacer nada
+                  const p = clientData.posts[pid];
+                  const er = p?.editRequest;
+                  if (!er || er.status === "aplicada" || er.status === "fallida") {
+                    iniciarEdicion(pid);
+                  } else if (er.status === "captcha_listo") {
+                    abrirFormularioEdicion(pid);
+                  }
+                  // captcha_pendiente o listo_para_publicar: no hacer nada (estado en curso)
+                }}
                 onPausarToggle={(pid) => {
                   const p = clientData.posts[pid];
                   if (p) togglePostStatus(pid, p.status);
