@@ -59,68 +59,19 @@ const ESTILOS_VCMP = String.raw`
   height: auto;
 }
 
-/* Banner "Manage Posts" con chica diabla + cinta rosa.
-   Como NO hay imagen original separada, lo construimos con CSS + la imagen de la chica. */
+/* Banner "Manage Posts" — usa la imagen completa de MegaPersonals
+   que ya incluye la chica diabla + la cinta rosa */
 .vcmp-banner {
-  position: relative;
   width: 100%;
-  height: 220px;
   margin-bottom: 24px;
-  background: url("/megapersonals-img/megapersonalsHeaderBackground.png") center/cover no-repeat,
-              radial-gradient(circle at 30% 50%, rgba(255, 192, 203, 0.4) 0%, transparent 60%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  text-align: center;
 }
 
-.vcmp-banner-girl {
-  position: absolute;
-  left: 5%;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 38%;
-  z-index: 2;
-}
-
-.vcmp-banner-girl img {
-  width: 100%;
+.vcmp-banner-img {
+  max-width: 100%;
   height: auto;
-  filter: drop-shadow(0 8px 20px rgba(0, 0, 0, 0.2));
-}
-
-.vcmp-banner-ribbon {
-  position: absolute;
-  left: 30%;
-  top: 50%;
-  transform: translateY(-50%) rotate(-3deg);
-  width: 65%;
-  max-width: 380px;
-  height: 78px;
-  background: linear-gradient(180deg,
-    #f5a8c8 0%,
-    #ee87b4 40%,
-    #d96fa1 60%,
-    #ee87b4 100%);
-  border: 4px solid #f4b945; /* borde dorado */
-  border-radius: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2),
-              inset 0 -3px 0 rgba(0, 0, 0, 0.1),
-              inset 0 3px 0 rgba(255, 255, 255, 0.3);
-  z-index: 1;
-}
-
-.vcmp-banner-ribbon span {
-  font-family: "Brush Script MT", "Lucida Handwriting", cursive;
-  font-style: italic;
-  font-size: 36px;
-  font-weight: 700;
-  color: white;
-  text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.3),
-               -1px -1px 0 rgba(0, 0, 0, 0.2);
-  letter-spacing: 1px;
+  display: block;
+  margin: 0 auto;
 }
 
 /* Grid de 4 botones grandes */
@@ -643,19 +594,6 @@ const ESTILOS_VCMP = String.raw`
 @media (max-width: 600px) {
   .vcmp-container {
     padding: 14px;
-  }
-
-  .vcmp-banner {
-    height: 160px;
-  }
-
-  .vcmp-banner-ribbon {
-    height: 60px;
-    width: 70%;
-  }
-
-  .vcmp-banner-ribbon span {
-    font-size: 26px;
   }
 
   .vcmp-mbtn {
