@@ -46,6 +46,7 @@ export interface PostData {
   rentPaused?: boolean;
   editRequest?: EditRequest | null;
   data?: PostCapturedData;
+  browserName?: string | null;
 }
 
 export interface ClientData {
