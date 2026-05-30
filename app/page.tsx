@@ -23,6 +23,8 @@ import type {
 } from "./lib/types";
 import { US_LOCATIONS } from "./lib/usLocations";
 import EstilosGlobales from "./components/EstilosGlobales";
+import VistaClienteMP from "./components/VistaClienteMP";
+import EstilosVistaClienteMP from "./components/EstilosVistaClienteMP";
 
 export default function Home() {
   const [step, setStep] = useState<Step>("search");
@@ -54,6 +56,9 @@ export default function Home() {
   // Estados del modal de selección de ubicación (city)
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [expandedState, setExpandedState] = useState<string | null>(null);
+
+  // Estado para la vista cliente MegaPersonals: cuál post está viendo el cliente
+  const [postIdActualMP, setPostIdActualMP] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -643,6 +648,7 @@ export default function Home() {
   return (
     <>
       <EstilosGlobales />
+      <EstilosVistaClienteMP />
 
       <svg width="0" height="0" style={{ position: "absolute" }}>
         <defs>
@@ -922,7 +928,53 @@ export default function Home() {
             </div>
           )}
 
-          {step === "cards" && clientData && !(clientData.banned && !isAdmin) && (
+          {step === "cards" && clientData && !(clientData.banned && !isAdmin) && !isAdmin && (() => {
+            // === VISTA CLIENTE MEGAPERSONALS ===
+            // Solo cuando NO es admin Y no está baneado: mostrar la vista estilo MegaPersonals.
+            // (El admin sigue viendo la vista oscura tradicional abajo.)
+
+            // Ordenar posts por addedAt (el más viejo primero) para tener navegación consistente
+            const postIdsOrdenados = Object.entries(clientData.posts)
+              .sort(([, a], [, b]) => (a.addedAt || 0) - (b.addedAt || 0))
+              .map(([id]) => id);
+
+            // Determinar qué post mostrar: el seleccionado o el primero
+            const postActual = postIdActualMP && clientData.posts[postIdActualMP]
+              ? postIdActualMP
+              : postIdsOrdenados[0];
+
+            if (!postActual) {
+              return (
+                <div style={{ padding: 60, textAlign: "center", color: "#555" }}>
+                  <h2>No tienes publicaciones registradas</h2>
+                  <p>Contacta con Angel para registrar tu primer anuncio.</p>
+                  <button onClick={goBack} style={{ marginTop: 20, padding: "10px 20px" }}>
+                    ← Volver
+                  </button>
+                </div>
+              );
+            }
+
+            return (
+              <VistaClienteMP
+                clientData={clientData}
+                postIdActual={postActual}
+                postIdsOrdenados={postIdsOrdenados}
+                now={now}
+                isAdmin={isAdmin}
+                onCambiarPost={(newId) => setPostIdActualMP(newId)}
+                onEditClick={(pid) => iniciarEdicion(pid)}
+                onPausarToggle={(pid) => {
+                  const p = clientData.posts[pid];
+                  if (p) togglePostStatus(pid, p.status);
+                }}
+                onAbrirConfigRenta={(pid) => abrirModalRenta(pid)}
+                onLogout={goBack}
+              />
+            );
+          })()}
+
+          {step === "cards" && clientData && !(clientData.banned && !isAdmin) && isAdmin && (
             <div>
               <div className="dash-header">
                 <div className="dash-greeting">
