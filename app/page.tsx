@@ -1182,10 +1182,32 @@ export default function Home() {
                             }
 
                             if (er.status === "listo_para_publicar") {
+                              // Calcular tiempo restante hasta el próximo bump.
+                              // El bot espera al nextBumpAt antes de publicar los cambios,
+                              // para no romper el ciclo de rotación.
+                              const msHastaBump = Math.max(0, post.nextBumpAt - now);
+                              const minHastaBump = Math.floor(msHastaBump / 60000);
+                              const segHastaBump = Math.floor((msHastaBump % 60000) / 1000);
+
+                              if (msHastaBump <= 0) {
+                                // Ya llegó el momento: el bot está publicando
+                                return (
+                                  <div className="edit-status publishing">
+                                    <span className="edit-status-spinner">⏳</span>
+                                    <span>Publicando cambios...</span>
+                                  </div>
+                                );
+                              }
+
+                              // Aún no es momento. Mostrar countdown.
                               return (
-                                <div className="edit-status publishing">
+                                <div className="edit-status waiting-bump">
                                   <span className="edit-status-spinner">⏳</span>
-                                  <span>Publicando cambios...</span>
+                                  <span>
+                                    Haciendo cambios — {minHastaBump > 0
+                                      ? `${minHastaBump} min ${segHastaBump.toString().padStart(2, "0")}s`
+                                      : `${segHastaBump}s`} restantes
+                                  </span>
                                 </div>
                               );
                             }
