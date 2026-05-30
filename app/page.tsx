@@ -99,6 +99,8 @@ interface PostData {
 interface ClientData {
   displayName: string;
   posts: Record<string, PostData>;
+  banned?: boolean;
+  bannedAt?: number;
 }
 
 type Step = "search" | "admin-list" | "cards";
@@ -376,12 +378,15 @@ export default function Home() {
     return null;
   };
 
-  // Tracker para evitar borrar varias veces la misma editRequest
-  const borradasRef = useRef<Set<string>>(new Set());
+  // Tracker de último intento de borrado por editRequest (postId:finishedAt → timestamp).
+  // Usamos Map (no Set) para permitir reintentos: si Firebase no propagó el DELETE
+  // a tiempo y el polling trae la editRequest de vuelta, reintentamos cada 3 segundos.
+  const ultimoBorradoRef = useRef<Map<string, number>>(new Map());
 
   // Limpia automáticamente solicitudes terminadas/fallidas tras 5 segundos.
-  // Actualiza el estado local INMEDIATAMENTE para que la card no muestre el mensaje
-  // pegado mientras el polling de 5s refresca los datos.
+  // Si Firebase no propaga el DELETE y vuelve a llegar la editRequest en el polling,
+  // reintentamos cada 3s hasta que efectivamente desaparezca. Esto evita que el mensaje
+  // "Cambios aplicados" se quede pegado por minutos.
   useEffect(() => {
     if (!clientData) return;
     Object.entries(clientData.posts).forEach(async ([postId, post]) => {
@@ -390,30 +395,37 @@ export default function Home() {
       const s = er.status;
       const finishedAt = er.appliedAt || er.failedAt;
       if (!finishedAt || (s !== "aplicada" && s !== "fallida")) return;
+      if (now - finishedAt <= 5000) return;
 
-      // Solo borrar una vez por finishedAt
-      const claveBorrado = `${postId}:${finishedAt}`;
-      if (borradasRef.current.has(claveBorrado)) return;
+      const clave = `${postId}:${finishedAt}`;
+      const ultimoIntento = ultimoBorradoRef.current.get(clave) || 0;
 
-      if (now - finishedAt > 5000) {
-        borradasRef.current.add(claveBorrado);
+      // Reintentar máximo cada 3 segundos
+      if (now - ultimoIntento < 3000) return;
+      ultimoBorradoRef.current.set(clave, now);
 
-        // Borrar en Firebase
-        await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
-          method: "DELETE",
-        });
+      // SIEMPRE actualizar el estado local INMEDIATAMENTE.
+      // Si el polling trae la editRequest de vuelta, este código se ejecuta otra vez
+      // y la vuelve a quitar del estado local. El mensaje no se queda pegado.
+      setClientData((prev) => {
+        if (!prev || !prev.posts[postId]) return prev;
+        const existing = prev.posts[postId].editRequest;
+        // Solo borrar si sigue siendo la MISMA editRequest (no una nueva)
+        if (!existing) return prev;
+        const existingFinish = existing.appliedAt || existing.failedAt;
+        if (existingFinish !== finishedAt) return prev;
+        const newPost = { ...prev.posts[postId] };
+        delete newPost.editRequest;
+        return {
+          ...prev,
+          posts: { ...prev.posts, [postId]: newPost },
+        };
+      });
 
-        // Actualizar el estado local INMEDIATAMENTE (sin esperar el polling)
-        setClientData((prev) => {
-          if (!prev || !prev.posts[postId]) return prev;
-          const newPost = { ...prev.posts[postId] };
-          delete newPost.editRequest;
-          return {
-            ...prev,
-            posts: { ...prev.posts, [postId]: newPost },
-          };
-        });
-      }
+      // Borrar de Firebase (idempotente: si ya no existe, no pasa nada)
+      await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
+        method: "DELETE",
+      });
     });
   }, [now, clientData, clientKey]);
 
@@ -664,11 +676,50 @@ export default function Home() {
     return { totalClients, totalPosts, activePosts, pausedPosts };
   };
 
-  const filteredClients = Object.entries(allClients).filter(([key, data]) => {
-    if (!adminFilter) return true;
-    const query = adminFilter.toLowerCase();
-    return data.displayName?.toLowerCase().includes(query) || key.includes(query);
-  });
+  const filteredClients = Object.entries(allClients)
+    .filter(([key, data]) => {
+      if (!adminFilter) return true;
+      const query = adminFilter.toLowerCase();
+      return data.displayName?.toLowerCase().includes(query) || key.includes(query);
+    })
+    // Ordenar por urgencia: cuenta baneada > en deuda > por vencer > con renta > sin renta > inactivo
+    .sort(([, a], [, b]) => {
+      const score = (data: ClientData) => {
+        // Cuenta baneada: máxima urgencia (necesita atención inmediata)
+        if (data.banned) return 0;
+
+        // Sacar la fecha más urgente entre todos sus posts
+        const posts = Object.values(data.posts || {});
+        if (!posts.length) return 6; // sin posts: lo último
+
+        // Buscar la renta más cercana a vencer (o ya vencida)
+        const fechas = posts
+          .map((p) => p.rentExpiresAt)
+          .filter((x): x is number => typeof x === "number");
+
+        if (!fechas.length) return 5; // ningún post con renta configurada
+
+        const minFecha = Math.min(...fechas);
+        const diff = minFecha - now;
+
+        if (diff <= 0) return 1; // en deuda
+        if (diff <= 24 * 3600 * 1000) return 2; // por vencer (<= 24h)
+        if (diff <= 7 * 24 * 3600 * 1000) return 3; // próximo (<= 7d)
+        return 4; // tiempo lejano
+      };
+
+      const sA = score(a);
+      const sB = score(b);
+      if (sA !== sB) return sA - sB;
+
+      // Empate: por nombre alfabético
+      return (a.displayName || "").localeCompare(b.displayName || "");
+    });
+
+  // Calcular contador de baneos por semana (últimos 7 días)
+  const baneosEstaSemana = Object.values(allClients).filter(
+    (c) => c.banned && c.bannedAt && now - c.bannedAt <= 7 * 24 * 3600 * 1000
+  ).length;
 
   return (
     <>
@@ -1049,6 +1100,19 @@ export default function Home() {
           background: linear-gradient(135deg, rgba(239,68,68,0.2) 0%, rgba(239,68,68,0.05) 100%);
           border: 1px solid rgba(239,68,68,0.2);
         }
+        .stat-pill.banned .stat-pill-icon {
+          background: linear-gradient(135deg, rgba(220,38,38,0.25) 0%, rgba(220,38,38,0.08) 100%);
+          border: 1px solid rgba(220,38,38,0.35);
+        }
+        .stat-pill.banned.alert {
+          border-color: rgba(220,38,38,0.5);
+          background: linear-gradient(135deg, rgba(220,38,38,0.08) 0%, rgba(220,38,38,0.02) 100%);
+          animation: pulseBan 2.5s ease-in-out infinite;
+        }
+        @keyframes pulseBan {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.3); }
+          50% { box-shadow: 0 0 0 8px rgba(220,38,38,0); }
+        }
 
         .stat-pill-info { flex: 1; min-width: 0; }
         .stat-pill-label {
@@ -1070,6 +1134,140 @@ export default function Home() {
         .stat-pill.total .stat-pill-value { color: var(--accent); }
         .stat-pill.active .stat-pill-value { color: var(--success); }
         .stat-pill.paused .stat-pill-value { color: var(--danger); }
+        .stat-pill.banned .stat-pill-value { color: #dc2626; }
+
+        /* ============================================
+         * PANTALLA "CUENTA BLOQUEADA" — vista cliente cuando banned=true
+         * ============================================ */
+        .banned-screen {
+          min-height: calc(100vh - 60px);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          padding: 20px;
+        }
+
+        .banned-card {
+          max-width: 540px;
+          width: 100%;
+          background: linear-gradient(180deg, rgba(220,38,38,0.08) 0%, rgba(220,38,38,0.03) 100%);
+          border: 2px solid rgba(220,38,38,0.35);
+          border-radius: 24px;
+          padding: 48px 36px;
+          text-align: center;
+          box-shadow: 0 25px 80px rgba(220,38,38,0.15);
+          animation: bannedAppear 0.5s cubic-bezier(0.22,1,0.36,1) both;
+        }
+
+        @keyframes bannedAppear {
+          from { transform: scale(0.92); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
+        .banned-icon {
+          font-size: 86px;
+          margin-bottom: 8px;
+          animation: bannedPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes bannedPulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.08); }
+        }
+
+        .banned-title {
+          font-family: 'Syne', sans-serif;
+          font-size: 38px;
+          font-weight: 800;
+          color: #dc2626;
+          margin: 0 0 12px 0;
+          letter-spacing: -0.5px;
+          text-shadow: 0 2px 20px rgba(220,38,38,0.3);
+        }
+
+        .banned-subtitle {
+          font-size: 18px;
+          color: var(--white);
+          margin: 0 0 24px 0;
+          font-weight: 500;
+        }
+
+        .banned-info {
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.08);
+          border-radius: 14px;
+          padding: 20px;
+          margin: 20px 0 28px;
+          text-align: left;
+        }
+
+        .banned-info p {
+          color: var(--gray-400);
+          font-size: 14px;
+          line-height: 1.6;
+          margin: 0;
+        }
+
+        .banned-info p + p {
+          margin-top: 12px;
+        }
+
+        .banned-date {
+          color: var(--gray-500) !important;
+          font-size: 12px !important;
+          font-family: 'JetBrains Mono', monospace;
+          padding-top: 12px;
+          border-top: 1px dashed rgba(255,255,255,0.1);
+        }
+
+        .banned-whatsapp {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          width: 100%;
+          padding: 16px 24px;
+          background: linear-gradient(135deg, #25D366 0%, #128C7E 100%);
+          color: white;
+          text-decoration: none;
+          border-radius: 14px;
+          font-size: 16px;
+          font-weight: 700;
+          margin-bottom: 14px;
+          transition: all 0.2s;
+          box-shadow: 0 8px 24px rgba(37,211,102,0.3);
+        }
+
+        .banned-whatsapp:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 12px 32px rgba(37,211,102,0.4);
+        }
+
+        .banned-back {
+          background: transparent;
+          border: 1px solid rgba(255,255,255,0.15);
+          color: var(--gray-400);
+          padding: 12px 24px;
+          border-radius: 12px;
+          font-size: 13px;
+          cursor: pointer;
+          font-family: inherit;
+          width: 100%;
+          transition: all 0.2s;
+        }
+
+        .banned-back:hover {
+          background: rgba(255,255,255,0.05);
+          color: var(--white);
+          border-color: rgba(255,255,255,0.25);
+        }
+
+        @media (max-width: 640px) {
+          .banned-card { padding: 36px 22px; }
+          .banned-title { font-size: 28px; }
+          .banned-subtitle { font-size: 15px; }
+          .banned-icon { font-size: 64px; }
+        }
 
         .admin-filter-bar {
           margin-bottom: 24px;
@@ -2894,6 +3092,13 @@ export default function Home() {
                         <div className="stat-pill-value">{stats.pausedPosts}</div>
                       </div>
                     </div>
+                    <div className={`stat-pill banned ${baneosEstaSemana > 0 ? "alert" : ""}`}>
+                      <div className="stat-pill-icon">🚫</div>
+                      <div className="stat-pill-info">
+                        <div className="stat-pill-label">Baneos esta semana</div>
+                        <div className="stat-pill-value">{baneosEstaSemana}</div>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
@@ -3018,7 +3223,46 @@ export default function Home() {
             </div>
           )}
 
-          {step === "cards" && clientData && (
+          {step === "cards" && clientData && clientData.banned && !isAdmin && (
+            <div className="banned-screen">
+              <div className="banned-card">
+                <div className="banned-icon">🚫</div>
+                <h1 className="banned-title">CUENTA BLOQUEADA</h1>
+                <p className="banned-subtitle">
+                  Tu cuenta de MegaPersonals fue bloqueada por la plataforma.
+                </p>
+                <div className="banned-info">
+                  <p>
+                    Esto puede deberse a actividad detectada como inusual o a una violación de las
+                    políticas de MegaPersonals. Tu publicación NO está activa en este momento.
+                  </p>
+                  {clientData.bannedAt && (
+                    <p className="banned-date">
+                      Detectado: {new Date(clientData.bannedAt).toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <a
+                  className="banned-whatsapp"
+                  href={`https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
+                    `Hola Angel, mi cuenta (${clientData.displayName}) aparece como BLOQUEADA. ¿Qué puedo hacer?`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span style={{ fontSize: 22 }}>💬</span> Contactar con Angel
+                </a>
+                <button
+                  className="banned-back"
+                  onClick={goBack}
+                >
+                  ← Volver al inicio
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === "cards" && clientData && !(clientData.banned && !isAdmin) && (
             <div>
               <div className="dash-header">
                 <div className="dash-greeting">
