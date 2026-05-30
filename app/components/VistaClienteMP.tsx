@@ -159,10 +159,22 @@ export default function VistaClienteMP({
           <button
             className="vcmp-mbtn vcmp-mbtn-red"
             onClick={() => onEditClick(postIdActual)}
-            disabled={enEdicion && !editAplicada && !editFallida}
-            title={enEdicion ? "Ya hay una edición en curso" : "Editar este post"}
+            disabled={
+              // Deshabilitado SOLO cuando el captcha está pendiente (esperando turno)
+              // o ya esperando bump para publicar. En captcha_listo SÍ funciona (entra al formulario).
+              esperandoCaptcha || listoParaPublicar
+            }
+            title={
+              esperandoCaptcha
+                ? "Esperando captcha del sistema..."
+                : captchaListo
+                  ? "Captcha listo, toca para continuar"
+                  : listoParaPublicar
+                    ? "Cambios listos, esperando turno de bump"
+                    : "Editar este post"
+            }
           >
-            Edit Post
+            {captchaListo ? "🔐 Continuar Edición" : "Edit Post"}
           </button>
           <button
             className="vcmp-mbtn vcmp-mbtn-blue"
@@ -222,9 +234,13 @@ export default function VistaClienteMP({
                 ? `${minHastaBump} min ${segHastaBump.toString().padStart(2, "0")}s`
                 : `${segHastaBump}s`} restantes
             </div>
-          ) : enEdicion && (esperandoCaptcha || captchaListo) ? (
+          ) : enEdicion && esperandoCaptcha ? (
             <div className="vcmp-status vcmp-status-editing">
-              ✏️ Edición en curso — ve a tu pestaña de edición para continuar
+              ⏳ Esperando captcha del sistema (puede tardar unos minutos)...
+            </div>
+          ) : enEdicion && captchaListo ? (
+            <div className="vcmp-status vcmp-status-editing">
+              📸 Captcha listo. Toca el botón "Edit Post" para continuar.
             </div>
           ) : editAplicada ? (
             <div className="vcmp-status vcmp-status-applied">
