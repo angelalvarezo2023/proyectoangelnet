@@ -10,10 +10,10 @@ const ESTILOS_VCMP = String.raw`
 .vcmp-wrapper {
   position: relative;
   min-height: 100vh;
-  background: rgb(253, 246, 251); /* rosa pálido idéntico al de MegaPersonals */
+  background: rgb(253, 246, 251);
   font-family: Arial, "sans serif";
   color: #333;
-  padding: 20px 0 60px;
+  padding: 16px 0 50px;
 }
 
 .vcmp-logout {
@@ -43,32 +43,33 @@ const ESTILOS_VCMP = String.raw`
 .vcmp-container {
   max-width: 600px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 16px 12px;
   background: rgb(253, 246, 251);
   position: relative;
 }
 
-/* Logo */
+/* Logo — tamaño contenido para no estirarse */
 .vcmp-logo {
   text-align: center;
-  margin-bottom: 24px;
+  margin-bottom: 14px;
 }
 
 .vcmp-logo img {
-  max-width: 90%;
+  max-width: 380px;
+  width: 70%;
   height: auto;
 }
 
-/* Banner "Manage Posts" — usa la imagen completa de MegaPersonals
-   que ya incluye la chica diabla + la cinta rosa */
+/* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta */
 .vcmp-banner {
   width: 100%;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
   text-align: center;
 }
 
 .vcmp-banner-img {
   max-width: 100%;
+  width: 100%;
   height: auto;
   display: block;
   margin: 0 auto;
@@ -78,42 +79,44 @@ const ESTILOS_VCMP = String.raw`
 .vcmp-buttons-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin-bottom: 18px;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 0 8px;
 }
 
 .vcmp-buttons-extra {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 14px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 0 8px;
 }
 
 .vcmp-buttons-extra .vcmp-mbtn {
-  max-width: 320px;
+  max-width: 260px;
   margin: 0 auto;
   width: 100%;
 }
 
-/* Botones tipo MegaPersonals - gradientes con borde dorado */
+/* Botones tipo MegaPersonals - gradientes con borde dorado, más compactos */
 .vcmp-mbtn {
   position: relative;
-  padding: 16px 8px;
-  border: 4px solid #f4b945; /* borde dorado */
-  border-radius: 50px;
+  padding: 11px 6px;
+  border: 3px solid #f4b945;
+  border-radius: 40px;
   cursor: pointer;
   font-family: "Arial Black", Arial, sans-serif;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 0.5px;
   color: white;
   text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5),
                -1px -1px 0 rgba(0, 0, 0, 0.3),
                2px 2px 4px rgba(0, 0, 0, 0.4);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.25),
-              inset 0 -4px 0 rgba(0, 0, 0, 0.15),
-              inset 0 3px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22),
+              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
+              inset 0 2px 0 rgba(255, 255, 255, 0.4);
   transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
   outline: none;
 }
@@ -170,24 +173,24 @@ const ESTILOS_VCMP = String.raw`
 /* Separador decorativo */
 .vcmp-divider {
   text-align: center;
-  margin: 16px 0 8px;
+  margin: 8px 0 4px;
 }
 
 .vcmp-divider img {
-  max-width: 60%;
+  max-width: 75%;
   height: auto;
 }
 
 /* Estado/status del post */
 .vcmp-status-row {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .vcmp-status {
-  padding: 12px 18px;
-  border-radius: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
   text-align: center;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -250,15 +253,79 @@ const ESTILOS_VCMP = String.raw`
   font-weight: 700;
 }
 
-/* "CURRENT POST" - título grande */
+/* ============================================================
+ * CAJA DE RENTA — siempre visible para el cliente
+ * ============================================================ */
+.vcmp-rent-row {
+  margin-bottom: 12px;
+}
+
+.vcmp-rent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 2px solid;
+}
+
+.vcmp-rent-icon {
+  font-size: 26px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.vcmp-rent-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.vcmp-rent-title {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 1px;
+  letter-spacing: 0.3px;
+}
+
+.vcmp-rent-sub {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+.vcmp-rent-active {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.03));
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #047857;
+}
+
+.vcmp-rent-warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04));
+  border-color: rgba(245, 158, 11, 0.45);
+  color: #b45309;
+}
+
+.vcmp-rent-debt {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.05));
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #b91c1c;
+  animation: vcmpDebtPulse 2s ease-in-out infinite;
+}
+
+@keyframes vcmpDebtPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+/* "CURRENT POST" - título grande pero más compacto */
 .vcmp-current-post-title {
   font-family: "Anton", "Arial Black", Impact, sans-serif;
-  font-size: 38px;
+  font-size: 32px;
   font-weight: 900;
   text-align: center;
   color: #1a1a1a;
-  letter-spacing: 2px;
-  margin: 18px 0;
+  letter-spacing: 1.5px;
+  margin: 8px 0 14px;
 }
 
 /* Caja del headline */
@@ -266,14 +333,14 @@ const ESTILOS_VCMP = String.raw`
   position: relative;
   background: white;
   border: 2px solid rgba(220, 20, 60, 0.7);
-  border-radius: 100px;
-  padding: 14px 22px;
-  margin-bottom: 20px;
+  border-radius: 80px;
+  padding: 12px 20px;
+  margin-bottom: 16px;
   box-shadow: 0 3px 10px rgba(220, 20, 60, 0.08);
 }
 
 .vcmp-headline-text {
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.45;
   color: #333;
   text-align: center;
@@ -282,15 +349,15 @@ const ESTILOS_VCMP = String.raw`
 
 /* Info (Phone, Age, City, Location, Name) */
 .vcmp-info {
-  margin-bottom: 20px;
-  padding: 0 6px;
-  font-size: 14px;
+  margin-bottom: 16px;
+  padding: 0 8px;
+  font-size: 13px;
 }
 
 .vcmp-info-row {
   display: flex;
   gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 5px;
   flex-wrap: wrap;
   align-items: baseline;
 }
@@ -324,15 +391,15 @@ const ESTILOS_VCMP = String.raw`
 .vcmp-body-box {
   background: white;
   border: 2px solid rgba(220, 20, 60, 0.4);
-  border-radius: 14px;
-  padding: 16px 18px;
-  margin-bottom: 24px;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
 }
 
 .vcmp-body-text {
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.55;
   color: #333;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -601,28 +668,195 @@ const ESTILOS_VCMP = String.raw`
   text-align: center;
 }
 
-/* MOBILE */
+/* ============================================================
+ * MOBILE — Optimizado para celulares (< 600px)
+ * ============================================================ */
 @media (max-width: 600px) {
+  .vcmp-wrapper {
+    padding: 14px 0 40px;
+  }
+
   .vcmp-container {
-    padding: 14px;
-  }
-
-  .vcmp-mbtn {
-    font-size: 14px;
-    padding: 12px 4px;
-  }
-
-  .vcmp-current-post-title {
-    font-size: 28px;
-  }
-
-  .vcmp-info-row {
-    font-size: 13px;
+    padding: 12px;
   }
 
   .vcmp-logout {
     font-size: 11px;
     padding: 6px 12px;
+    top: 10px;
+    left: 10px;
+  }
+
+  /* Logo más pequeño en mobile */
+  .vcmp-logo {
+    margin-bottom: 14px;
+  }
+
+  .vcmp-logo img {
+    max-width: 75%;
+  }
+
+  /* Banner ocupa más ancho */
+  .vcmp-banner {
+    margin-bottom: 18px;
+  }
+
+  /* Botones grandes: más tap-friendly en mobile */
+  .vcmp-buttons-grid {
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .vcmp-mbtn {
+    font-size: 13px;
+    padding: 14px 4px;
+    border-width: 3px;
+    border-radius: 36px;
+    letter-spacing: 0.5px;
+  }
+
+  .vcmp-buttons-extra {
+    margin-bottom: 18px;
+    gap: 10px;
+  }
+
+  /* Status / Renta */
+  .vcmp-status {
+    font-size: 13px;
+    padding: 10px 14px;
+  }
+
+  .vcmp-rent {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  .vcmp-rent-icon {
+    font-size: 26px;
+  }
+
+  .vcmp-rent-title {
+    font-size: 14px;
+  }
+
+  .vcmp-rent-sub {
+    font-size: 12px;
+  }
+
+  /* Título CURRENT POST */
+  .vcmp-current-post-title {
+    font-size: 28px;
+    margin: 14px 0;
+  }
+
+  /* Headline */
+  .vcmp-headline-box {
+    padding: 12px 16px;
+    border-radius: 60px;
+  }
+
+  .vcmp-headline-text {
+    font-size: 13px;
+  }
+
+  /* Info */
+  .vcmp-info-row {
+    font-size: 13px;
+    gap: 6px;
+  }
+
+  .vcmp-info-label-right {
+    margin-left: auto;
+  }
+
+  /* Body */
+  .vcmp-body-box {
+    padding: 12px 14px;
+  }
+
+  .vcmp-body-text {
+    font-size: 13px;
+  }
+
+  /* Fotos: mantener una columna, pero con menos padding */
+  .vcmp-photos {
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .vcmp-photo-frame {
+    padding: 8px 14px;
+  }
+
+  .vcmp-photo-frame::before,
+  .vcmp-photo-frame::after {
+    width: 12px;
+  }
+
+  /* Post published */
+  .vcmp-published {
+    font-size: 12px;
+    padding: 8px 14px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    border-radius: 16px;
+  }
+
+  /* Nav entre posts */
+  .vcmp-nav {
+    padding: 6px 10px;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .vcmp-nav-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+
+  .vcmp-nav-counter {
+    font-size: 12px;
+    width: 100%;
+    text-align: center;
+    order: -1; /* contador arriba en mobile */
+  }
+
+  /* Modal prohibido */
+  .vcmp-prohibido-modal {
+    padding: 24px 18px 18px;
+    border-radius: 16px;
+  }
+
+  .vcmp-prohibido-icon {
+    font-size: 44px;
+  }
+
+  .vcmp-prohibido-modal h2 {
+    font-size: 18px;
+  }
+
+  .vcmp-prohibido-modal p {
+    font-size: 13px;
+  }
+}
+
+/* Pantallas muy pequeñas (< 380px) */
+@media (max-width: 380px) {
+  .vcmp-mbtn {
+    font-size: 12px;
+    padding: 12px 2px;
+    letter-spacing: 0;
+  }
+
+  .vcmp-current-post-title {
+    font-size: 24px;
+    letter-spacing: 1px;
+  }
+
+  .vcmp-buttons-grid {
+    gap: 8px;
   }
 }
 `;
