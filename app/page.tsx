@@ -5,6 +5,15 @@ const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
 const ADMIN_PASSWORD = "admin2024";
 const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
 
+// Convierte una URL de MegaPersonals a una URL del proxy local en Vercel.
+// Esto permite que los clientes en RD (donde MegaPersonals está bloqueado) puedan
+// ver las fotos sin VPN. El proxy las pide desde Vercel y las sirve.
+function imagenViaProxy(url?: string): string {
+  if (!url) return "";
+  if (!url.startsWith("http")) return url; // Ya es relativa, no necesita proxy
+  return `/api/mp-image?url=${encodeURIComponent(url)}`;
+}
+
 // Lista completa de estados de US con sus ciudades, replicando lo de MegaPersonals.
 // Se usa en el modal selector de ubicación al editar un post.
 const US_LOCATIONS: Record<string, { abrev: string; ciudades: string[] }> = {
@@ -85,6 +94,13 @@ interface EditRequest {
   fields?: EditRequestFields;
 }
 
+interface PostCapturedData {
+  capturedAt?: number;
+  images?: string[];
+  title?: string;
+  body?: string;
+}
+
 interface PostData {
   status: "active" | "paused";
   nextBumpAt: number;
@@ -94,6 +110,7 @@ interface PostData {
   rentExpiresAt?: number | null;
   rentPaused?: boolean;
   editRequest?: EditRequest | null;
+  data?: PostCapturedData;
 }
 
 interface ClientData {
