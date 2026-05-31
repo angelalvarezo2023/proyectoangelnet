@@ -44,10 +44,21 @@ export interface PostData {
   url: string;
   rentExpiresAt?: number | null;
   rentPaused?: boolean;
+  rentRemainingMs?: number;
+  rentPausedReason?: string;
+  rentPausedAt?: number;
+  banned?: boolean;
+  bannedAt?: number;
   editRequest?: EditRequest | null;
   data?: PostCapturedData;
   browserName?: string | null;
-  lastPhotoChangeRequest?: number; // timestamp del último cambio de fotos solicitado
+  lastPhotoChangeRequest?: number;
+  deleteRequest?: {                  // solicitud de eliminación desde el admin
+    requestedAt: number;
+    requestedBy?: string;            // ej: "admin"
+    status?: "pending" | "deleting" | "done" | "failed";
+    failReason?: string;
+  } | null;
 }
 
 export interface ClientData {
