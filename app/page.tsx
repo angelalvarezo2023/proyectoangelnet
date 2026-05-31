@@ -848,6 +848,13 @@ export default function Home() {
                   </div>
                   <div className="chrome-monitor-grid">
                     {Object.entries(heartbeats)
+                      // Filtrar heartbeats inválidos: sin lastSeen o más de 24h sin actividad
+                      // (eso significa que está abandonado, no es un Chrome "caído reciente")
+                      .filter(([, info]) => {
+                        if (!info || !info.lastSeen) return false;
+                        const silencio = now - info.lastSeen;
+                        return silencio < 24 * 60 * 60 * 1000; // < 24 horas
+                      })
                       .sort(([, a], [, b]) => (b.lastSeen || 0) - (a.lastSeen || 0))
                       .map(([botId, info]) => {
                         const silencio = now - (info.lastSeen || 0);
