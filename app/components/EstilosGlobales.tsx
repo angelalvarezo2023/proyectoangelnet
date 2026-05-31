@@ -549,6 +549,114 @@ const ESTILOS_GLOBALES = String.raw`
           .banned-icon { font-size: 64px; }
         }
 
+        /* ============================================================
+         * MONITOR DE CHROMES (heartbeats)
+         * ============================================================ */
+        .chrome-monitor {
+          margin: 28px 0 24px;
+          padding: 20px 22px;
+          background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%);
+          border: 1px solid var(--border-2);
+          border-radius: 18px;
+        }
+        .chrome-monitor-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .chrome-monitor-header h2 {
+          font-size: 16px;
+          font-weight: 700;
+          color: var(--white);
+          margin: 0;
+        }
+        .chrome-monitor-count {
+          font-size: 12px;
+          color: var(--gray-500);
+          padding: 4px 12px;
+          background: rgba(255,255,255,0.06);
+          border-radius: 100px;
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .chrome-monitor-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+          gap: 10px;
+        }
+        .chrome-monitor-card {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 14px;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid var(--border-2);
+          border-radius: 12px;
+          transition: all 0.2s;
+        }
+        .chrome-monitor-card.ok {
+          border-color: rgba(16,185,129,0.3);
+          background: linear-gradient(135deg, rgba(16,185,129,0.06) 0%, rgba(16,185,129,0.01) 100%);
+        }
+        .chrome-monitor-card.warn {
+          border-color: rgba(245,158,11,0.4);
+          background: linear-gradient(135deg, rgba(245,158,11,0.08) 0%, rgba(245,158,11,0.01) 100%);
+        }
+        .chrome-monitor-card.down {
+          border-color: rgba(239,68,68,0.5);
+          background: linear-gradient(135deg, rgba(239,68,68,0.1) 0%, rgba(239,68,68,0.02) 100%);
+          animation: chromeDownPulse 2s ease-in-out infinite;
+        }
+        @keyframes chromeDownPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+          50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+        }
+        .chrome-monitor-status-dot {
+          width: 12px;
+          height: 12px;
+          border-radius: 50%;
+          flex-shrink: 0;
+        }
+        .chrome-monitor-card.ok .chrome-monitor-status-dot {
+          background: #10b981;
+          box-shadow: 0 0 12px rgba(16,185,129,0.6);
+        }
+        .chrome-monitor-card.warn .chrome-monitor-status-dot {
+          background: #f59e0b;
+          box-shadow: 0 0 12px rgba(245,158,11,0.6);
+        }
+        .chrome-monitor-card.down .chrome-monitor-status-dot {
+          background: #ef4444;
+          box-shadow: 0 0 12px rgba(239,68,68,0.7);
+        }
+        .chrome-monitor-card-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .chrome-monitor-name {
+          color: var(--white);
+          font-size: 13px;
+          font-weight: 700;
+          margin-bottom: 2px;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .chrome-monitor-time {
+          font-size: 11px;
+          color: var(--gray-500);
+          font-family: 'JetBrains Mono', monospace;
+        }
+        .chrome-monitor-card.warn .chrome-monitor-time {
+          color: #fbbf24;
+        }
+        .chrome-monitor-card.down .chrome-monitor-time {
+          color: #fca5a5;
+          font-weight: 700;
+        }
+
         .admin-filter-bar {
           margin-bottom: 24px;
           display: flex;
@@ -704,6 +812,46 @@ const ESTILOS_GLOBALES = String.raw`
           gap: 10px;
           font-size: 12px;
           font-weight: 600;
+        }
+
+        /* Pill especial para clientes con posts bloqueados (cuenta MP baneada).
+           Aparece encima de client-rent. Pulsa para llamar atención. */
+        .client-banned-pill {
+          margin-bottom: 10px;
+          padding: 10px 14px;
+          background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(239,68,68,0.05) 100%);
+          border: 1.5px solid rgba(239,68,68,0.45);
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          animation: clientBannedPulse 2.5s ease-in-out infinite;
+        }
+        @keyframes clientBannedPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); }
+          50% { box-shadow: 0 0 0 5px rgba(239,68,68,0); }
+        }
+        .client-banned-icon {
+          font-size: 22px;
+          flex-shrink: 0;
+          filter: drop-shadow(0 0 6px rgba(239,68,68,0.5));
+        }
+        .client-banned-info {
+          flex: 1;
+          min-width: 0;
+        }
+        .client-banned-title {
+          font-size: 11px;
+          font-weight: 800;
+          color: #fca5a5;
+          letter-spacing: 1px;
+          margin-bottom: 2px;
+        }
+        .client-banned-sub {
+          font-size: 11px;
+          font-weight: 600;
+          color: #f87171;
+          opacity: 0.85;
         }
 
         .client-rent.active {
@@ -1235,6 +1383,22 @@ const ESTILOS_GLOBALES = String.raw`
         }
 
         .btn-view:hover { transform: translateY(-2px); }
+
+        .btn-delete-post {
+          background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+          color: white;
+          box-shadow: 0 6px 20px rgba(239,68,68,0.3), 0 1px 0 rgba(255,255,255,0.15) inset;
+        }
+
+        .btn-delete-post:hover:not(:disabled) {
+          transform: translateY(-2px);
+          filter: brightness(1.1);
+        }
+
+        .btn-delete-post:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
 
         .btn-edit {
           background: var(--surface-2);
