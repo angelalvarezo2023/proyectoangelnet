@@ -33,6 +33,9 @@ export default function Home() {
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [allClients, setAllClients] = useState<Record<string, ClientData>>({});
   const [adminFilter, setAdminFilter] = useState("");
+
+  // Heartbeats de los bots (Chromes activos): { botId: { browserName, lastSeen, url } }
+  const [heartbeats, setHeartbeats] = useState<Record<string, { browserName?: string; lastSeen: number; url?: string }>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -41,6 +44,10 @@ export default function Home() {
   const [adminPass, setAdminPass] = useState("");
   const [adminError, setAdminError] = useState("");
   const [rentModalPost, setRentModalPost] = useState<string | null>(null);
+
+  // Eliminación de posts desde admin (modal de confirmación + doble clic)
+  const [deletePostId, setDeletePostId] = useState<string | null>(null);
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState(0); // 0=primer clic, 1=segundo clic
   const [rentDays, setRentDays] = useState("7");
   const [rentHours, setRentHours] = useState("0");
 
@@ -70,6 +77,7 @@ export default function Home() {
       setIsAdmin(true);
       setStep("admin-list");
       loadAllClients();
+      loadHeartbeats();
     }
   }, []);
 
@@ -85,7 +93,10 @@ export default function Home() {
 
   useEffect(() => {
     if (step !== "admin-list" || !isAdmin) return;
-    const interval = setInterval(() => loadAllClients(), 10000);
+    const interval = setInterval(() => {
+      loadAllClients();
+      loadHeartbeats();
+    }, 10000);
     return () => clearInterval(interval);
   }, [step, isAdmin]);
 
@@ -96,6 +107,17 @@ export default function Home() {
       setAllClients(data || {});
     } catch (e) {
       console.error("Error loading clients", e);
+    }
+  };
+
+  // Carga los heartbeats de TODOS los bots para mostrar quiénes están vivos.
+  const loadHeartbeats = async () => {
+    try {
+      const res = await fetch(`${FB_URL}/heartbeats.json`);
+      const data = await res.json();
+      setHeartbeats(data || {});
+    } catch (e) {
+      console.error("Error loading heartbeats", e);
     }
   };
 
@@ -151,6 +173,52 @@ export default function Home() {
         [postId]: { ...clientData.posts[postId], status: newStatus as "active" | "paused" },
       },
     });
+  };
+
+  // Solicita la eliminación de un post. El bot detecta el deleteRequest en su
+  // ciclo normal, navega al post, lo elimina en MegaPersonals y limpia las
+  // referencias en Firebase + itemIds locales (en todos los Chromes).
+  const solicitarEliminarPost = async (postId: string) => {
+    if (!clientData) return;
+
+    try {
+      await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/deleteRequest.json`, {
+        method: "PUT",
+        body: JSON.stringify({
+          requestedAt: Date.now(),
+          requestedBy: "admin",
+          status: "pending",
+        }),
+      });
+
+      // Actualizar localmente para feedback inmediato
+      setClientData({
+        ...clientData,
+        posts: {
+          ...clientData.posts,
+          [postId]: {
+            ...clientData.posts[postId],
+            deleteRequest: {
+              requestedAt: Date.now(),
+              requestedBy: "admin",
+              status: "pending",
+            },
+          },
+        },
+      });
+
+      // Cerrar modal
+      setDeletePostId(null);
+      setDeleteConfirmStep(0);
+    } catch (e) {
+      alert("Error al solicitar la eliminación. Revisa tu conexión.");
+      console.error(e);
+    }
+  };
+
+  const cancelarEliminacion = () => {
+    setDeletePostId(null);
+    setDeleteConfirmStep(0);
   };
 
   const handleAdminLogin = () => {
@@ -769,6 +837,49 @@ export default function Home() {
                 );
               })()}
 
+              {/* Monitor de estado de los Chromes (heartbeats).
+                  Muestra cada bot conectado y cuándo fue su última actividad.
+                  Verde = activo (<2 min), Amarillo = lento (<5 min), Rojo = caído (>5 min). */}
+              {Object.keys(heartbeats).length > 0 && (
+                <div className="chrome-monitor">
+                  <div className="chrome-monitor-header">
+                    <h2>🖥 Estado de los Chromes</h2>
+                    <span className="chrome-monitor-count">{Object.keys(heartbeats).length} conectados</span>
+                  </div>
+                  <div className="chrome-monitor-grid">
+                    {Object.entries(heartbeats)
+                      .sort(([, a], [, b]) => (b.lastSeen || 0) - (a.lastSeen || 0))
+                      .map(([botId, info]) => {
+                        const silencio = now - (info.lastSeen || 0);
+                        const minutos = Math.floor(silencio / 60000);
+                        const segundos = Math.floor((silencio % 60000) / 1000);
+                        const estado =
+                          silencio < 2 * 60 * 1000 ? "ok"
+                            : silencio < 5 * 60 * 1000 ? "warn"
+                              : "down";
+                        const tiempoLabel =
+                          minutos < 1 ? `${segundos}s`
+                            : minutos < 60 ? `${minutos} min`
+                              : `${Math.floor(minutos / 60)}h ${minutos % 60}m`;
+                        const browserName = info.browserName || `(${botId.substring(0, 12)})`;
+                        return (
+                          <div key={botId} className={`chrome-monitor-card ${estado}`}>
+                            <div className="chrome-monitor-status-dot" />
+                            <div className="chrome-monitor-card-info">
+                              <div className="chrome-monitor-name">{browserName}</div>
+                              <div className="chrome-monitor-time">
+                                {estado === "ok" && `Activo · ${tiempoLabel}`}
+                                {estado === "warn" && `⚠️ Lento · ${tiempoLabel}`}
+                                {estado === "down" && `🚨 Caído · ${tiempoLabel}`}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
+
               <div className="admin-filter-bar">
                 <input
                   type="text"
@@ -810,6 +921,26 @@ export default function Home() {
                       type: "none",
                       text: "Sin renta",
                     };
+
+                    // Posts baneados (cuenta de MP bloqueada): cada post tiene
+                    // banned=true y rentRemainingMs guardado (tiempo congelado).
+                    const postsBaneados = posts.filter((p) => p.banned);
+                    const tieneBaneados = postsBaneados.length > 0;
+
+                    // Formatear el tiempo restante del más urgente (el que tiene menos)
+                    let tiempoBaneadoTexto = "";
+                    if (tieneBaneados) {
+                      const conRentaRestante = postsBaneados.filter(p => typeof p.rentRemainingMs === "number");
+                      if (conRentaRestante.length > 0) {
+                        const minMs = Math.min(...conRentaRestante.map(p => p.rentRemainingMs!));
+                        const totalHrs = Math.floor(minMs / (60 * 60 * 1000));
+                        const days = Math.floor(totalHrs / 24);
+                        const hours = totalHrs % 24;
+                        tiempoBaneadoTexto = days > 0 ? `${days}d ${hours}h restantes` : `${hours}h restantes`;
+                      } else {
+                        tiempoBaneadoTexto = "sin renta configurada";
+                      }
+                    }
 
                     if (postsConRenta.length > 0) {
                       const expired = postsConRenta.filter((p) => p.rentExpiresAt! <= now);
@@ -879,6 +1010,23 @@ export default function Home() {
                             <div className="client-stat-label">Pausadas</div>
                           </div>
                         </div>
+
+                        {/* Aviso de cuenta bloqueada: solo si hay posts banned.
+                            Muestra cuántos están bloqueados y el tiempo de renta
+                            congelado (lo que le quedaba al momento del baneo). */}
+                        {tieneBaneados && (
+                          <div className="client-banned-pill">
+                            <span className="client-banned-icon">🚫</span>
+                            <div className="client-banned-info">
+                              <div className="client-banned-title">
+                                {postsBaneados.length} POST{postsBaneados.length > 1 ? "S" : ""} BLOQUEADO{postsBaneados.length > 1 ? "S" : ""}
+                              </div>
+                              <div className="client-banned-sub">
+                                Renta pausada · {tiempoBaneadoTexto}
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Estado de renta del cliente */}
                         <div className={`client-rent ${rentSummary.type}`}>
@@ -1208,13 +1356,47 @@ export default function Home() {
                             <button
                               className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
                               onClick={() => togglePostStatus(postId, post.status)}
+                              disabled={!!post.deleteRequest && post.deleteRequest.status !== "failed"}
                             >
                               {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
                             </button>
                             <button className="action-btn btn-view" onClick={() => verAnuncio(postId)}>
                               👁 Ver anuncio
                             </button>
+                            <button
+                              className="action-btn btn-delete-post"
+                              onClick={() => {
+                                setDeletePostId(postId);
+                                setDeleteConfirmStep(0);
+                              }}
+                              disabled={!!post.deleteRequest && post.deleteRequest.status !== "failed"}
+                              title="Eliminar este post del sistema"
+                            >
+                              🗑 Eliminar
+                            </button>
                           </div>
+
+                          {/* Estado de eliminación si está en proceso */}
+                          {post.deleteRequest && post.deleteRequest.status !== "failed" && (
+                            <div className="edit-status pending" style={{ borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
+                              <div className="edit-status-info">
+                                <span className="edit-status-spinner">🗑</span>
+                                <div>
+                                  <div className="edit-status-title">
+                                    {post.deleteRequest.status === "deleting" ? "Eliminando del sistema..." : "Eliminación solicitada"}
+                                  </div>
+                                  <div className="edit-status-sub">
+                                    El bot lo procesará en el próximo ciclo (1-3 min)
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {post.deleteRequest?.status === "failed" && (
+                            <div className="edit-status failed">
+                              <span>✗ Eliminación falló: {post.deleteRequest.failReason || "error desconocido"}</span>
+                            </div>
+                          )}
 
                           {/* Vista admin: muestra el estado de la edición si existe.
                               NO permite iniciar nueva edición — eso lo hace el cliente
@@ -1349,6 +1531,85 @@ export default function Home() {
                   Entrar
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmación de eliminación de post (doble clic) */}
+        {deletePostId && (
+          <div className="modal-overlay" onClick={cancelarEliminacion}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+              <div className="modal-title" style={{ color: "#ef4444" }}>
+                ⚠️ Eliminar este post
+              </div>
+              <div className="modal-subtitle">
+                Post <code style={{ color: "var(--accent)" }}>#{deletePostId}</code>
+              </div>
+
+              <div style={{
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.3)",
+                borderRadius: 12,
+                padding: 16,
+                margin: "16px 0",
+                color: "#fca5a5",
+                fontSize: 13,
+                lineHeight: 1.5
+              }}>
+                <strong>Esto eliminará el post de:</strong>
+                <ul style={{ margin: "8px 0 0 18px", padding: 0 }}>
+                  <li>MegaPersonals (el bot lo borrará automáticamente)</li>
+                  <li>Tu sistema (Firebase + lista del bot)</li>
+                </ul>
+                <p style={{ margin: "12px 0 0", fontWeight: 700 }}>
+                  Esta acción NO se puede deshacer.
+                </p>
+              </div>
+
+              {deleteConfirmStep === 0 ? (
+                <>
+                  <button
+                    className="modal-btn modal-btn-danger"
+                    onClick={() => setDeleteConfirmStep(1)}
+                    style={{ width: "100%" }}
+                  >
+                    🗑 Continuar
+                  </button>
+                  <button
+                    className="modal-btn modal-btn-cancel"
+                    onClick={cancelarEliminacion}
+                    style={{ width: "100%", marginTop: 8 }}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{
+                    textAlign: "center",
+                    marginBottom: 12,
+                    color: "#fca5a5",
+                    fontSize: 14,
+                    fontWeight: 700
+                  }}>
+                    ¿Estás 100% seguro? Confirma una vez más.
+                  </div>
+                  <button
+                    className="modal-btn modal-btn-danger"
+                    onClick={() => solicitarEliminarPost(deletePostId)}
+                    style={{ width: "100%" }}
+                  >
+                    🗑 SÍ, ELIMINAR
+                  </button>
+                  <button
+                    className="modal-btn modal-btn-cancel"
+                    onClick={cancelarEliminacion}
+                    style={{ width: "100%", marginTop: 8 }}
+                  >
+                    No, volver atrás
+                  </button>
+                </>
+              )}
             </div>
           </div>
         )}
