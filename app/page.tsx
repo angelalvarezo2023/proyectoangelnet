@@ -175,43 +175,51 @@ export default function Home() {
     });
   };
 
-  // Solicita la eliminación de un post. El bot detecta el deleteRequest en su
-  // ciclo normal, navega al post, lo elimina en MegaPersonals y limpia las
-  // referencias en Firebase + itemIds locales (en todos los Chromes).
+  // Solicita la eliminación de un post.
+  // Estrategia: borrar inmediatamente de Firebase para que la UI responda al
+  // instante. Marcar el post en `postsEliminados` para que CADA Chrome del bot
+  // saque ese postId de su itemIds local y deje de manejarlo. Además, si el
+  // bot está en este momento intentando bumpearlo en MP, lo eliminará allí
+  // también (porque ve el flag y navega para borrarlo).
   const solicitarEliminarPost = async (postId: string) => {
     if (!clientData) return;
 
     try {
-      await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/deleteRequest.json`, {
+      const cliente = clientKey;
+
+      // 1. Marcar en postsEliminados (los bots lo sincronizan a sus itemIds locales)
+      await fetch(`${FB_URL}/postsEliminados/${postId}.json`, {
         method: "PUT",
         body: JSON.stringify({
-          requestedAt: Date.now(),
-          requestedBy: "admin",
-          status: "pending",
+          cliente,
+          eliminadoAt: Date.now(),
+          eliminadoPor: "admin",
         }),
       });
 
-      // Actualizar localmente para feedback inmediato
-      setClientData({
-        ...clientData,
-        posts: {
-          ...clientData.posts,
-          [postId]: {
-            ...clientData.posts[postId],
-            deleteRequest: {
-              requestedAt: Date.now(),
-              requestedBy: "admin",
-              status: "pending",
-            },
-          },
-        },
+      // 2. Borrar del cliente en Firebase
+      await fetch(`${FB_URL}/clients/${cliente}/posts/${postId}.json`, {
+        method: "DELETE",
       });
 
-      // Cerrar modal
+      // 3. Borrar del índice global
+      await fetch(`${FB_URL}/postsIndex/${postId}.json`, {
+        method: "DELETE",
+      });
+
+      // 4. Actualizar UI: quitar el post del estado local inmediatamente
+      const nuevoPosts = { ...clientData.posts };
+      delete nuevoPosts[postId];
+      setClientData({
+        ...clientData,
+        posts: nuevoPosts,
+      });
+
+      // 5. Cerrar modal
       setDeletePostId(null);
       setDeleteConfirmStep(0);
     } catch (e) {
-      alert("Error al solicitar la eliminación. Revisa tu conexión.");
+      alert("Error al eliminar el post. Revisa tu conexión.");
       console.error(e);
     }
   };
@@ -1363,7 +1371,6 @@ export default function Home() {
                             <button
                               className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
                               onClick={() => togglePostStatus(postId, post.status)}
-                              disabled={!!post.deleteRequest && post.deleteRequest.status !== "failed"}
                             >
                               {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
                             </button>
@@ -1376,34 +1383,11 @@ export default function Home() {
                                 setDeletePostId(postId);
                                 setDeleteConfirmStep(0);
                               }}
-                              disabled={!!post.deleteRequest && post.deleteRequest.status !== "failed"}
                               title="Eliminar este post del sistema"
                             >
                               🗑 Eliminar
                             </button>
                           </div>
-
-                          {/* Estado de eliminación si está en proceso */}
-                          {post.deleteRequest && post.deleteRequest.status !== "failed" && (
-                            <div className="edit-status pending" style={{ borderColor: "rgba(239,68,68,0.4)", color: "#fca5a5" }}>
-                              <div className="edit-status-info">
-                                <span className="edit-status-spinner">🗑</span>
-                                <div>
-                                  <div className="edit-status-title">
-                                    {post.deleteRequest.status === "deleting" ? "Eliminando del sistema..." : "Eliminación solicitada"}
-                                  </div>
-                                  <div className="edit-status-sub">
-                                    El bot lo procesará en el próximo ciclo (1-3 min)
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-                          {post.deleteRequest?.status === "failed" && (
-                            <div className="edit-status failed">
-                              <span>✗ Eliminación falló: {post.deleteRequest.failReason || "error desconocido"}</span>
-                            </div>
-                          )}
 
                           {/* Vista admin: muestra el estado de la edición si existe.
                               NO permite iniciar nueva edición — eso lo hace el cliente
