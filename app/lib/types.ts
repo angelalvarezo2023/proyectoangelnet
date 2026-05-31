@@ -53,12 +53,6 @@ export interface PostData {
   data?: PostCapturedData;
   browserName?: string | null;
   lastPhotoChangeRequest?: number;
-  deleteRequest?: {                  // solicitud de eliminación desde el admin
-    requestedAt: number;
-    requestedBy?: string;            // ej: "admin"
-    status?: "pending" | "deleting" | "done" | "failed";
-    failReason?: string;
-  } | null;
 }
 
 export interface ClientData {
