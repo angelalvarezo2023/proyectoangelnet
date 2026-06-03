@@ -523,16 +523,23 @@ export default function Home() {
       return;
     }
 
-    // Construir 'fields' SOLO con los campos que el cliente realmente cambió
-    // Comparando contra los valores originales que capturó el bot.
+    // Construir 'fields' SOLO con los campos que el cliente realmente cambió,
+    // comparando contra los valores originales que capturó el bot.
+    // cityId es un número (no string), se trata aparte.
     const cambios: EditRequestFields = {};
-    (Object.keys(editFields) as (keyof EditRequestFields)[]).forEach((key) => {
-      const valNuevo = (editFields[key] || "").trim();
-      const valOriginal = (editOriginalFields[key] || "").trim();
+    type StringKey = "name" | "age" | "title" | "body" | "cityName" | "location";
+    const camposString: StringKey[] = ["name", "age", "title", "body", "cityName", "location"];
+    for (const key of camposString) {
+      const valNuevo = String(editFields[key] || "").trim();
+      const valOriginal = String(editOriginalFields[key] || "").trim();
       if (valNuevo !== valOriginal) {
         cambios[key] = valNuevo;
       }
-    });
+    }
+    // Si cambió cityName, también enviar cityId actualizado (necesario para que MP acepte el cambio)
+    if (cambios.cityName !== undefined && editFields.cityId !== undefined) {
+      cambios.cityId = editFields.cityId;
+    }
 
     setEditSubmitting(true);
 
@@ -584,8 +591,12 @@ export default function Home() {
   };
 
   // Selector de ubicación: el usuario eligió una ciudad de un estado
-  const seleccionarCiudad = (ciudad: string, abrev: string) => {
-    setEditFields({ ...editFields, cityName: `${ciudad}, ${abrev}` });
+  const seleccionarCiudad = (ciudad: { cid: number; name: string }, abrev: string) => {
+    setEditFields({
+      ...editFields,
+      cityName: `${ciudad.name}, ${abrev}`,
+      cityId: ciudad.cid,
+    });
     setShowLocationPicker(false);
     setExpandedState(null);
   };
@@ -2021,11 +2032,11 @@ export default function Home() {
                         <div className="location-cities-list">
                           {info.ciudades.map((ciudad) => (
                             <button
-                              key={ciudad}
+                              key={ciudad.cid}
                               className="location-city-btn"
                               onClick={() => seleccionarCiudad(ciudad, info.abrev)}
                             >
-                              {ciudad}
+                              {ciudad.name}
                             </button>
                           ))}
                         </div>
