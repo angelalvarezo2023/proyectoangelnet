@@ -7,6 +7,7 @@ export interface EditRequestFields {
   title?: string;
   body?: string;
   cityName?: string;
+  cityId?: number;     // ID interno de MegaPersonals — necesario para que el cambio se aplique
   location?: string;
 }
 
