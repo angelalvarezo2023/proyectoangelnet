@@ -65,7 +65,9 @@ const ESTILOS_VCMP = String.raw`
   height: auto;
 }
 
-/* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta */
+/* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta.
+   Se recorta con object-fit para que la chica + cinta queden grandes
+   y centradas, sin el exceso de burbujas que la hacía verse estirada. */
 .vcmp-banner {
   width: 100%;
   margin-bottom: 18px;
@@ -73,9 +75,11 @@ const ESTILOS_VCMP = String.raw`
 }
 
 .vcmp-banner-img {
-  max-width: 100%;
   width: 100%;
-  height: auto;
+  max-width: 480px;
+  height: 230px;               /* controla cuánto se recorta el alto */
+  object-fit: cover;           /* recorta las burbujas sobrantes */
+  object-position: center 38%; /* centra el encuadre en la chica + cinta */
   display: block;
   margin: 0 auto;
 }
@@ -103,12 +107,14 @@ const ESTILOS_VCMP = String.raw`
   width: 100%;
 }
 
-/* Botones tipo MegaPersonals - gradientes con borde dorado, más compactos */
+/* Botones tipo MegaPersonals - gradientes con borde dorado, más compactos.
+   border-radius reducido para que sean rectángulos redondeados como el
+   original (antes eran píldoras alargadas). */
 .vcmp-mbtn {
   position: relative;
   padding: 11px 6px;
   border: 3px solid #f4b945;
-  border-radius: 40px;
+  border-radius: 14px;
   cursor: pointer;
   font-family: "Arial Black", Arial, sans-serif;
   font-size: 15px;
@@ -1165,12 +1171,18 @@ const ESTILOS_VCMP = String.raw`
     max-width: 75%;
   }
 
-  /* Banner ocupa más ancho */
+  /* Banner: ocupa el ancho y se recorta más bajo en celular */
   .vcmp-banner {
     margin-bottom: 18px;
   }
 
-  /* Botones grandes: más tap-friendly en mobile */
+  .vcmp-banner-img {
+    max-width: 100%;
+    height: 175px;
+    object-position: center 38%;
+  }
+
+  /* Botones grandes: más tap-friendly en mobile, rectángulos redondeados */
   .vcmp-buttons-grid {
     gap: 10px;
     margin-bottom: 12px;
@@ -1180,7 +1192,7 @@ const ESTILOS_VCMP = String.raw`
     font-size: 13px;
     padding: 14px 4px;
     border-width: 3px;
-    border-radius: 36px;
+    border-radius: 12px;
     letter-spacing: 0.5px;
   }
 
@@ -1383,6 +1395,11 @@ const ESTILOS_VCMP = String.raw`
     font-size: 12px;
     padding: 12px 2px;
     letter-spacing: 0;
+    border-radius: 12px;
+  }
+
+  .vcmp-banner-img {
+    height: 150px;
   }
 
   .vcmp-current-post-title {
