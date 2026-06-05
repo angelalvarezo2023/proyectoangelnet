@@ -53,21 +53,20 @@ const ESTILOS_VCMP = String.raw`
   min-height: 100vh;
 }
 
-/* Logo — tamaño contenido para no estirarse */
+/* Logo — estático arriba centrado, 420px como el original. */
 .vcmp-logo {
   text-align: center;
   margin-bottom: 14px;
 }
 
 .vcmp-logo img {
-  max-width: 380px;
-  width: 70%;
+  max-width: 420px;
+  width: 100%;
   height: auto;
 }
 
 /* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta.
-   Se recorta con object-fit para que la chica + cinta queden grandes
-   y centradas, sin el exceso de burbujas que la hacía verse estirada. */
+   Se muestra COMPLETA, sin recortar, igual que el MegaPersonals original. */
 .vcmp-banner {
   width: 100%;
   margin-bottom: 18px;
@@ -76,10 +75,8 @@ const ESTILOS_VCMP = String.raw`
 
 .vcmp-banner-img {
   width: 100%;
-  max-width: 480px;
-  height: 230px;               /* controla cuánto se recorta el alto */
-  object-fit: cover;           /* recorta las burbujas sobrantes */
-  object-position: center 38%; /* centra el encuadre en la chica + cinta */
+  max-width: 100%;
+  height: auto;
   display: block;
   margin: 0 auto;
 }
@@ -107,44 +104,47 @@ const ESTILOS_VCMP = String.raw`
   width: 100%;
 }
 
-/* Botones tipo MegaPersonals - gradientes con borde dorado, más compactos.
-   border-radius reducido para que sean rectángulos redondeados como el
-   original (antes eran píldoras alargadas). */
+/* ============================================================
+ * BOTONES — valores EXACTOS extraídos del MegaPersonals original
+ * vía DevTools (F12) en /users/posts/list:
+ *   border-radius: 17px
+ *   border: 2px solid rgb(46,46,46)
+ *   font: Arial 900, blanco
+ *   text-shadow: 0 0 4px black (sombra borrosa simple)
+ *   box-shadow: inset -2px -2px 5px 0 rgb(38,38,38)  (efecto encajado)
+ *   background: linear-gradient(claro 1%, oscuro 11%)
+ * ============================================================ */
 .vcmp-mbtn {
-  position: relative;
-  padding: 11px 6px;
-  border: 3px solid #f4b945;
-  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  padding: 8px 10px;
+  border: 2px solid rgb(46, 46, 46);
+  border-radius: 17px;
   cursor: pointer;
-  font-family: "Arial Black", Arial, sans-serif;
-  font-size: 15px;
+  font-family: Arial, sans-serif;
+  font-size: 22px;
   font-weight: 900;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: white;
-  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5),
-               -1px -1px 0 rgba(0, 0, 0, 0.3),
-               2px 2px 4px rgba(0, 0, 0, 0.4);
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.22),
-              inset 0 -3px 0 rgba(0, 0, 0, 0.15),
-              inset 0 2px 0 rgba(255, 255, 255, 0.4);
-  transition: transform 0.1s, box-shadow 0.15s, filter 0.15s;
+  letter-spacing: 0.3px;
+  color: rgb(255, 255, 255);
+  text-shadow: 0 0 4px rgb(0, 0, 0);
+  box-shadow: inset -2px -2px 5px 0 rgb(38, 38, 38);
+  transition: transform 0.1s, filter 0.15s, box-shadow 0.15s;
   outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .vcmp-mbtn:hover:not(:disabled) {
-  transform: translateY(-2px);
   filter: brightness(1.08);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3),
-              inset 0 -4px 0 rgba(0, 0, 0, 0.15),
-              inset 0 3px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: inset -2px -2px 5px 0 rgb(38, 38, 38),
+              0 3px 8px rgba(0, 0, 0, 0.2);
 }
 
 .vcmp-mbtn:active:not(:disabled) {
   transform: translateY(1px);
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.2),
-              inset 0 -2px 0 rgba(0, 0, 0, 0.15),
-              inset 0 2px 0 rgba(255, 255, 255, 0.3);
+  box-shadow: inset 2px 2px 6px 0 rgb(38, 38, 38);
 }
 
 .vcmp-mbtn:disabled {
@@ -152,33 +152,35 @@ const ESTILOS_VCMP = String.raw`
   cursor: not-allowed;
 }
 
-/* Variantes de color */
+/* Variantes de color — gradientes EXACTOS del MegaPersonals original.
+   Estructura: linear-gradient(color-claro 1%, color-oscuro 11%) */
 .vcmp-mbtn-red {
-  background: linear-gradient(180deg, #f56b8e 0%, #e44875 40%, #c22f5d 60%, #e44875 100%);
+  background: linear-gradient(rgb(255, 176, 199) 1%, rgb(223, 62, 109) 11%);
 }
 
 .vcmp-mbtn-blue {
-  background: linear-gradient(180deg, #5b9eed 0%, #2f7adf 40%, #1d5fb8 60%, #2f7adf 100%);
+  background: linear-gradient(rgb(217, 225, 255) 1%, rgb(39, 85, 240) 11%);
 }
 
 .vcmp-mbtn-orange {
-  background: linear-gradient(180deg, #ffa75e 0%, #ff823c 40%, #de6822 60%, #ff823c 100%);
+  background: linear-gradient(rgb(255, 225, 212) 1%, rgb(223, 94, 41) 11%);
 }
 
 .vcmp-mbtn-cyan {
-  background: linear-gradient(180deg, #7fdaff 0%, #4cc4f6 40%, #2da6d8 60%, #4cc4f6 100%);
+  background: linear-gradient(rgb(239, 245, 255) 1%, rgb(91, 157, 255) 11%);
 }
 
+/* Variantes extras (no existen en el original) — mismo patrón visual */
 .vcmp-mbtn-green {
-  background: linear-gradient(180deg, #6cd99e 0%, #3fc079 40%, #29a464 60%, #3fc079 100%);
+  background: linear-gradient(rgb(208, 245, 218) 1%, rgb(34, 158, 92) 11%);
 }
 
 .vcmp-mbtn-purple {
-  background: linear-gradient(180deg, #b988e7 0%, #9b66d6 40%, #7e4cba 60%, #9b66d6 100%);
+  background: linear-gradient(rgb(232, 217, 255) 1%, rgb(126, 76, 186) 11%);
 }
 
 .vcmp-mbtn-gold {
-  background: linear-gradient(180deg, #f5d27f 0%, #e8b860 40%, #c79944 60%, #e8b860 100%);
+  background: linear-gradient(rgb(252, 235, 192) 1%, rgb(199, 153, 68) 11%);
 }
 
 /* Separador decorativo */
@@ -1162,38 +1164,39 @@ const ESTILOS_VCMP = String.raw`
     left: 10px;
   }
 
-  /* Logo más pequeño en mobile */
+  /* Logo más pequeño en mobile, sigue superpuesto a la derecha */
   .vcmp-logo {
-    margin-bottom: 14px;
+    top: 10px;
+    right: 5%;
   }
 
   .vcmp-logo img {
-    max-width: 75%;
+    max-width: 190px;
+    width: 50%;
   }
 
-  /* Banner: ocupa el ancho y se recorta más bajo en celular */
+  /* Banner: imagen completa también en celular */
   .vcmp-banner {
     margin-bottom: 18px;
   }
 
   .vcmp-banner-img {
     max-width: 100%;
-    height: 175px;
-    object-position: center 38%;
+    height: auto;
   }
 
-  /* Botones grandes: más tap-friendly en mobile, rectángulos redondeados */
+  /* Botones grandes: rectángulares estilo MP, ajustados para mobile */
   .vcmp-buttons-grid {
     gap: 10px;
     margin-bottom: 12px;
   }
 
   .vcmp-mbtn {
-    font-size: 13px;
-    padding: 14px 4px;
-    border-width: 3px;
-    border-radius: 12px;
-    letter-spacing: 0.5px;
+    font-size: 16px;
+    min-height: 50px;
+    padding: 6px 8px;
+    border-radius: 14px;
+    letter-spacing: 0.2px;
   }
 
   .vcmp-buttons-extra {
@@ -1392,14 +1395,11 @@ const ESTILOS_VCMP = String.raw`
 /* Pantallas muy pequeñas (< 380px) */
 @media (max-width: 380px) {
   .vcmp-mbtn {
-    font-size: 12px;
-    padding: 12px 2px;
+    font-size: 14px;
+    min-height: 44px;
+    padding: 4px 6px;
     letter-spacing: 0;
     border-radius: 12px;
-  }
-
-  .vcmp-banner-img {
-    height: 150px;
   }
 
   .vcmp-current-post-title {
