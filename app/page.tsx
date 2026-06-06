@@ -26,6 +26,279 @@ import EstilosGlobales from "./components/EstilosGlobales";
 import VistaClienteMP from "./components/VistaClienteMP";
 import EstilosVistaClienteMP from "./components/EstilosVistaClienteMP";
 
+// ============================================================
+// ESTILOS DEL NUEVO LOGIN VICE CITY
+// Se insertan solo cuando step === "search". No tocan el resto
+// del sistema (admin panel, vista cliente MP, etc.)
+// ============================================================
+const VICE_CITY_STYLES = `
+/* Fondo a pantalla completa con la imagen Vice City */
+.vc-bg-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  background-image: url('/vice-city-fondo.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* En celular usa la versión vertical */
+@media (max-width: 768px) {
+  .vc-bg-fullscreen {
+    background-image: url('/vice-city-fondo-mobile.png');
+  }
+}
+
+/* Contenedor de la tarjeta de login centrada en pantalla */
+.vc-login-wrap {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+/* Tarjeta translúcida oscura con blur */
+.vc-card {
+  background: rgba(20, 8, 30, 0.82);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 61, 138, 0.18);
+  border-radius: 26px;
+  padding: 38px 34px 32px;
+  width: 100%;
+  max-width: 460px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 60px rgba(255, 61, 138, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  animation: vcFadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes vcFadeIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Logo AV grande arriba de la tarjeta */
+.vc-logo {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  margin: 0 auto 28px;
+  filter: drop-shadow(0 4px 20px rgba(255, 61, 138, 0.3));
+}
+
+/* Label "NOMBRE DEL CLIENTE" en rosa neón */
+.vc-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #ff3d8a;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.vc-label-palm {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Wrapper del input con icono */
+.vc-input-wrap {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.vc-input-icon {
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  pointer-events: none;
+  filter: grayscale(0.3);
+}
+
+.vc-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.5px solid rgba(255, 61, 138, 0.28);
+  border-radius: 14px;
+  padding: 17px 18px 17px 52px;
+  color: white;
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.vc-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.vc-input:focus {
+  border-color: #ff3d8a;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 4px rgba(255, 61, 138, 0.12);
+}
+
+/* Botón Acceder al panel con gradiente rosa-naranja */
+.vc-btn {
+  width: 100%;
+  background: linear-gradient(95deg, #ff2a8a 0%, #ff4d7a 40%, #ff6b3d 75%, #ff9a3d 100%);
+  border: none;
+  border-radius: 14px;
+  padding: 18px 22px;
+  color: white;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow:
+    0 10px 28px rgba(255, 61, 138, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  position: relative;
+  overflow: hidden;
+}
+
+.vc-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 36px rgba(255, 61, 138, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.vc-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.vc-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.vc-btn-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.vc-btn-arrow {
+  font-size: 18px;
+  line-height: 1;
+  margin-left: 4px;
+}
+
+/* Divider sutil entre el botón y el acceso admin */
+.vc-divider {
+  height: 1px;
+  background: linear-gradient(to right,
+    transparent,
+    rgba(255, 61, 138, 0.25) 50%,
+    transparent);
+  margin: 24px 0 18px;
+}
+
+/* Botón de acceso administrador */
+.vc-admin-btn {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #ffc864;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  transition: color 0.2s, transform 0.15s;
+  font-family: inherit;
+}
+
+.vc-admin-btn:hover {
+  color: #ffd989;
+  transform: translateY(-1px);
+}
+
+.vc-admin-btn-text {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 1.5px;
+}
+
+/* Mensaje de error */
+.vc-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  padding: 12px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  text-align: center;
+  animation: vcShake 0.4s ease-in-out;
+}
+
+@keyframes vcShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+/* Adaptaciones para celular */
+@media (max-width: 480px) {
+  .vc-card {
+    padding: 30px 24px 26px;
+    border-radius: 22px;
+    max-width: 100%;
+  }
+
+  .vc-logo {
+    max-width: 260px;
+    margin-bottom: 22px;
+  }
+
+  .vc-label {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+  }
+
+  .vc-input {
+    padding: 15px 16px 15px 48px;
+    font-size: 14px;
+  }
+
+  .vc-btn {
+    font-size: 13px;
+    padding: 16px 18px;
+    letter-spacing: 1px;
+  }
+
+  .vc-admin-btn {
+    font-size: 13px;
+  }
+}
+`;
+
 export default function Home() {
   const [step, setStep] = useState<Step>("search");
   const [searchName, setSearchName] = useState("");
@@ -47,16 +320,16 @@ export default function Home() {
 
   // Eliminación de posts desde admin (modal de confirmación + doble clic)
   const [deletePostId, setDeletePostId] = useState<string | null>(null);
-  const [deleteConfirmStep, setDeleteConfirmStep] = useState(0); // 0=primer clic, 1=segundo clic
+  const [deleteConfirmStep, setDeleteConfirmStep] = useState(0);
   const [rentDays, setRentDays] = useState("7");
   const [rentHours, setRentHours] = useState("0");
 
   // Estados del flujo de edición del cliente
-  const [editConfirmPost, setEditConfirmPost] = useState<string | null>(null); // muestra modal de confirmación inicial
-  const [editFormPost, setEditFormPost] = useState<string | null>(null);       // muestra modal de edición
-  const [editStep, setEditStep] = useState<"fields" | "captcha">("fields");    // qué pantalla del modal
-  const [editFields, setEditFields] = useState<EditRequestFields>({});         // valores que el cliente está editando
-  const [editOriginalFields, setEditOriginalFields] = useState<EditRequestFields>({}); // valores originales (para comparar)
+  const [editConfirmPost, setEditConfirmPost] = useState<string | null>(null);
+  const [editFormPost, setEditFormPost] = useState<string | null>(null);
+  const [editStep, setEditStep] = useState<"fields" | "captcha">("fields");
+  const [editFields, setEditFields] = useState<EditRequestFields>({});
+  const [editOriginalFields, setEditOriginalFields] = useState<EditRequestFields>({});
   const [editCaptchaCode, setEditCaptchaCode] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
 
@@ -64,7 +337,7 @@ export default function Home() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [expandedState, setExpandedState] = useState<string | null>(null);
 
-  // Estado para la vista cliente MegaPersonals: cuál post está viendo el cliente
+  // Estado para la vista cliente MegaPersonals
   const [postIdActualMP, setPostIdActualMP] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,7 +383,6 @@ export default function Home() {
     }
   };
 
-  // Carga los heartbeats de TODOS los bots para mostrar quiénes están vivos.
   const loadHeartbeats = async () => {
     try {
       const res = await fetch(`${FB_URL}/heartbeats.json`);
@@ -175,19 +447,12 @@ export default function Home() {
     });
   };
 
-  // Solicita la eliminación de un post.
-  // Estrategia: borrar inmediatamente de Firebase para que la UI responda al
-  // instante. Marcar el post en `postsEliminados` para que CADA Chrome del bot
-  // saque ese postId de su itemIds local y deje de manejarlo. Además, si el
-  // bot está en este momento intentando bumpearlo en MP, lo eliminará allí
-  // también (porque ve el flag y navega para borrarlo).
   const solicitarEliminarPost = async (postId: string) => {
     if (!clientData) return;
 
     try {
       const cliente = clientKey;
 
-      // 1. Marcar en postsEliminados (los bots lo sincronizan a sus itemIds locales)
       await fetch(`${FB_URL}/postsEliminados/${postId}.json`, {
         method: "PUT",
         body: JSON.stringify({
@@ -197,17 +462,14 @@ export default function Home() {
         }),
       });
 
-      // 2. Borrar del cliente en Firebase
       await fetch(`${FB_URL}/clients/${cliente}/posts/${postId}.json`, {
         method: "DELETE",
       });
 
-      // 3. Borrar del índice global
       await fetch(`${FB_URL}/postsIndex/${postId}.json`, {
         method: "DELETE",
       });
 
-      // 4. Actualizar UI: quitar el post del estado local inmediatamente
       const nuevoPosts = { ...clientData.posts };
       delete nuevoPosts[postId];
       setClientData({
@@ -215,7 +477,6 @@ export default function Home() {
         posts: nuevoPosts,
       });
 
-      // 5. Cerrar modal
       setDeletePostId(null);
       setDeleteConfirmStep(0);
     } catch (e) {
@@ -267,15 +528,9 @@ export default function Home() {
     const post = clientData.posts[postId];
     const SEMANA = 7 * 24 * 60 * 60 * 1000;
 
-    // Si el post YA tiene renta (vencida o no), el nuevo periodo se cuenta
-    // desde la fecha de vencimiento original. Asi, si el cliente pago tarde,
-    // el tiempo que estuvo en deuda se le descuenta automaticamente.
-    // Si nunca tuvo renta, se cuenta desde ahora.
     const base = post.rentExpiresAt || Date.now();
     const newExpiry = base + SEMANA;
 
-    // Reactivar el post solo si el nuevo vencimiento queda en el futuro.
-    // (Si la deuda era mayor a lo pagado, seguiria vencido y pausado.)
     const reactivar = newExpiry > Date.now() && post.rentPaused;
 
     const updates: Partial<PostData> = { rentExpiresAt: newExpiry };
@@ -315,13 +570,10 @@ export default function Home() {
       return;
     }
 
-    // El modal "Establecer" cuenta desde AHORA (renta limpia, sin cobrar deuda).
-    // Usalo cuando quieras dar tiempo fresco. Para cobrar deuda usa el boton +7d.
     const newExpiry = Date.now() + days * 24 * 60 * 60 * 1000 + hours * 60 * 60 * 1000;
 
     const post = clientData.posts[rentModalPost];
     const updates: Partial<PostData> = { rentExpiresAt: newExpiry };
-    // Si estaba pausado por renta vencida, reactivarlo
     if (post.rentPaused) {
       updates.status = "active";
       updates.rentPaused = false;
@@ -365,8 +617,6 @@ export default function Home() {
   // FLUJO DE EDICIÓN DEL CLIENTE
   // ===========================================================
 
-  // Verifica si esta cuenta ya tiene una edición activa (en cualquier post).
-  // Por regla: solo una edición a la vez por cuenta.
   const hayEdicionActiva = (): string | null => {
     if (!clientData) return null;
     for (const [pid, post] of Object.entries(clientData.posts)) {
@@ -378,15 +628,8 @@ export default function Home() {
     return null;
   };
 
-  // Tracker de último intento de borrado por editRequest (postId:finishedAt → timestamp).
-  // Usamos Map (no Set) para permitir reintentos: si Firebase no propagó el DELETE
-  // a tiempo y el polling trae la editRequest de vuelta, reintentamos cada 3 segundos.
   const ultimoBorradoRef = useRef<Map<string, number>>(new Map());
 
-  // Limpia automáticamente solicitudes terminadas/fallidas tras 5 segundos.
-  // Si Firebase no propaga el DELETE y vuelve a llegar la editRequest en el polling,
-  // reintentamos cada 3s hasta que efectivamente desaparezca. Esto evita que el mensaje
-  // "Cambios aplicados" se quede pegado por minutos.
   useEffect(() => {
     if (!clientData) return;
     Object.entries(clientData.posts).forEach(async ([postId, post]) => {
@@ -400,17 +643,12 @@ export default function Home() {
       const clave = `${postId}:${finishedAt}`;
       const ultimoIntento = ultimoBorradoRef.current.get(clave) || 0;
 
-      // Reintentar máximo cada 3 segundos
       if (now - ultimoIntento < 3000) return;
       ultimoBorradoRef.current.set(clave, now);
 
-      // SIEMPRE actualizar el estado local INMEDIATAMENTE.
-      // Si el polling trae la editRequest de vuelta, este código se ejecuta otra vez
-      // y la vuelve a quitar del estado local. El mensaje no se queda pegado.
       setClientData((prev) => {
         if (!prev || !prev.posts[postId]) return prev;
         const existing = prev.posts[postId].editRequest;
-        // Solo borrar si sigue siendo la MISMA editRequest (no una nueva)
         if (!existing) return prev;
         const existingFinish = existing.appliedAt || existing.failedAt;
         if (existingFinish !== finishedAt) return prev;
@@ -422,14 +660,12 @@ export default function Home() {
         };
       });
 
-      // Borrar de Firebase (idempotente: si ya no existe, no pasa nada)
       await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/editRequest.json`, {
         method: "DELETE",
       });
     });
   }, [now, clientData, clientKey]);
 
-  // Paso 1: el cliente toca "Editar publicación" en una tarjeta
   const iniciarEdicion = (postId: string) => {
     const existente = hayEdicionActiva();
     if (existente && existente !== postId) {
@@ -439,7 +675,6 @@ export default function Home() {
     setEditConfirmPost(postId);
   };
 
-  // Paso 2: el cliente confirma. Creamos la solicitud en Firebase con estado "captcha_pendiente"
   const confirmarEdicion = async () => {
     if (!editConfirmPost || !clientData) return;
 
@@ -464,14 +699,11 @@ export default function Home() {
     setEditConfirmPost(null);
   };
 
-  // Paso 3: el cliente toca "Editar ahora" cuando el captcha ya está listo.
-  // Abrimos el formulario en la pantalla 1 (campos editables, sin captcha aún).
   const abrirFormularioEdicion = (postId: string) => {
     if (!clientData) return;
     const post = clientData.posts[postId];
     if (!post.editRequest || post.editRequest.status !== "captcha_listo") return;
 
-    // Pre-llenar los campos con los valores actuales que capturó el bot
     const current: EditRequestFields = {
       name: post.editRequest.currentValues?.name || "",
       age: post.editRequest.currentValues?.age || "",
@@ -481,20 +713,18 @@ export default function Home() {
       location: post.editRequest.currentValues?.location || "",
     };
     setEditFields(current);
-    setEditOriginalFields(current); // guardar copia para comparar después
+    setEditOriginalFields(current);
     setEditCaptchaCode("");
-    setEditStep("fields"); // empezar en la pantalla 1
+    setEditStep("fields");
     setEditFormPost(postId);
   };
 
-  // Validación de los campos antes de avanzar al captcha
   const validarCampos = (): string | null => {
     if (!editFields.title?.trim()) return "El titular (Headline) no puede estar vacío";
     if (!editFields.body?.trim()) return "La descripción (Body) no puede estar vacía";
     return null;
   };
 
-  // Avanzar de pantalla "fields" a "captcha"
   const irAlCaptcha = () => {
     const err = validarCampos();
     if (err) {
@@ -504,12 +734,10 @@ export default function Home() {
     setEditStep("captcha");
   };
 
-  // Volver de "captcha" a "fields" para editar los campos
   const volverAFields = () => {
     setEditStep("fields");
   };
 
-  // Paso 4: el cliente envía el formulario completo (campos modificados + captcha)
   const enviarEdicion = async () => {
     if (!editFormPost || !clientData) return;
     if (!editCaptchaCode.trim()) {
@@ -523,9 +751,6 @@ export default function Home() {
       return;
     }
 
-    // Construir 'fields' SOLO con los campos que el cliente realmente cambió,
-    // comparando contra los valores originales que capturó el bot.
-    // cityId es un número (no string), se trata aparte.
     const cambios: EditRequestFields = {};
     type StringKey = "name" | "age" | "title" | "body" | "cityName" | "location";
     const camposString: StringKey[] = ["name", "age", "title", "body", "cityName", "location"];
@@ -536,7 +761,6 @@ export default function Home() {
         cambios[key] = valNuevo;
       }
     }
-    // Si cambió cityName, también enviar cityId actualizado (necesario para que MP acepte el cambio)
     if (cambios.cityName !== undefined && editFields.cityId !== undefined) {
       cambios.cityId = editFields.cityId;
     }
@@ -546,7 +770,7 @@ export default function Home() {
     const updates: Partial<EditRequest> = {
       status: "listo_para_publicar",
       captchaCode: editCaptchaCode.trim(),
-      fields: cambios, // SOLO los campos modificados
+      fields: cambios,
     };
 
     await fetch(`${FB_URL}/clients/${clientKey}/posts/${editFormPost}/editRequest.json`, {
@@ -570,7 +794,6 @@ export default function Home() {
     setEditFormPost(null);
   };
 
-  // Cancelar edición en cualquier momento (antes de "aplicada")
   const cancelarEdicion = async (postId: string) => {
     if (!confirm("¿Cancelar la edición de este post?")) return;
 
@@ -590,7 +813,6 @@ export default function Home() {
     setEditFormPost(null);
   };
 
-  // Selector de ubicación: el usuario eligió una ciudad de un estado
   const seleccionarCiudad = (ciudad: { cid: number; name: string }, abrev: string) => {
     setEditFields({
       ...editFields,
@@ -601,7 +823,6 @@ export default function Home() {
     setExpandedState(null);
   };
 
-  // Abre el modal del selector
   const abrirSelectorUbicacion = () => {
     setExpandedState(null);
     setShowLocationPicker(true);
@@ -637,7 +858,6 @@ export default function Home() {
 
     const diff = post.rentExpiresAt - now;
     if (diff <= 0) {
-      // Renta vencida: calcular el tiempo que lleva en deuda
       const debtMs = now - post.rentExpiresAt;
       const debtTotalHours = Math.floor(debtMs / (60 * 60 * 1000));
       const debtDays = Math.floor(debtTotalHours / 24);
@@ -649,7 +869,6 @@ export default function Home() {
     const days = Math.floor(totalHours / 24);
     const hours = totalHours % 24;
 
-    // Advertencia cuando queda 1 día (24h) o menos
     const isWarning = totalHours <= 24;
 
     return { status: "active" as const, days, hours, isWarning, totalHours, debtDays: 0, debtHours: 0 };
@@ -693,41 +912,35 @@ export default function Home() {
       const query = adminFilter.toLowerCase();
       return data.displayName?.toLowerCase().includes(query) || key.includes(query);
     })
-    // Ordenar por urgencia: cuenta baneada > en deuda > por vencer > con renta > sin renta > inactivo
     .sort(([, a], [, b]) => {
       const score = (data: ClientData) => {
-        // Cuenta baneada: máxima urgencia (necesita atención inmediata)
         if (data.banned) return 0;
 
-        // Sacar la fecha más urgente entre todos sus posts
         const posts = Object.values(data.posts || {});
-        if (!posts.length) return 6; // sin posts: lo último
+        if (!posts.length) return 6;
 
-        // Buscar la renta más cercana a vencer (o ya vencida)
         const fechas = posts
           .map((p) => p.rentExpiresAt)
           .filter((x): x is number => typeof x === "number");
 
-        if (!fechas.length) return 5; // ningún post con renta configurada
+        if (!fechas.length) return 5;
 
         const minFecha = Math.min(...fechas);
         const diff = minFecha - now;
 
-        if (diff <= 0) return 1; // en deuda
-        if (diff <= 24 * 3600 * 1000) return 2; // por vencer (<= 24h)
-        if (diff <= 7 * 24 * 3600 * 1000) return 3; // próximo (<= 7d)
-        return 4; // tiempo lejano
+        if (diff <= 0) return 1;
+        if (diff <= 24 * 3600 * 1000) return 2;
+        if (diff <= 7 * 24 * 3600 * 1000) return 3;
+        return 4;
       };
 
       const sA = score(a);
       const sB = score(b);
       if (sA !== sB) return sA - sB;
 
-      // Empate: por nombre alfabético
       return (a.displayName || "").localeCompare(b.displayName || "");
     });
 
-  // Calcular contador de baneos por semana (últimos 7 días)
   const baneosEstaSemana = Object.values(allClients).filter(
     (c) => c.banned && c.bannedAt && now - c.bannedAt <= 7 * 24 * 3600 * 1000
   ).length;
@@ -753,42 +966,62 @@ export default function Home() {
 
       <div className="page">
         <div className="content">
+          {/* =====================================================
+              NUEVO LOGIN VICE CITY
+              ===================================================== */}
           {step === "search" && (
-            <div className="search-container">
-              <div className="search-card">
-                <div className="logo-orb">
-                  <span>🔍</span>
-                </div>
-
-                <div className="brand">
-                  Angel<span>Vercel</span>
-                </div>
-                <div className="tagline">Panel premium de control</div>
-
-                <div className="input-group">
-                  <label className="input-label">Nombre del cliente</label>
-                  <input
-                    type="text"
-                    className="search-input"
-                    placeholder="Ej: Carla, María, Sofía..."
-                    value={searchName}
-                    onChange={(e) => setSearchName(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && searchClient()}
-                    autoFocus
+            <>
+              <style dangerouslySetInnerHTML={{ __html: VICE_CITY_STYLES }} />
+              <div className="vc-bg-fullscreen" />
+              <div className="vc-login-wrap">
+                <div className="vc-card">
+                  <img
+                    src="/av-logo.png"
+                    alt="AngelVercel"
+                    className="vc-logo"
                   />
-                </div>
 
-                {error && <div className="error-msg">{error}</div>}
+                  <label className="vc-label">
+                    <span className="vc-label-palm">🌴</span>
+                    Nombre del cliente
+                  </label>
 
-                <button className="btn-primary" onClick={searchClient} disabled={loading}>
-                  {loading ? "Buscando..." : "Acceder al panel"}
-                </button>
+                  <div className="vc-input-wrap">
+                    <span className="vc-input-icon">👤</span>
+                    <input
+                      type="text"
+                      className="vc-input"
+                      placeholder="Ej: Carla, María, Sofía..."
+                      value={searchName}
+                      onChange={(e) => setSearchName(e.target.value)}
+                      onKeyPress={(e) => e.key === "Enter" && searchClient()}
+                      autoFocus
+                    />
+                  </div>
 
-                <div className="admin-link">
-                  <button onClick={() => setShowAdminLogin(true)}>🔐 Acceso administrador</button>
+                  {error && <div className="vc-error">{error}</div>}
+
+                  <button
+                    className="vc-btn"
+                    onClick={searchClient}
+                    disabled={loading}
+                  >
+                    <span className="vc-btn-icon">🌴</span>
+                    {loading ? "Buscando..." : "Acceder al panel"}
+                    <span className="vc-btn-arrow">→</span>
+                  </button>
+
+                  <div className="vc-divider"></div>
+
+                  <button
+                    className="vc-admin-btn"
+                    onClick={() => setShowAdminLogin(true)}
+                  >
+                    🔒 <span className="vc-admin-btn-text">Acceso administrador</span>
+                  </button>
                 </div>
               </div>
-            </div>
+            </>
           )}
 
           {step === "admin-list" && isAdmin && (
@@ -856,9 +1089,6 @@ export default function Home() {
                 );
               })()}
 
-              {/* Monitor de estado de los Chromes (heartbeats).
-                  Muestra cada bot conectado y cuándo fue su última actividad.
-                  Verde = activo (<2 min), Amarillo = lento (<5 min), Rojo = caído (>5 min). */}
               {Object.keys(heartbeats).length > 0 && (
                 <div className="chrome-monitor">
                   <div className="chrome-monitor-header">
@@ -867,12 +1097,10 @@ export default function Home() {
                   </div>
                   <div className="chrome-monitor-grid">
                     {Object.entries(heartbeats)
-                      // Filtrar heartbeats inválidos: sin lastSeen o más de 24h sin actividad
-                      // (eso significa que está abandonado, no es un Chrome "caído reciente")
                       .filter(([, info]) => {
                         if (!info || !info.lastSeen) return false;
                         const silencio = now - info.lastSeen;
-                        return silencio < 24 * 60 * 60 * 1000; // < 24 horas
+                        return silencio < 24 * 60 * 60 * 1000;
                       })
                       .sort(([, a], [, b]) => (b.lastSeen || 0) - (a.lastSeen || 0))
                       .map(([botId, info]) => {
@@ -936,24 +1164,19 @@ export default function Home() {
                     const paused = posts.filter((p) => p.status === "paused").length;
                     const initial = (data.displayName || key).charAt(0).toUpperCase();
 
-                    // Lista de navegadores únicos donde están los posts de este cliente
                     const navegadores = Array.from(new Set(
                       posts.map((p) => p.browserName).filter((b): b is string => !!b)
                     ));
 
-                    // Estado de renta agregado del cliente
                     const postsConRenta = posts.filter((p) => p.rentExpiresAt);
                     let rentSummary: { type: "expired" | "warning" | "active" | "none"; text: string; count?: number } = {
                       type: "none",
                       text: "Sin renta",
                     };
 
-                    // Posts baneados (cuenta de MP bloqueada): cada post tiene
-                    // banned=true y rentRemainingMs guardado (tiempo congelado).
                     const postsBaneados = posts.filter((p) => p.banned);
                     const tieneBaneados = postsBaneados.length > 0;
 
-                    // Formatear el tiempo restante del más urgente (el que tiene menos)
                     let tiempoBaneadoTexto = "";
                     if (tieneBaneados) {
                       const conRentaRestante = postsBaneados.filter(p => typeof p.rentRemainingMs === "number");
@@ -974,7 +1197,6 @@ export default function Home() {
                       const warning = activeRent.filter((p) => p.rentExpiresAt! - now <= 24 * 60 * 60 * 1000);
 
                       if (expired.length > 0) {
-                        // Tomar la deuda más grande (más urgente)
                         const maxDebt = Math.max(...expired.map((p) => now - p.rentExpiresAt!));
                         const debtDays = Math.floor(maxDebt / (24 * 60 * 60 * 1000));
                         const debtHours = Math.floor((maxDebt % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
@@ -984,7 +1206,6 @@ export default function Home() {
                           count: expired.length,
                         };
                       } else if (warning.length > 0) {
-                        // Tomar el que vence más pronto
                         const minTime = Math.min(...warning.map((p) => p.rentExpiresAt! - now));
                         const totalHours = Math.floor(minTime / (60 * 60 * 1000));
                         const h = totalHours;
@@ -995,7 +1216,6 @@ export default function Home() {
                           count: warning.length,
                         };
                       } else if (activeRent.length > 0) {
-                        // Tomar el que vence más pronto entre los activos
                         const minTime = Math.min(...activeRent.map((p) => p.rentExpiresAt! - now));
                         const totalHours = Math.floor(minTime / (60 * 60 * 1000));
                         const days = Math.floor(totalHours / 24);
@@ -1037,9 +1257,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Aviso de cuenta bloqueada: solo si hay posts banned.
-                            Muestra cuántos están bloqueados y el tiempo de renta
-                            congelado (lo que le quedaba al momento del baneo). */}
                         {tieneBaneados && (
                           <div className="client-banned-pill">
                             <span className="client-banned-icon">🚫</span>
@@ -1054,7 +1271,6 @@ export default function Home() {
                           </div>
                         )}
 
-                        {/* Estado de renta del cliente */}
                         <div className={`client-rent ${rentSummary.type}`}>
                           <span className="client-rent-icon">
                             {rentSummary.type === "expired" ? "🔴" :
@@ -1113,16 +1329,10 @@ export default function Home() {
           )}
 
           {step === "cards" && clientData && !(clientData.banned && !isAdmin) && !isAdmin && (() => {
-            // === VISTA CLIENTE MEGAPERSONALS ===
-            // Solo cuando NO es admin Y no está baneado: mostrar la vista estilo MegaPersonals.
-            // (El admin sigue viendo la vista oscura tradicional abajo.)
-
-            // Ordenar posts por addedAt (el más viejo primero) para tener navegación consistente
             const postIdsOrdenados = Object.entries(clientData.posts)
               .sort(([, a], [, b]) => (a.addedAt || 0) - (b.addedAt || 0))
               .map(([id]) => id);
 
-            // Determinar qué post mostrar: el seleccionado o el primero
             const postActual = postIdActualMP && clientData.posts[postIdActualMP]
               ? postIdActualMP
               : postIdsOrdenados[0];
@@ -1149,10 +1359,6 @@ export default function Home() {
                 isAdmin={isAdmin}
                 onCambiarPost={(newId) => setPostIdActualMP(newId)}
                 onEditClick={(pid) => {
-                  // Decide qué hacer según el estado actual de la editRequest:
-                  // - sin editRequest, o aplicada/fallida → iniciar nueva edición
-                  // - captcha_listo → abrir formulario para que llene el captcha
-                  // - captcha_pendiente o listo_para_publicar → ya está en progreso, no hacer nada
                   const p = clientData.posts[pid];
                   const er = p?.editRequest;
                   if (!er || er.status === "aplicada" || er.status === "fallida") {
@@ -1160,7 +1366,6 @@ export default function Home() {
                   } else if (er.status === "captcha_listo") {
                     abrirFormularioEdicion(pid);
                   }
-                  // captcha_pendiente o listo_para_publicar: no hacer nada (estado en curso)
                 }}
                 onPausarToggle={(pid) => {
                   const p = clientData.posts[pid];
@@ -1294,7 +1499,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* BANNER - cuando queda 1 día o menos, O cuando ya venció (en deuda) */}
                         {(rent.isWarning || rent.status === "expired") && (
                           <div className="pc-warning">
                             <div className="pc-warning-header">
@@ -1400,14 +1604,9 @@ export default function Home() {
                             </button>
                           </div>
 
-                          {/* Vista admin: muestra el estado de la edición si existe.
-                              NO permite iniciar nueva edición — eso lo hace el cliente
-                              desde su vista MegaPersonals. */}
                           {(() => {
                             const er = post.editRequest;
                             if (!er || er.status === "aplicada" || er.status === "fallida") {
-                              // Sin edición en curso: nada que mostrar.
-                              // (El admin no inicia ediciones, eso es solo del cliente.)
                               if (er?.status === "aplicada") {
                                 return (
                                   <div className="edit-status applied">
@@ -1466,15 +1665,11 @@ export default function Home() {
                             }
 
                             if (er.status === "listo_para_publicar") {
-                              // Calcular tiempo restante hasta el próximo bump.
-                              // El bot espera al nextBumpAt antes de publicar los cambios,
-                              // para no romper el ciclo de rotación.
                               const msHastaBump = Math.max(0, post.nextBumpAt - now);
                               const minHastaBump = Math.floor(msHastaBump / 60000);
                               const segHastaBump = Math.floor((msHastaBump % 60000) / 1000);
 
                               if (msHastaBump <= 0) {
-                                // Ya llegó el momento: el bot está publicando
                                 return (
                                   <div className="edit-status publishing">
                                     <span className="edit-status-spinner">⏳</span>
@@ -1483,7 +1678,6 @@ export default function Home() {
                                 );
                               }
 
-                              // Aún no es momento. Mostrar countdown.
                               return (
                                 <div className="edit-status waiting-bump">
                                   <span className="edit-status-spinner">⏳</span>
@@ -1537,7 +1731,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Modal de confirmación de eliminación de post (doble clic) */}
         {deletePostId && (
           <div className="modal-overlay" onClick={cancelarEliminacion}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
@@ -1658,7 +1851,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: Confirmar inicio de edición */}
         {editConfirmPost && (
           <div className="modal-overlay" onClick={() => setEditConfirmPost(null)}>
             <div className="modal-card" onClick={(e) => e.stopPropagation()}>
@@ -1700,7 +1892,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* MODAL: Formulario de edición estilo MegaPersonals 1:1 */}
         {editFormPost && clientData && clientData.posts[editFormPost]?.editRequest && (
           <div className="mp-overlay" onClick={() => !editSubmitting && setEditFormPost(null)}>
             <div className="mp-modal" onClick={(e) => e.stopPropagation()}>
@@ -1715,7 +1906,6 @@ export default function Home() {
 
                 return (
                   <>
-                    {/* Botón X cerrar (esquina superior derecha) */}
                     <button
                       className="mp-close-x"
                       onClick={() => !editSubmitting && setEditFormPost(null)}
@@ -1724,21 +1914,17 @@ export default function Home() {
                       <img src="/megapersonals-img/close_bump_to_top_modal.png" alt="Cerrar" />
                     </button>
 
-                    {/* Timer flotante */}
                     <div className="mp-timer">⏱ {minRest}:{secRest.toString().padStart(2, "0")}</div>
 
-                    {/* Bordes decorativos rosa */}
                     <div className="mp-topborder"></div>
                     <div className="mp-leftborder"></div>
                     <div className="mp-rightborder"></div>
                     <div className="mp-bottomborder"></div>
 
-                    {/* Logo de header */}
                     <div className="mp-header-logo">
                       <img src="/megapersonals-img/megapersonalsPageHeader2.png" alt="MegaPersonals" />
                     </div>
 
-                    {/* ============ PESTAÑA 1: DATOS ============ */}
                     {editStep === "fields" && (
                       <div className="mp-stage">
                         <div className="mp-banner">
@@ -1746,7 +1932,6 @@ export default function Home() {
                         </div>
 
                         <form className="mp-form" onSubmit={(e) => e.preventDefault()}>
-                          {/* I AM / I SEE */}
                           <div className="mp-row mp-row-2">
                             <div className="mp-field">
                               <label className="mp-label">I AM:</label>
@@ -1766,7 +1951,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Name / Age */}
                           <div className="mp-row mp-row-2">
                             <div className="mp-field">
                               <label className="mp-label">Name/Alias:</label>
@@ -1791,7 +1975,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Headline */}
                           <div className="mp-row">
                             <div className="mp-field mp-field-full">
                               <label className="mp-label">Headline: *</label>
@@ -1804,7 +1987,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Body */}
                           <div className="mp-row">
                             <div className="mp-field mp-field-full">
                               <label className="mp-label">Body: *</label>
@@ -1816,7 +1998,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* City / Phone */}
                           <div className="mp-row mp-row-2">
                             <div className="mp-field">
                               <label className="mp-label">City:</label>
@@ -1849,7 +2030,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Location/Area */}
                           <div className="mp-row">
                             <div className="mp-field mp-field-full">
                               <label className="mp-label">Location/Area:</label>
@@ -1862,7 +2042,6 @@ export default function Home() {
                             </div>
                           </div>
 
-                          {/* Botón Next */}
                           <div className="mp-button-row">
                             <button
                               type="button"
@@ -1874,7 +2053,6 @@ export default function Home() {
                             </button>
                           </div>
 
-                          {/* Cancelar */}
                           <div className="mp-cancel-row">
                             <button
                               type="button"
@@ -1889,14 +2067,12 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* ============ PESTAÑA 2: CAPTCHA + FOTOS ============ */}
                     {editStep === "captcha" && (
                       <div className="mp-stage">
                         <div className="mp-banner">
                           <img src="/megapersonals-img/writepost2_devilgirl.png" alt="Add Pics & Video" />
                         </div>
 
-                        {/* Photos in this Ad (deshabilitado) */}
                         <div className="mp-section-locked">
                           <div className="mp-section-title">
                             <span className="mp-letter">A</span> Photos in this Ad:
@@ -1916,7 +2092,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Videos (deshabilitado) */}
                         <div className="mp-section-locked">
                           <div className="mp-section-title">
                             <span className="mp-letter mp-letter-c">C</span> Videos: <span style={{ fontWeight: 400, fontSize: 14, color: "#666" }}>(optional)</span>
@@ -1935,7 +2110,6 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Captcha */}
                         <div className="mp-captcha-section">
                           {er.captchaUrl && (
                             <div className="mp-captcha-image-wrapper">
@@ -1955,7 +2129,6 @@ export default function Home() {
                           />
                         </div>
 
-                        {/* Botones Back y Publish */}
                         <div className="mp-buttons-final">
                           <button
                             type="button"
@@ -1977,7 +2150,6 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {/* Cancelar */}
                         <div className="mp-cancel-row">
                           <button
                             type="button"
@@ -1997,8 +2169,6 @@ export default function Home() {
           </div>
         )}
 
-
-        {/* MODAL: Selector de ubicación (estilo MegaPersonals) */}
         {showLocationPicker && (
           <div className="modal-overlay" onClick={() => { setShowLocationPicker(false); setExpandedState(null); }}>
             <div className="location-modal" onClick={(e) => e.stopPropagation()}>
@@ -2011,7 +2181,6 @@ export default function Home() {
               </button>
               <div className="location-title">Choose a Location</div>
 
-              {/* United States es el ÚNICO continente disponible */}
               <button className="location-region-btn">
                 United States
               </button>
