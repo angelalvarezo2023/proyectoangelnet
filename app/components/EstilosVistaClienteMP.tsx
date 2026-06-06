@@ -65,12 +65,16 @@ const ESTILOS_VCMP = String.raw`
   height: auto;
 }
 
-/* Banner "Manage Posts" — la imagen ya incluye chica diabla + cinta.
-   Se muestra COMPLETA, sin recortar, igual que el MegaPersonals original. */
+/* Banner "Manage Posts" — la imagen incluye chica diabla + cinta + burbujas.
+   Se muestra COMPLETA. Los botones (más abajo) se superponen sobre la zona
+   inferior del banner usando margin-top negativo + z-index, para que las
+   burbujas queden DETRÁS de los botones, igual que en MegaPersonals. */
 .vcmp-banner {
   width: 100%;
-  margin-bottom: 18px;
+  margin-bottom: 0;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .vcmp-banner-img {
@@ -81,13 +85,17 @@ const ESTILOS_VCMP = String.raw`
   margin: 0 auto;
 }
 
-/* Grid de 4 botones grandes */
+/* Grid de 4 botones grandes — superpuestos sobre la parte inferior
+   del banner (sobre las burbujas, debajo de la cinta) con z-index. */
 .vcmp-buttons-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 12px;
+  margin-top: -32%;     /* sube los botones para superponerlos al banner */
   padding: 0 8px;
+  position: relative;
+  z-index: 3;
 }
 
 .vcmp-buttons-extra {
@@ -96,12 +104,15 @@ const ESTILOS_VCMP = String.raw`
   gap: 10px;
   margin-bottom: 14px;
   padding: 0 8px;
+  position: relative;
+  z-index: 3;
 }
 
 .vcmp-buttons-extra .vcmp-mbtn {
-  max-width: 260px;
+  max-width: 340px;
   margin: 0 auto;
   width: 100%;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -183,10 +194,12 @@ const ESTILOS_VCMP = String.raw`
   background: linear-gradient(rgb(252, 235, 192) 1%, rgb(199, 153, 68) 11%);
 }
 
-/* Separador decorativo */
+/* Separador decorativo (encima del banner si es que llega a tocar). */
 .vcmp-divider {
   text-align: center;
   margin: 8px 0 4px;
+  position: relative;
+  z-index: 3;
 }
 
 .vcmp-divider img {
@@ -1164,20 +1177,19 @@ const ESTILOS_VCMP = String.raw`
     left: 10px;
   }
 
-  /* Logo más pequeño en mobile, sigue superpuesto a la derecha */
+  /* Logo en mobile */
   .vcmp-logo {
-    top: 10px;
-    right: 5%;
+    margin-bottom: 10px;
   }
 
   .vcmp-logo img {
-    max-width: 190px;
-    width: 50%;
+    max-width: 280px;
+    width: 90%;
   }
 
   /* Banner: imagen completa también en celular */
   .vcmp-banner {
-    margin-bottom: 18px;
+    margin-bottom: 0;
   }
 
   .vcmp-banner-img {
@@ -1185,10 +1197,11 @@ const ESTILOS_VCMP = String.raw`
     height: auto;
   }
 
-  /* Botones grandes: rectángulares estilo MP, ajustados para mobile */
+  /* Botones grandes superpuestos al banner — proporción ajustada en mobile */
   .vcmp-buttons-grid {
     gap: 10px;
     margin-bottom: 12px;
+    margin-top: -30%;
   }
 
   .vcmp-mbtn {
