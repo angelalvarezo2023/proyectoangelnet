@@ -53,16 +53,25 @@ const ESTILOS_VCMP = String.raw`
   min-height: 100vh;
 }
 
-/* Logo — estático arriba centrado, 420px como el original. */
+/* Logo — posicionado ABSOLUTO arriba a la derecha, superpuesto al banner.
+   Así queda al lado de la cabeza de la chica diabla, como en el original. */
 .vcmp-logo {
-  text-align: center;
-  margin-bottom: 14px;
+  position: absolute;
+  top: 18px;
+  right: 3%;
+  z-index: 4;
+  text-align: right;
+  margin: 0;
+  width: auto;
+  max-width: 58%;
+  pointer-events: none;
 }
 
 .vcmp-logo img {
-  max-width: 420px;
-  width: 100%;
+  max-width: 100%;
+  width: auto;
   height: auto;
+  display: inline-block;
 }
 
 /* Banner "Manage Posts" — la imagen incluye chica diabla + cinta + burbujas.
@@ -134,13 +143,14 @@ const ESTILOS_VCMP = String.raw`
   border: 2px solid rgb(46, 46, 46);
   border-radius: 17px;
   cursor: pointer;
-  font-family: Arial, sans-serif;
+  font-family: "Arial Black", "Arial Bold", Gadget, Arial, sans-serif;
   font-size: 22px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: rgb(255, 255, 255);
-  text-shadow: 0 0 4px rgb(0, 0, 0);
+  text-shadow: 0 0 4px rgb(0, 0, 0),
+               0 0 4px rgb(0, 0, 0);
   box-shadow: inset -2px -2px 5px 0 rgb(38, 38, 38);
   transition: transform 0.1s, filter 0.15s, box-shadow 0.15s;
   outline: none;
@@ -194,17 +204,23 @@ const ESTILOS_VCMP = String.raw`
   background: linear-gradient(rgb(252, 235, 192) 1%, rgb(199, 153, 68) 11%);
 }
 
-/* Separador decorativo (encima del banner si es que llega a tocar). */
+/* Separador decorativo — el original lo muestra al 100% del ancho del
+   contenedor (600px wide en el original, parent text-align: start).
+   Por eso antes se veía corrido a la izquierda con max-width: 75%. */
 .vcmp-divider {
   text-align: center;
-  margin: 8px 0 4px;
+  margin: 18px auto;
+  width: 100%;
   position: relative;
   z-index: 3;
 }
 
 .vcmp-divider img {
-  max-width: 75%;
+  width: 100%;
+  max-width: 100%;
   height: auto;
+  display: block;
+  margin: 0 auto;
 }
 
 /* Estado/status del post */
@@ -818,15 +834,17 @@ const ESTILOS_VCMP = String.raw`
   margin: 8px 0 14px;
 }
 
-/* Caja del headline */
+/* Caja del headline — pill con colores EXACTOS del original:
+   fondo crema rgb(250,244,216) y borde beige rgb(210,196,189). */
 .vcmp-headline-box {
   position: relative;
-  background: white;
-  border: 2px solid rgba(220, 20, 60, 0.7);
+  background: rgb(250, 244, 216);
+  border: 3px solid rgb(210, 196, 189);
   border-radius: 80px;
-  padding: 12px 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 3px 10px rgba(220, 20, 60, 0.08);
+  padding: 12px 24px;
+  margin: 0 auto 18px;
+  max-width: 90%;
+  box-shadow: none;
 }
 
 .vcmp-headline-text {
@@ -834,7 +852,7 @@ const ESTILOS_VCMP = String.raw`
   line-height: 1.45;
   color: #333;
   text-align: center;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Info (Phone, Age, City, Location, Name) */
@@ -877,14 +895,20 @@ const ESTILOS_VCMP = String.raw`
   font-style: italic;
 }
 
-/* Caja del body (anuncio) */
+/* Caja del body (anuncio) — valores EXACTOS del MegaPersonals original
+   extraídos vía F12:
+     background: rgb(250, 244, 216)
+     border: 3px solid rgb(210, 196, 189)
+     border-radius: 18px
+     box-shadow: none */
 .vcmp-body-box {
-  background: white;
-  border: 2px solid rgba(220, 20, 60, 0.4);
-  border-radius: 12px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.05);
+  background: rgb(250, 244, 216);
+  border: 3px solid rgb(210, 196, 189);
+  border-radius: 18px;
+  padding: 12px 18px;
+  margin: 0 auto 20px;
+  max-width: 95%;
+  box-shadow: none;
 }
 
 .vcmp-body-text {
@@ -1177,14 +1201,15 @@ const ESTILOS_VCMP = String.raw`
     left: 10px;
   }
 
-  /* Logo en mobile */
+  /* Logo en mobile — sigue arriba a la derecha pero más chico */
   .vcmp-logo {
-    margin-bottom: 10px;
+    top: 12px;
+    right: 3%;
+    max-width: 52%;
   }
 
   .vcmp-logo img {
-    max-width: 280px;
-    width: 90%;
+    max-width: 100%;
   }
 
   /* Banner: imagen completa también en celular */
