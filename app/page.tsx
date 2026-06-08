@@ -577,6 +577,11 @@ export default function Home() {
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [expandedState, setExpandedState] = useState<string | null>(null);
   const [postIdActualMP, setPostIdActualMP] = useState<string | null>(null);
+  // Cooldown del botón pausar/reanudar: previene desync con el bot
+  // Mapa { postId: timestamp_hasta_cuando_puede_volver_a_pausar }
+  const [pauseCooldowns, setPauseCooldowns] = useState<Record<string, number>>({});
+  // Cooldown configurable en milisegundos (10 segundos)
+  const PAUSE_COOLDOWN_MS = 10000;
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -642,12 +647,46 @@ export default function Home() {
     setClientKey(key); setClientData(data); setStep("cards");
   };
 
+  // Verifica si un post tiene una edición en proceso (no se puede pausar mientras tanto)
+  const tieneEdicionEnProceso = (postId: string): boolean => {
+    if (!clientData) return false;
+    const er = clientData.posts[postId]?.editRequest;
+    if (!er) return false;
+    return er.status === "captcha_pendiente" || er.status === "captcha_listo" || er.status === "listo_para_publicar";
+  };
+
+  // Retorna ms restantes del cooldown del botón pausar (0 si no está en cooldown)
+  const getPauseCooldownMs = (postId: string): number => {
+    const until = pauseCooldowns[postId] || 0;
+    return Math.max(0, until - now);
+  };
+
   const togglePostStatus = async (postId: string, currentStatus: string) => {
     if (!clientData) return;
+
+    // Validación 1: no permitir pausar/reanudar si hay edición en proceso
+    if (tieneEdicionEnProceso(postId)) {
+      alert(
+        "⚠️ No puedes pausar este anuncio mientras tiene una edición en proceso.\n\n" +
+        "Para editar NO necesitas pausar primero. El robot se encarga automáticamente.\n\n" +
+        "Si quieres pausar, primero termina o cancela la edición."
+      );
+      return;
+    }
+
+    // Validación 2: respetar cooldown (previene desync con el bot)
+    const cooldownLeft = getPauseCooldownMs(postId);
+    if (cooldownLeft > 0) {
+      alert(`⏱ Espera ${Math.ceil(cooldownLeft / 1000)}s antes de cambiar el estado de este anuncio nuevamente.\n\nEsto evita que se desincronice con el robot.`);
+      return;
+    }
+
     const newStatus = currentStatus === "active" ? "paused" : "active";
     await fetch(`${FB_URL}/clients/${clientKey}/posts/${postId}/status.json`, {
       method: "PUT", body: JSON.stringify(newStatus),
     });
+    // Activar cooldown
+    setPauseCooldowns((prev) => ({ ...prev, [postId]: Date.now() + PAUSE_COOLDOWN_MS }));
     setClientData({ ...clientData, posts: { ...clientData.posts, [postId]: { ...clientData.posts[postId], status: newStatus as "active" | "paused" } } });
   };
 
@@ -1018,7 +1057,7 @@ export default function Home() {
 
                 <button className="vc-btn" onClick={searchClient} disabled={loading}>
                   <span className="vc-btn-icon">🌴</span>
-                  {loading ? "Buscando..." : "Acceder al anuncio"}
+                  {loading ? "Buscando..." : "Acceder al panel"}
                   <span className="vc-btn-arrow">→</span>
                 </button>
 
@@ -1296,6 +1335,10 @@ export default function Home() {
                   }}
                   onAbrirConfigRenta={(pid) => abrirModalRenta(pid)}
                   onLogout={goBack}
+                  /* Nuevas props: edición en proceso, cooldown, pagar renta whatsapp */
+                  tieneEdicionEnProceso={tieneEdicionEnProceso(postActual)}
+                  pauseCooldownMs={getPauseCooldownMs(postActual)}
+                  onPagarRentaWhatsApp={(pid: string) => renovarWhatsApp(pid)}
                 />
               );
             })()}
@@ -1419,9 +1462,33 @@ export default function Home() {
                           </div>
                           <div className="pc-actions">
                             <div className="pc-actions-row">
-                              <button className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`} onClick={() => togglePostStatus(postId, post.status)}>
-                                {isPaused ? "▶ Reanudar" : "⏸ Pausar"}
-                              </button>
+                              {(() => {
+                                const editing = tieneEdicionEnProceso(postId);
+                                const cooldownLeft = getPauseCooldownMs(postId);
+                                const disabled = editing || cooldownLeft > 0;
+                                let label;
+                                let title = "";
+                                if (editing) {
+                                  label = isPaused ? "🔒 Pausado (editando)" : "🔒 Editando...";
+                                  title = "No se puede pausar mientras hay edición en proceso";
+                                } else if (cooldownLeft > 0) {
+                                  label = `⏱ Espera ${Math.ceil(cooldownLeft / 1000)}s`;
+                                  title = "Cooldown anti-desync con el bot";
+                                } else {
+                                  label = isPaused ? "▶ Reanudar" : "⏸ Pausar";
+                                }
+                                return (
+                                  <button
+                                    className={`action-btn ${isPaused ? "btn-resume" : "btn-pause"}`}
+                                    onClick={() => togglePostStatus(postId, post.status)}
+                                    disabled={disabled}
+                                    title={title}
+                                    style={disabled ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
+                                  >
+                                    {label}
+                                  </button>
+                                );
+                              })()}
                               <button className="action-btn btn-view" onClick={() => verAnuncio(postId)}>👁 Ver anuncio</button>
                               <button className="action-btn btn-delete-post" onClick={() => { setDeletePostId(postId); setDeleteConfirmStep(0); }} title="Eliminar este post del sistema">🗑 Eliminar</button>
                             </div>
