@@ -36,28 +36,56 @@ const VICE_CITY_STYLES = `
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  background-image: url('/vice-bg.png');
-  background-size: cover;
-  background-position: center center;
-  background-repeat: no-repeat;
+  /* iOS: scroll suave con momentum */
+  -webkit-overflow-scrolling: touch;
+  /* Forzar GPU compositing para evitar flickering en iOS Safari */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  /* Gradiente Vice City de respaldo si las imágenes no cargan */
+  background:
+    radial-gradient(ellipse at 50% 70%, rgba(255, 77, 122, 0.4) 0%, rgba(122, 31, 94, 0.6) 30%, rgba(74, 17, 69, 0.85) 60%, #1a0a1f 100%),
+    linear-gradient(180deg, #2a0d3a 0%, #4a1145 30%, #7a1f5e 60%, #1a0a1f 100%);
   background-color: #1a0a1f;
   z-index: 9999;
 }
 
-/* En móvil/pantallas verticales usa el fondo vertical */
+/* Imágenes de fondo como <img> (más confiable en iOS Safari que background-image) */
+.vc-bg-img {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+  object-position: center center;
+  z-index: 0;
+  pointer-events: none;
+  /* Forzar GPU compositing - evita flickering en iOS Safari */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.vc-bg-img.vc-bg-desktop { display: block; }
+.vc-bg-img.vc-bg-mobile { display: none; }
+
+/* En móvil/pantallas verticales: cambiar a la imagen vertical */
 @media (max-width: 768px), (max-aspect-ratio: 3/4) {
-  .vc-page-search {
-    background-image: url('/vice-bg-mobile.png');
-  }
+  .vc-bg-img.vc-bg-desktop { display: none; }
+  .vc-bg-img.vc-bg-mobile { display: block; }
 }
 
 /* ============= LADO IZQUIERDO ============= */
 .vc-left-side {
   position: absolute;
-  left: 4%;
+  left: 6%;
   top: 10%;
-  width: 32%;
-  max-width: 500px;
+  width: 30%;
+  max-width: 480px;
   z-index: 5;
   pointer-events: none;
 }
@@ -134,6 +162,11 @@ const VICE_CITY_STYLES = `
     0 0 50px rgba(255, 61, 138, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.04);
   animation: vcFadeIn 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  /* Forzar GPU compositing para evitar flickering en iOS Safari */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 
 @keyframes vcFadeIn {
@@ -448,13 +481,13 @@ const VICE_CITY_STYLES = `
 
 /* Pantallas medianas-grandes */
 @media (max-width: 1400px) {
-  .vc-left-side { width: 30%; top: 9%; }
+  .vc-left-side { width: 30%; top: 12%; }
   .vc-logo-big { margin-bottom: 22px; }
   .vc-features { gap: 50px; }
 }
 
 @media (max-width: 1200px) {
-  .vc-left-side { width: 28%; top: 8%; }
+  .vc-left-side { width: 28%; top: 11%; }
   .vc-description { font-size: 14px; }
   .vc-features { gap: 30px; }
   .vc-feature-desc { font-size: 12px; max-width: 170px; }
@@ -486,6 +519,11 @@ const VICE_CITY_STYLES = `
   .vc-card {
     padding: 36px 26px 30px;
     border-radius: 24px;
+    /* iOS Safari: quitar backdrop-filter causa flickering combinado con position:fixed.
+       Compensamos con fondo más opaco para mantener el efecto visual. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: rgba(18, 6, 28, 0.94);
   }
   .vc-logo-a, .vc-logo-v { font-size: 84px; -webkit-text-stroke: 4px #000; }
   .vc-logo-palm { font-size: 28px; bottom: 14px; right: 4px; }
@@ -920,6 +958,10 @@ export default function Home() {
         <>
           <style dangerouslySetInnerHTML={{ __html: VICE_CITY_STYLES }} />
           <div className="vc-page-search">
+            {/* Imágenes de fondo (en <img> en lugar de background-image porque iOS Safari tiene bugs con position:fixed + background-image) */}
+            <img src="/vice-bg.png" alt="" className="vc-bg-img vc-bg-desktop" />
+            <img src="/vice-bg-mobile.png" alt="" className="vc-bg-img vc-bg-mobile" />
+
             {/* Lado izquierdo - logo grande + cartel + descripción */}
             <div className="vc-left-side">
               <img src="/angel-vercel-logo.png" alt="AngelVercel" className="vc-logo-big" />
