@@ -1018,7 +1018,7 @@ export default function Home() {
 
                 <button className="vc-btn" onClick={searchClient} disabled={loading}>
                   <span className="vc-btn-icon">🌴</span>
-                  {loading ? "Buscando..." : "Acceder al panel"}
+                  {loading ? "Buscando..." : "Acceder al anuncio"}
                   <span className="vc-btn-arrow">→</span>
                 </button>
 
