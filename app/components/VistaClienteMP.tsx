@@ -10,6 +10,9 @@
 //   * Solo "Edit Post" es funcional → abre el modal de edición existente
 //   * Los otros 3 muestran modal "Prohibido — contacta Angel por WhatsApp"
 // - Botón extra "Pausar/Reanudar" estilo MegaPersonals
+//   * Bloqueado durante edición (con mensaje claro al cliente)
+//   * Cooldown de 10 seg después de cada cambio para prevenir desync con el bot
+// - Botón "Pagar Renta por WhatsApp" estilo WhatsApp cuando hay warning o deuda
 // - Vista del post actual: headline, info, body, fotos vía proxy
 // - Cronómetro de próximo bump + info de renta (integrados al estilo)
 // - Flechas ← → para navegar si tiene varios posts
@@ -34,6 +37,11 @@ interface VistaClienteMPProps {
   onPausarToggle: (postId: string) => void;
   onAbrirConfigRenta: (postId: string) => void; // solo admin
   onLogout: () => void;
+
+  // Props nuevas (opcionales para mantener compatibilidad)
+  tieneEdicionEnProceso?: boolean;
+  pauseCooldownMs?: number;
+  onPagarRentaWhatsApp?: (postId: string) => void;
 }
 
 export default function VistaClienteMP({
@@ -48,6 +56,9 @@ export default function VistaClienteMP({
   onPausarToggle,
   onAbrirConfigRenta,
   onLogout,
+  tieneEdicionEnProceso = false,
+  pauseCooldownMs = 0,
+  onPagarRentaWhatsApp,
 }: VistaClienteMPProps) {
   const post: PostData | undefined = clientData.posts[postIdActual];
   const [modalProhibido, setModalProhibido] = useState<string | null>(null);
@@ -93,6 +104,9 @@ export default function VistaClienteMP({
   const editAplicada = post.editRequest?.status === "aplicada";
   const editFallida = post.editRequest?.status === "fallida";
 
+  // Cooldown del botón pausar (segundos restantes)
+  const cooldownSegRestantes = Math.ceil(pauseCooldownMs / 1000);
+
   // Info de renta
   const rentInfo = (() => {
     if (!post.rentExpiresAt) return null;
@@ -125,6 +139,23 @@ export default function VistaClienteMP({
   // Estado pausado
   const pausado = post.status === "paused";
 
+  // ¿Mostrar el botón "Pagar Renta por WhatsApp"?
+  const mostrarBotonPagarRenta =
+    rentInfo && (rentInfo.status === "deuda" || (rentInfo.status === "active" && rentInfo.isWarning));
+
+  // Handler para pagar renta: usa el callback si existe, si no abre WhatsApp directo
+  const handlePagarRenta = () => {
+    if (onPagarRentaWhatsApp) {
+      onPagarRentaWhatsApp(postIdActual);
+    } else {
+      const mensaje = `Hola Angel, quiero pagar la renta de mi anuncio (#${postIdActual}) - ${clientData.displayName}`;
+      window.open(
+        `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(mensaje)}`,
+        "_blank"
+      );
+    }
+  };
+
   // Mensaje WhatsApp para botones prohibidos
   const whatsappLink = (accion: string) =>
     `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(
@@ -134,6 +165,24 @@ export default function VistaClienteMP({
   const handleClickProhibido = (accion: string) => {
     setModalProhibido(accion);
   };
+
+  // Determinar estado del botón Pausar/Reanudar
+  const pausarBloqueadoPorEdicion = tieneEdicionEnProceso;
+  const pausarEnCooldown = pauseCooldownMs > 0;
+  const pausarDisabled = pausarBloqueadoPorEdicion || pausarEnCooldown;
+
+  let pausarLabel: string;
+  let pausarTitle: string;
+  if (pausarBloqueadoPorEdicion) {
+    pausarLabel = pausado ? "🔒 Pausado (Editando)" : "🔒 No se puede pausar (Editando)";
+    pausarTitle = "El robot está editando tu post. No necesitas pausar para editar.";
+  } else if (pausarEnCooldown) {
+    pausarLabel = `⏱ Espera ${cooldownSegRestantes}s`;
+    pausarTitle = "Espera unos segundos para que el robot se sincronice";
+  } else {
+    pausarLabel = pausado ? "▶ Reanudar Anuncio" : "⏸ Pausar Anuncio";
+    pausarTitle = pausado ? "Reanudar este anuncio" : "Pausar este anuncio";
+  }
 
   return (
     <div className="vcmp-wrapper">
@@ -204,8 +253,11 @@ export default function VistaClienteMP({
           <button
             className={`vcmp-mbtn ${pausado ? "vcmp-mbtn-green" : "vcmp-mbtn-purple"}`}
             onClick={() => onPausarToggle(postIdActual)}
+            disabled={pausarDisabled}
+            title={pausarTitle}
+            style={pausarDisabled ? { opacity: 0.55, cursor: "not-allowed" } : undefined}
           >
-            {pausado ? "▶ Reanudar Anuncio" : "⏸ Pausar Anuncio"}
+            {pausarLabel}
           </button>
           {isAdmin && (
             <button
@@ -216,6 +268,28 @@ export default function VistaClienteMP({
             </button>
           )}
         </div>
+
+        {/* Aviso si hay edición en proceso: explica al cliente que NO necesita pausar */}
+        {pausarBloqueadoPorEdicion && (
+          <div
+            style={{
+              background: "linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(99, 102, 241, 0.1))",
+              border: "1.5px solid rgba(59, 130, 246, 0.35)",
+              borderRadius: 12,
+              padding: "12px 16px",
+              margin: "12px auto 0",
+              maxWidth: 600,
+              fontSize: 13,
+              color: "#3b5298",
+              fontWeight: 600,
+              textAlign: "center",
+              lineHeight: 1.5,
+            }}
+          >
+            ℹ️ <strong>Aviso:</strong> Para editar tu anuncio NO necesitas pausar primero.
+            El robot maneja todo automáticamente. El botón Pausar se reactiva cuando termine la edición.
+          </div>
+        )}
 
         {/* Separador decorativo */}
         <div className="vcmp-divider">
@@ -314,6 +388,50 @@ export default function VistaClienteMP({
                   )}
                 </div>
               </div>
+
+              {/* Botón "Pagar Renta por WhatsApp" — visible en warning y deuda */}
+              {mostrarBotonPagarRenta && (
+                <button
+                  onClick={handlePagarRenta}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 12,
+                    width: "calc(100% - 32px)",
+                    margin: "16px 16px 18px",
+                    background: "linear-gradient(135deg, #25d366 0%, #128c7e 100%)",
+                    color: "white",
+                    padding: "16px 24px",
+                    borderRadius: 14,
+                    fontWeight: 800,
+                    fontSize: 15,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.8px",
+                    border: "none",
+                    cursor: "pointer",
+                    boxShadow:
+                      "0 8px 22px rgba(37, 211, 102, 0.45), inset 0 1px 0 rgba(255,255,255,0.25)",
+                    fontFamily: "inherit",
+                    transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                  }}
+                  onMouseDown={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.98)";
+                  }}
+                  onMouseUp={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)";
+                  }}
+                  title="Pagar la renta de este anuncio por WhatsApp"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.522l4.625-1.476A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.75a9.7 9.7 0 01-5.226-1.526l-.375-.237-3.872 1.013 1.035-3.776-.244-.388A9.71 9.71 0 012.25 12c0-5.385 4.365-9.75 9.75-9.75S21.75 6.615 21.75 12 17.385 21.75 12 21.75z"/>
+                  </svg>
+                  {rentInfo.status === "deuda" ? "Reactivar Anuncio - Pagar Renta" : "Pagar Renta por WhatsApp"}
+                </button>
+              )}
             </div>
           </div>
         )}
