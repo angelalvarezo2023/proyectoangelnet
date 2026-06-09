@@ -603,13 +603,13 @@ export default function Home() {
       const res = await fetch(`${FB_URL}/clients/${clientKey}.json`);
       const data = await res.json();
       if (data) setClientData(data);
-    }, 5000);
+    }, 15000);
     return () => clearInterval(interval);
   }, [step, clientKey]);
 
   useEffect(() => {
     if (step !== "admin-list" || !isAdmin) return;
-    const interval = setInterval(() => { loadAllClients(); loadHeartbeats(); }, 10000);
+    const interval = setInterval(() => { loadAllClients(); loadHeartbeats(); }, 30000);
     return () => clearInterval(interval);
   }, [step, isAdmin]);
 
