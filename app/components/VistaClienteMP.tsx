@@ -269,28 +269,6 @@ export default function VistaClienteMP({
           )}
         </div>
 
-        {/* Aviso si hay edición en proceso: explica al cliente que NO necesita pausar */}
-        {pausarBloqueadoPorEdicion && (
-          <div
-            style={{
-              background: "linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(99, 102, 241, 0.1))",
-              border: "1.5px solid rgba(59, 130, 246, 0.35)",
-              borderRadius: 12,
-              padding: "12px 16px",
-              margin: "12px auto 0",
-              maxWidth: 600,
-              fontSize: 13,
-              color: "#3b5298",
-              fontWeight: 600,
-              textAlign: "center",
-              lineHeight: 1.5,
-            }}
-          >
-            ℹ️ <strong>Aviso:</strong> Para editar tu anuncio NO necesitas pausar primero.
-            El robot maneja todo automáticamente. El botón Pausar se reactiva cuando termine la edición.
-          </div>
-        )}
-
         {/* Separador decorativo */}
         <div className="vcmp-divider">
           <img
