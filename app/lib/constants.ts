@@ -1,7 +1,7 @@
 // Constantes y helpers globales del proyecto.
 // Refactor: extraído de page.tsx para mejor organización.
 
-export const FB_URL = "https://megapersonals-control-default-rtdb.firebaseio.com";
+export const FB_URL = "https://angelalvarezvercel-default-rtdb.firebaseio.com";
 export const ADMIN_PASSWORD = "admin2024";
 export const WHATSAPP_NUMERO = "18293837695"; // Número de Angel (sin + ni espacios)
 export const TELEGRAM_SOPORTE = "https://t.me/Soportetecnico2323"; // Telegram de soporte técnico
