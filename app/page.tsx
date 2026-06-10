@@ -547,6 +547,15 @@ const VICE_CITY_STYLES = `
 }
 `;
 
+// Tipo del log de baneos (cada entrada de banLog/{timestamp})
+type BanLogEntry = {
+  at: number;
+  postIds?: string[];
+  clientesPorPost?: Record<string, string>;
+  browserName?: string;
+  url?: string;
+};
+
 export default function Home() {
   const [step, setStep] = useState<Step>("search");
   const [searchName, setSearchName] = useState("");
@@ -554,7 +563,9 @@ export default function Home() {
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [allClients, setAllClients] = useState<Record<string, ClientData>>({});
   const [adminFilter, setAdminFilter] = useState("");
-  const [heartbeats, setHeartbeats] = useState<Record<string, { browserName?: string; lastSeen: number; url?: string }>>({});
+  // banLog: cada entrada se escribe en mega.js cuando detecta baneo en un Chrome.
+  // Se usa para contar baneos en los últimos 7 días (más preciso que c.banned global).
+  const [banLog, setBanLog] = useState<Record<string, BanLogEntry>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
@@ -588,12 +599,38 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
+  // Al cargar la página: restaurar sesión guardada (admin o cliente).
+  // Esto evita que el cliente tenga que escribir su nombre cada vez que recarga.
   useEffect(() => {
-    if (typeof window !== "undefined" && localStorage.getItem("isAdmin") === "true") {
+    if (typeof window === "undefined") return;
+
+    // 1) Admin: si ya inició sesión, ir directo al panel admin
+    if (localStorage.getItem("isAdmin") === "true") {
       setIsAdmin(true);
       setStep("admin-list");
       loadAllClients();
-      loadHeartbeats();
+      return;
+    }
+
+    // 2) Cliente: si tiene un clientKey guardado, intentar restaurar su sesión
+    const savedKey = localStorage.getItem("clientKey");
+    if (savedKey) {
+      fetch(`${FB_URL}/clients/${savedKey}.json`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && data.posts) {
+            setClientKey(savedKey);
+            setClientData(data);
+            setStep("cards");
+          } else {
+            // El cliente ya no existe en Firebase: limpiar
+            localStorage.removeItem("clientKey");
+          }
+        })
+        .catch(() => {
+          // Error de red: dejar al cliente en la pantalla de login
+          localStorage.removeItem("clientKey");
+        });
     }
   }, []);
 
@@ -609,24 +646,22 @@ export default function Home() {
 
   useEffect(() => {
     if (step !== "admin-list" || !isAdmin) return;
-    const interval = setInterval(() => { loadAllClients(); loadHeartbeats(); }, 30000);
+    const interval = setInterval(() => { loadAllClients(); }, 30000);
     return () => clearInterval(interval);
   }, [step, isAdmin]);
 
+  // Carga clientes Y banLog en paralelo. Se llama al inicio y cada 30s en admin.
   const loadAllClients = async () => {
     try {
-      const res = await fetch(`${FB_URL}/clients.json`);
-      const data = await res.json();
+      const [resC, resBL] = await Promise.all([
+        fetch(`${FB_URL}/clients.json`),
+        fetch(`${FB_URL}/banLog.json`),
+      ]);
+      const data = await resC.json();
+      const bl = await resBL.json();
       setAllClients(data || {});
-    } catch (e) { console.error("Error loading clients", e); }
-  };
-
-  const loadHeartbeats = async () => {
-    try {
-      const res = await fetch(`${FB_URL}/heartbeats.json`);
-      const data = await res.json();
-      setHeartbeats(data || {});
-    } catch (e) { console.error("Error loading heartbeats", e); }
+      setBanLog(bl || {});
+    } catch (e) { console.error("Error loading clients/banLog", e); }
   };
 
   const searchClient = async () => {
@@ -638,6 +673,8 @@ export default function Home() {
       const data = await res.json();
       if (data && data.posts) {
         setClientKey(key); setClientData(data); setStep("cards");
+        // Guardar la sesión para que la próxima vez no tenga que volver a escribir el nombre
+        if (typeof window !== "undefined") localStorage.setItem("clientKey", key);
       } else { setError("No encontramos publicaciones para este cliente"); }
     } catch (e) { setError("Error de conexión"); }
     setLoading(false);
@@ -667,9 +704,8 @@ export default function Home() {
     // Validación 1: no permitir pausar/reanudar si hay edición en proceso
     if (tieneEdicionEnProceso(postId)) {
       alert(
-        "⚠️ No puedes pausar este anuncio mientras tiene una edición en proceso.\n\n" +
-        "Para editar NO necesitas pausar primero. El robot se encarga automáticamente.\n\n" +
-        "Si quieres pausar, primero termina o cancela la edición."
+        "⏳ Hay una edición en proceso en este anuncio.\n\n" +
+        "Espera a que termine o cancélala antes de pausar."
       );
       return;
     }
@@ -814,9 +850,40 @@ export default function Home() {
 
   const confirmarEdicion = async () => {
     if (!editConfirmPost || !clientData) return;
+    const post = clientData.posts[editConfirmPost];
     const editRequest: EditRequest = { status: "captcha_pendiente", requestedAt: Date.now() };
-    await fetch(`${FB_URL}/clients/${clientKey}/posts/${editConfirmPost}/editRequest.json`, { method: "PUT", body: JSON.stringify(editRequest) });
-    setClientData({ ...clientData, posts: { ...clientData.posts, [editConfirmPost]: { ...clientData.posts[editConfirmPost], editRequest } } });
+
+    // AUTO-REANUDAR: si el cliente pausó el post manualmente y ahora quiere editar,
+    // el bot NO procesará la edición porque sólo trabaja posts activos. Lo reanudamos
+    // automáticamente para evitar el aviso confuso "no necesitas pausar primero".
+    // EXCEPCIONES: si está baneado o si la renta venció (rentPaused), NO reanudar
+    // porque esas pausas tienen razones sistémicas que el cliente no puede saltar.
+    const pausadoManualmente =
+      post?.status === "paused" && !post?.banned && !post?.rentPaused;
+
+    // Construir el PATCH: siempre el editRequest, y si aplica, también status=active
+    const patchPayload: Record<string, unknown> = {
+      editRequest,
+    };
+    if (pausadoManualmente) {
+      patchPayload.status = "active";
+    }
+
+    await fetch(`${FB_URL}/clients/${clientKey}/posts/${editConfirmPost}.json`, {
+      method: "PATCH",
+      body: JSON.stringify(patchPayload),
+    });
+
+    // Reflejar el cambio localmente
+    const postActualizado: PostData = {
+      ...post,
+      editRequest,
+      ...(pausadoManualmente ? { status: "active" as const } : {}),
+    };
+    setClientData({
+      ...clientData,
+      posts: { ...clientData.posts, [editConfirmPost]: postActualizado },
+    });
     setEditConfirmPost(null);
   };
 
@@ -928,8 +995,19 @@ export default function Home() {
   };
 
   const goBack = () => {
-    if (isAdmin) { setStep("admin-list"); setClientData(null); setClientKey(""); }
-    else { setStep("search"); setSearchName(""); setClientData(null); setClientKey(""); setError(""); }
+    if (isAdmin) {
+      setStep("admin-list");
+      setClientData(null);
+      setClientKey("");
+    } else {
+      setStep("search");
+      setSearchName("");
+      setClientData(null);
+      setClientKey("");
+      setError("");
+      // Limpiar sesión guardada del cliente al cerrar sesión
+      if (typeof window !== "undefined") localStorage.removeItem("clientKey");
+    }
   };
 
   const getGlobalStats = () => {
@@ -971,7 +1049,14 @@ export default function Home() {
       return (a.displayName || "").localeCompare(b.displayName || "");
     });
 
-  const baneosEstaSemana = Object.values(allClients).filter((c) => c.banned && c.bannedAt && now - c.bannedAt <= 7 * 24 * 3600 * 1000).length;
+  // Conteo de baneos en los últimos 7 días.
+  // El bot escribe en banLog/{timestamp} cada vez que detecta baneo en un Chrome,
+  // así que contamos esas entradas (cada entrada = 1 baneo de cuenta MP).
+  // Esto reemplaza la cuenta vieja basada en c.banned a nivel cliente, que NUNCA
+  // funcionaba porque el bot marca a nivel post, no cliente.
+  const baneosEstaSemana = Object.values(banLog).filter(
+    (entry) => entry?.at && now - entry.at <= 7 * 24 * 3600 * 1000
+  ).length;
 
   return (
     <>
@@ -1151,41 +1236,6 @@ export default function Home() {
                     </div>
                   );
                 })()}
-
-                {Object.keys(heartbeats).length > 0 && (
-                  <div className="chrome-monitor">
-                    <div className="chrome-monitor-header">
-                      <h2>🖥 Estado de los Chromes</h2>
-                      <span className="chrome-monitor-count">{Object.keys(heartbeats).length} conectados</span>
-                    </div>
-                    <div className="chrome-monitor-grid">
-                      {Object.entries(heartbeats)
-                        .filter(([, info]) => { if (!info || !info.lastSeen) return false; return now - info.lastSeen < 24 * 60 * 60 * 1000; })
-                        .sort(([, a], [, b]) => (b.lastSeen || 0) - (a.lastSeen || 0))
-                        .map(([botId, info]) => {
-                          const silencio = now - (info.lastSeen || 0);
-                          const minutos = Math.floor(silencio / 60000);
-                          const segundos = Math.floor((silencio % 60000) / 1000);
-                          const estado = silencio < 2 * 60 * 1000 ? "ok" : silencio < 5 * 60 * 1000 ? "warn" : "down";
-                          const tiempoLabel = minutos < 1 ? `${segundos}s` : minutos < 60 ? `${minutos} min` : `${Math.floor(minutos / 60)}h ${minutos % 60}m`;
-                          const browserName = info.browserName || `(${botId.substring(0, 12)})`;
-                          return (
-                            <div key={botId} className={`chrome-monitor-card ${estado}`}>
-                              <div className="chrome-monitor-status-dot" />
-                              <div className="chrome-monitor-card-info">
-                                <div className="chrome-monitor-name">{browserName}</div>
-                                <div className="chrome-monitor-time">
-                                  {estado === "ok" && `Activo · ${tiempoLabel}`}
-                                  {estado === "warn" && `⚠️ Lento · ${tiempoLabel}`}
-                                  {estado === "down" && `🚨 Caído · ${tiempoLabel}`}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
 
                 <div className="admin-filter-bar">
                   <input type="text" placeholder="🔍 Filtrar clientes por nombre..." value={adminFilter} onChange={(e) => setAdminFilter(e.target.value)} />
