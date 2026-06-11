@@ -1183,6 +1183,205 @@ const ESTILOS_VCMP = String.raw`
 }
 
 /* ============================================================
+ * BANNER PUBLICITARIO VICE CITY
+ * Anuncio que invita al cliente a compartir el WhatsApp para
+ * ganar recompensas. Estilo neón rosa/morado con palmera decorativa.
+ * Se inserta entre los botones del cliente y el separador decorativo.
+ * ============================================================ */
+.vcmp-promo-banner {
+  display: block;
+  margin: 18px auto 0;
+  padding: 22px 26px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #1a0a1f 0%, #4a1145 50%, #7a1f5e 100%);
+  border: 1.5px solid rgba(255, 61, 138, 0.45);
+  color: white;
+  text-decoration: none;
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+  box-shadow:
+    0 8px 24px rgba(122, 31, 94, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vcmp-promo-banner:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 12px 30px rgba(122, 31, 94, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.vcmp-promo-banner:active {
+  transform: translateY(0);
+}
+
+.vcmp-promo-banner:focus-visible {
+  box-shadow:
+    0 0 0 3px rgba(255, 61, 138, 0.5),
+    0 8px 24px rgba(122, 31, 94, 0.35);
+}
+
+/* Botón X para cerrar el banner promocional (esquina superior derecha) */
+.vcmp-promo-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+  z-index: 3;
+  transition: background 0.2s ease, transform 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vcmp-promo-close:hover {
+  background: rgba(255, 255, 255, 0.22);
+  color: white;
+  transform: scale(1.08);
+}
+
+.vcmp-promo-close:active {
+  transform: scale(0.95);
+}
+
+/* Palmera decorativa de fondo, grande y semi-transparente */
+.vcmp-promo-palm {
+  position: absolute;
+  top: -16px;
+  right: -10px;
+  font-size: 100px;
+  line-height: 1;
+  opacity: 0.13;
+  pointer-events: none;
+  transform: rotate(-15deg);
+}
+
+.vcmp-promo-content {
+  position: relative;
+  z-index: 1;
+}
+
+.vcmp-promo-tag {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #ff3d8a;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  text-shadow: 0 0 8px rgba(255, 61, 138, 0.4);
+}
+
+.vcmp-promo-title {
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1.2;
+  margin-bottom: 6px;
+  color: white;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+
+.vcmp-promo-title span {
+  color: #ff3d8a;
+  text-shadow: 0 0 14px rgba(255, 61, 138, 0.6);
+}
+
+.vcmp-promo-sub {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.vcmp-promo-sub strong {
+  color: #ffc864;
+  font-weight: 700;
+}
+
+.vcmp-promo-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(95deg, #ff2a8a 0%, #ff4d7a 38%, #ff6b3d 72%, #ff9a3d 100%);
+  color: white;
+  padding: 12px 22px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  box-shadow:
+    0 6px 18px rgba(255, 61, 138, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.vcmp-promo-cta svg {
+  flex-shrink: 0;
+}
+
+/* ============================================================
+ * BANNER "CAMBIOS PENDIENTES"
+ * Aparece cuando el cliente envió cambios y está esperando que el bot
+ * los publique. Los valores en pantalla ya reflejan los cambios nuevos.
+ * ============================================================ */
+.vcmp-pending-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 18px auto 0;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(99, 102, 241, 0.06));
+  border: 1.5px solid rgba(59, 130, 246, 0.35);
+  border-left: 4px solid #3b82f6;
+  position: relative;
+  animation: vcmpPendingPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes vcmpPendingPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.15); }
+  50% { box-shadow: 0 0 0 6px rgba(59, 130, 246, 0); }
+}
+
+.vcmp-pending-icon {
+  flex-shrink: 0;
+  font-size: 26px;
+  line-height: 1;
+}
+
+.vcmp-pending-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.vcmp-pending-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e3a8a;
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+
+.vcmp-pending-sub {
+  font-size: 12.5px;
+  color: #3b5298;
+  line-height: 1.4;
+}
+
+/* ============================================================
  * MOBILE — Optimizado para celulares (< 600px)
  * ============================================================ */
 @media (max-width: 600px) {
@@ -1427,6 +1626,68 @@ const ESTILOS_VCMP = String.raw`
 
   .vcmp-prohibido-modal p {
     font-size: 13px;
+  }
+
+  /* Banner promocional ajustado a mobile */
+  .vcmp-promo-banner {
+    padding: 18px 18px;
+    margin-top: 14px;
+    border-radius: 14px;
+  }
+
+  .vcmp-promo-close {
+    top: 8px;
+    right: 8px;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
+
+  .vcmp-promo-palm {
+    font-size: 80px;
+    top: -10px;
+    right: -8px;
+  }
+
+  .vcmp-promo-title {
+    font-size: 18px;
+  }
+
+  .vcmp-promo-sub {
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+
+  .vcmp-promo-tag {
+    font-size: 10px;
+    letter-spacing: 1.5px;
+  }
+
+  .vcmp-promo-cta {
+    padding: 11px 18px;
+    font-size: 14px;
+    width: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  /* Banner cambios pendientes en mobile */
+  .vcmp-pending-banner {
+    padding: 12px 14px;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .vcmp-pending-icon {
+    font-size: 22px;
+  }
+
+  .vcmp-pending-title {
+    font-size: 13px;
+  }
+
+  .vcmp-pending-sub {
+    font-size: 11.5px;
   }
 }
 
