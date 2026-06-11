@@ -65,6 +65,35 @@ export default function VistaClienteMP({
   const [fotoAmpliada, setFotoAmpliada] = useState<number | null>(null);
   const [mostrarBackToTop, setMostrarBackToTop] = useState(false);
 
+  // Banner promocional: aparece UNA VEZ AL DÍA por dispositivo.
+  // - Si nunca se vio hoy (o nunca se vio en general) → se muestra y se marca como visto hoy
+  // - Si ya se vio hoy → no aparece (hasta mañana)
+  // - El cliente puede cerrarlo con X durante esa sesión
+  const [mostrarPromoBanner, setMostrarPromoBanner] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const hoy = new Date().toISOString().slice(0, 10); // formato "YYYY-MM-DD"
+    const ultimaFechaVista = localStorage.getItem("promoBannerLastSeen");
+    if (ultimaFechaVista !== hoy) {
+      setMostrarPromoBanner(true);
+      localStorage.setItem("promoBannerLastSeen", hoy);
+    }
+  }, []);
+
+  const cerrarPromoBanner = () => {
+    setMostrarPromoBanner(false);
+    // No tocamos localStorage al cerrar manual: ya está marcado como "visto hoy"
+    // en el useEffect inicial, así que no volverá a aparecer hoy de todos modos.
+  };
+
+  // Abrir WhatsApp al hacer clic en el banner (excepto si dio clic en la X)
+  const abrirWhatsAppPromo = () => {
+    const url =
+      "https://wa.me/18293837695?text=" +
+      encodeURIComponent("Hola Angel, quiero saber sobre las recompensas por compartir su WhatsApp");
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   // Mostrar botón "back to top" cuando el usuario haya bajado más de 300px
   useEffect(() => {
     const onScroll = () => {
@@ -126,15 +155,23 @@ export default function VistaClienteMP({
 
   // Datos capturados del post (fotos + texto + info)
   // El bot llena post.data en cada bump. Si aún no hay data, mostramos placeholder.
+  // IDEA 3 (reflejo visual inmediato): si hay cambios pendientes de publicar
+  // (status === "listo_para_publicar"), priorizamos esos valores sobre los actuales.
+  // Así el cliente ve sus cambios YA, antes de que el bot los publique en MegaPersonals.
   const datos = post.data;
   const fotos = datos?.images || [];
-  const titulo = datos?.title || post.editRequest?.currentValues?.title || null;
-  const cuerpo = datos?.body || post.editRequest?.currentValues?.body || null;
+  const pendingFields = listoParaPublicar ? post.editRequest?.fields : null;
+  const pickPendingOr = <T,>(pending: unknown, fallback: T | null): T | null => {
+    if (typeof pending === "string") return pending as unknown as T;
+    return fallback;
+  };
+  const titulo = pickPendingOr<string>(pendingFields?.title, datos?.title || post.editRequest?.currentValues?.title || null);
+  const cuerpo = pickPendingOr<string>(pendingFields?.body, datos?.body || post.editRequest?.currentValues?.body || null);
   const telefono = datos?.phone || null;
-  const edad = datos?.age || post.editRequest?.currentValues?.age || null;
-  const ciudad = datos?.city || post.editRequest?.currentValues?.cityName || null;
-  const ubicacion = datos?.location || post.editRequest?.currentValues?.location || null;
-  const nombre = post.editRequest?.currentValues?.name || null;
+  const edad = pickPendingOr<string>(pendingFields?.age, datos?.age || post.editRequest?.currentValues?.age || null);
+  const ciudad = pickPendingOr<string>(pendingFields?.cityName, datos?.city || post.editRequest?.currentValues?.cityName || null);
+  const ubicacion = pickPendingOr<string>(pendingFields?.location, datos?.location || post.editRequest?.currentValues?.location || null);
+  const nombre = pickPendingOr<string>(pendingFields?.name, post.editRequest?.currentValues?.name || null);
 
   // Estado pausado
   const pausado = post.status === "paused";
@@ -268,6 +305,53 @@ export default function VistaClienteMP({
             </button>
           )}
         </div>
+
+        {/* Banner publicitario Vice City — invita a compartir el WhatsApp por recompensas.
+            Aparece UNA VEZ AL DÍA por dispositivo (controlado por mostrarPromoBanner).
+            Tiene botón X para cerrar durante la sesión actual. */}
+        {mostrarPromoBanner && (
+          <div
+            className="vcmp-promo-banner"
+            role="button"
+            tabIndex={0}
+            onClick={abrirWhatsAppPromo}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                abrirWhatsAppPromo();
+              }
+            }}
+          >
+            <button
+              type="button"
+              className="vcmp-promo-close"
+              onClick={(e) => {
+                e.stopPropagation();
+                cerrarPromoBanner();
+              }}
+              aria-label="Cerrar promoción"
+              title="Cerrar"
+            >
+              ✕
+            </button>
+            <div className="vcmp-promo-palm" aria-hidden="true">🌴</div>
+            <div className="vcmp-promo-content">
+              <div className="vcmp-promo-tag">━ OFERTA EXCLUSIVA ━</div>
+              <div className="vcmp-promo-title">
+                El mejor servicio al <span>menor precio</span>
+              </div>
+              <div className="vcmp-promo-sub">
+                Comparte nuestro WhatsApp y <strong>gana recompensas</strong> en tu renta
+              </div>
+              <div className="vcmp-promo-cta">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.522l4.625-1.476A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/>
+                </svg>
+                <span>829-383-7695</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Separador decorativo */}
         <div className="vcmp-divider">
@@ -410,6 +494,23 @@ export default function VistaClienteMP({
                   {rentInfo.status === "deuda" ? "Reactivar Anuncio - Pagar Renta" : "Pagar Renta por WhatsApp"}
                 </button>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Banner "Cambios pendientes" — aparece SOLO cuando el cliente envió
+            sus cambios y está esperando que el bot los publique (status: listo_para_publicar).
+            Los valores que se muestran abajo (titulo, cuerpo, etc) YA reflejan los cambios
+            nuevos del cliente gracias a pickPendingOr. Este banner sólo le dice al cliente
+            "esto es lo que va a quedar publicado, espera un poco". */}
+        {listoParaPublicar && (
+          <div className="vcmp-pending-banner">
+            <div className="vcmp-pending-icon">✏️</div>
+            <div className="vcmp-pending-content">
+              <div className="vcmp-pending-title">Cambios pendientes</div>
+              <div className="vcmp-pending-sub">
+                Estás viendo cómo quedará tu anuncio. El robot lo publicará en su próximo turno.
+              </div>
             </div>
           </div>
         )}
